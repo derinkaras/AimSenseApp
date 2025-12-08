@@ -1,0 +1,22 @@
+import leftArrow from "../assets/icons/arrow-left-solid.png"
+import mail from "../assets/icons/envelope-solid.png"
+import user from "../assets/icons/user.png"
+import lock from "../assets/icons/lock-solid.png"
+import home from "../assets/icons/home.png"
+import person from "../assets/icons/person.png"
+import crosshair from "../assets/icons/crosshairs-solid-full.png"
+import rifle from "../assets/icons/person-rifle-solid-full.png"
+import pencil from "../assets/icons/pencil-solid-full.png"
+
+const icons = {
+    leftArrow,
+    mail,
+    user,
+    lock,
+    home,
+    person,
+    crosshair,
+    rifle,
+    pencil
+}
+export default icons
