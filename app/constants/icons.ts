@@ -7,6 +7,9 @@ import person from "../assets/icons/person.png"
 import crosshair from "../assets/icons/crosshairs-solid-full.png"
 import rifle from "../assets/icons/person-rifle-solid-full.png"
 import pencil from "../assets/icons/pencil-solid-full.png"
+import privacy from "../assets/icons/user-shield-solid-full.png"
+import power from "../assets/icons/power-off-solid-full.png"
+import chevronRight from "../assets/icons/chevron-right-solid-full.png"
 
 const icons = {
     leftArrow,
@@ -17,6 +20,9 @@ const icons = {
     person,
     crosshair,
     rifle,
-    pencil
+    pencil,
+    privacy,
+    power,
+    chevronRight,
 }
 export default icons

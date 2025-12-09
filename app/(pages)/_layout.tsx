@@ -1,4 +1,4 @@
-import React from "react";
+import React, {useEffect} from "react";
 import {
     View,
     Text,
@@ -6,9 +6,10 @@ import {
     Image,
     ImageSourcePropType,
 } from "react-native";
-import { Tabs } from "expo-router";
+import {Tabs, useRouter} from "expo-router";
 import * as Haptics from "expo-haptics";
 import icons from "@/app/constants/icons";
+import {useAuth} from "@/app/contexts/AuthContext";
 
 const ICON_BOX = 28;   // outer box
 const ICON_SIZE = 22;  // base inner size
@@ -61,7 +62,19 @@ const TabIcon = ({ focused, icon, title, scale = 1 }: TabIconProps) => {
     );
 };
 
-const _layout = () => {
+export default function Layout(){
+    const { session, loading } = useAuth();
+    const router = useRouter();
+
+    // If session disappears (logout), redirect to onboarding
+    useEffect(() => {
+        if (loading) return;
+
+        if (!session) {
+            router.replace("/(onboarding)");
+        }
+    }, [loading, session, router]);
+
     return (
         <Tabs
             screenOptions={{
@@ -142,4 +155,3 @@ const _layout = () => {
     );
 };
 
-export default _layout;

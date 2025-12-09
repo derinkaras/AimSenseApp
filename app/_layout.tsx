@@ -94,7 +94,7 @@ export default function RootLayout() {
 
                 <Toast
                     position="top"
-                    visibilityTime={3000}
+                    visibilityTime={2000}
                     topOffset={60}
                     config={toastConfig}
                 />

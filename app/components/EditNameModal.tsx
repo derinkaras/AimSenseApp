@@ -1,5 +1,6 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {View, Text, Modal, Pressable, TextInput, TouchableOpacity} from 'react-native';
+import Toast from "react-native-toast-message";
 
 type editNameModalProps = {
     showEditNameModal: boolean;
@@ -8,18 +9,27 @@ type editNameModalProps = {
     lastName: string;
     setFirstName: (name: string) => void;
     setLastName: (name: string) => void;
+    handleSave: (firstName: string, lastName: string) => void;
+
 }
 
 const EditNameModal = (props: editNameModalProps) => {
     const { showEditNameModal, onClose, setFirstName,
-        setLastName, firstName, lastName
+        setLastName, firstName, lastName, handleSave: saveInDb
     } = props;
     const [newFirstName, setNewFirstName] = useState(firstName);
     const [newLastName, setNewLastName] = useState(lastName);
 
+    useEffect(() => {
+        setNewFirstName(firstName);
+        setNewLastName(lastName);
+    }, [firstName, lastName])
+
+
     const handleSave = () => {
         setFirstName(newFirstName);
         setLastName(newLastName);
+        saveInDb(newFirstName, newLastName);
         onClose();
     }
 
