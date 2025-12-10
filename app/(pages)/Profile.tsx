@@ -9,6 +9,8 @@ import EditNameModal from "@/app/components/EditNameModal";
 import {userProfileApi} from "@/app/api/userProfile";
 import UniversalModal from "@/app/components/UniversalModal";
 import LogoutContent from "@/app/components/contents/LogoutContent";
+import PrivacyPolicyContent from "@/app/components/contents/PrivacyPolicyContent";
+import DeleteAccountContent from "@/app/components/contents/DeleteAccountContent";
 
 const Profile = () => {
     const [profilePhotoUri, setProfilePhotoUri] = useState("");
@@ -138,7 +140,8 @@ const Profile = () => {
 
     const options = Object.entries({
         "Privacy": {icon: icons.privacy},
-        "Logout": {icon: icons.power}
+        "Logout": {icon: icons.power},
+        "Delete Account": {icon: icons.trash}
     })
 
     return (
@@ -186,6 +189,8 @@ const Profile = () => {
                     {user ? user.email : "AimSense@app.com"}
                 </Text>
 
+
+                {/*Modal content*/}
                 <UniversalModal
                     visible={activeModal === "Logout"}
                     onClose={()=>setActiveModal("")}
@@ -195,6 +200,26 @@ const Profile = () => {
                         onConfirm={logout}
                     />
                 </UniversalModal>
+                <UniversalModal
+                    visible={activeModal === "Privacy"}
+                    onClose={() => setActiveModal("")}
+                >
+                    <PrivacyPolicyContent
+                        onClose={() => setActiveModal("")}
+                    />
+                </UniversalModal>
+
+                <UniversalModal
+                    visible={activeModal === "Delete Account"}
+                    onClose={() => setActiveModal("")}
+                >
+                    <DeleteAccountContent
+                        onCancel={() => setActiveModal("")}
+                        onConfirm={()=> setActiveModal("")}
+                    />
+                </UniversalModal>
+
+
                 <FlatList
                     data={options}
                     keyExtractor={(item, index) => index.toString()}

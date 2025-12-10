@@ -8,6 +8,7 @@ interface LogoutContentProps {
 }
 
 const LogoutContent = ({ onConfirm, onCancel }: LogoutContentProps) => {
+
     return (
         <View className="gap-6 py-2">
             {/* Icon */}

@@ -8,7 +8,7 @@ export default function Layout() {
     const { session, loading } = useAuth();
     const router = useRouter();
 
-    // When auth finishes and we have a session → go to main app
+    // When auth finishes + we have a session → go to main app
     useEffect(() => {
         if (loading) return;
 
