@@ -11,6 +11,7 @@ import UniversalModal from "@/app/components/UniversalModal";
 import LogoutContent from "@/app/components/contents/LogoutContent";
 import PrivacyPolicyContent from "@/app/components/contents/PrivacyPolicyContent";
 import DeleteAccountContent from "@/app/components/contents/DeleteAccountContent";
+import {supabase} from "@/app/lib/supabase";
 
 const Profile = () => {
     const [profilePhotoUri, setProfilePhotoUri] = useState("");
@@ -18,8 +19,32 @@ const Profile = () => {
     const [lastName, setLastName] = useState("");
     const [showEditNameModal, setShowEditNameModal] = useState(false);
     const [loading, setLoading] = useState(false);
+
     const [activeModal, setActiveModal] = useState("");
     const {user, logout} = useAuth()
+
+    const loadProfile = async () => {
+        try {
+            setLoading(true);
+            const profileData = await userProfileApi.getMyProfile()
+            if (profileData) {
+                //Keys val might be null since these are optional therefor fall back to ''
+                setFirstName(profileData.firstName || '')
+                setLastName(profileData.lastName || '')
+                setProfilePhotoUri(profileData.profilePhotoUri || '')
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Something went wrong loading the profile'
+            console.log("An unexpected error occurred in load profile getMyProfile api call", message);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    useEffect(() => {
+        loadProfile();
+    }, [])
+
 
     const handleSave = async (firstName: string, lastName: string) => {
         try {
@@ -50,29 +75,6 @@ const Profile = () => {
             console.log("An unexpected error occurred in handle saves api call", message);
         }
     }
-
-    const loadProfile = async () => {
-        try {
-            setLoading(true);
-            const profileData = await userProfileApi.getMyProfile()
-            if (profileData) {
-                //Keys val might be null since these are optional therefor fall back to ''
-                setFirstName(profileData.firstName || '')
-                setLastName(profileData.lastName || '')
-                setProfilePhotoUri(profileData.profilePhotoUri || '')
-            }
-        } catch (error) {
-            const message = error instanceof Error ? error.message : 'Something went wrong loading the profile'
-            console.log("An unexpected error occurred in load profile getMyProfile api call", message);
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    useEffect(() => {
-        loadProfile();
-    }, [])
-
 
 
     const pickImage = async () => {
@@ -127,6 +129,39 @@ const Profile = () => {
             }
         }
     };
+
+    const handleDeleteAccount = async () => {
+        try {
+            if (!user) {
+                return
+            }
+            setLoading(true);
+            await userProfileApi.deleteAccount()
+            Toast.show({
+                type: "success",
+                text1: "Account Deleted",
+                text2: "Your account has been permanently deleted",
+            });
+            setActiveModal("");
+            await logout()
+
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to delete account';
+            console.log("Error deleting account:", message);
+            Toast.show({
+                type: "error",
+                text1: "Delete Failed",
+                text2: message,
+            });
+
+        } finally {
+            setLoading(false);
+        }
+    }
+
+
+
+
 
     if (loading) {
         return (
@@ -197,7 +232,14 @@ const Profile = () => {
                 >
                     <LogoutContent
                         onCancel={() => setActiveModal("")}
-                        onConfirm={logout}
+                        onConfirm={() => {
+                            logout()
+                            Toast.show({
+                                type: "success",
+                                text1: "Logged Out",
+                                text2: "See you soon!",
+                            });
+                        }}
                     />
                 </UniversalModal>
                 <UniversalModal
@@ -215,7 +257,7 @@ const Profile = () => {
                 >
                     <DeleteAccountContent
                         onCancel={() => setActiveModal("")}
-                        onConfirm={()=> setActiveModal("")}
+                        onConfirm={handleDeleteAccount}
                     />
                 </UniversalModal>
 

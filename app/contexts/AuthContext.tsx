@@ -199,6 +199,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setLoading(false);
             return { success: true };
         } catch (e: any) {
+            console.log("gets here")
             const msg = e?.message ?? "Login failed";
             setError(msg);
             Toast.show({
@@ -230,12 +231,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
             setUser(null);
             setSession(null);
-
-            Toast.show({
-                type: "success",
-                text1: "Logged Out",
-                text2: "See you soon!",
-            });
+            // Not showing logout toast message here since we dont want account deletion toast to be overwritten
 
             setLoading(false);
         } catch (e: any) {

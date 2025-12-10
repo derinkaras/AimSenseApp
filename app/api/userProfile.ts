@@ -98,13 +98,26 @@ export const userProfileApi = {
                 headers,
             }
         );
-
+        // BE CAREFUL WITH NO CONTENT RETURNS THEY CANNOT BE .json() like above .json() should strickly be done
+        // if there is an error in these cases
         if (!response.ok) {
             // DELETE might not have a body, so catch parsing errors
             const data = await response.json().catch(() => ({}));
             throw new Error(data.message || 'Failed to delete profile');
         }
 
-        // No return needed for DELETE
+    },
+    deleteAccount: async () =>{
+        const headers = await getAuthHeaders();
+        const response = await fetch(`${API_BASE_URL}/userProfile/deleteAccount`, {
+            method: 'DELETE',
+            headers,
+        })
+        // BE CAREFUL WITH NO CONTENT RETURNS THEY CANNOT BE .json() like above .json() should strickly be done
+        // if there is an error in these cases
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.message || 'Failed to delete account');
+        }
     }
 }

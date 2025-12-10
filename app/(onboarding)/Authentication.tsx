@@ -13,10 +13,9 @@ const Authentication = () => {
     const [isSignUp, setIsSignUp] = useState(true);
 
     const { signup, login, loading, error, clearError } = useAuth();
-    // ^ include error/clearError if your context exposes them
 
     const handleSubmit = async () => {
-        if (loading) return; // prevent double taps
+        if (loading) return;
 
         // Optional: clear old error before new submit
         if (clearError) clearError();
