@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, {useEffect, useRef} from "react";
 import { View, ActivityIndicator } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -7,21 +7,24 @@ import { useAuth } from "@/app/contexts/AuthContext";
 export default function Layout() {
     const { session, loading } = useAuth();
     const router = useRouter();
+    const hasCheckedInitialSession = useRef(false)
 
-    // When auth finishes + we have a session → go to main app
+    // When auth finishes we have a session → go to main app
     useEffect(() => {
         if (loading) return;
 
         if (session) {
             console.log("[OnboardingLayout] Session found, router.replace to /(pages)/Home");
+            hasCheckedInitialSession.current = true;
             router.replace("/(pages)/Home");
         } else {
+            hasCheckedInitialSession.current = true;
             console.log("[OnboardingLayout] No session, staying on onboarding");
         }
     }, [loading, session, router]);
 
     // While loading auth OR while redirecting, show a simple loader
-    if (loading || session) {
+    if (loading && !hasCheckedInitialSession.current) {
         return (
             <View className="flex-1 bg-brand-black items-center justify-center">
                 <StatusBar style="light" backgroundColor="#121212" />

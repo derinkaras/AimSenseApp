@@ -1,4 +1,4 @@
-import onboarding from "../assets/images/onboarding.png"
+import onboarding from "../assets/images/onboarding2.png"
 import highlight from "../assets/images/highlight.png"
 const images = {
     onboarding,

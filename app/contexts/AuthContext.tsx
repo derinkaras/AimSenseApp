@@ -73,6 +73,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         try {
             clearError();
 
+            // ✅ Validate BEFORE setting loading or making API call
             if (!email || !password) {
                 Toast.show({
                     type: "error",
@@ -100,6 +101,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 return { success: false };
             }
 
+            // ✅ Only set loading AFTER validation passes
             setLoading(true);
 
             // --- SAFEST POSSIBLE SIGNUP ---
@@ -159,17 +161,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const login = async (email: string, password: string) => {
         try {
             clearError();
-            setLoading(true);
 
-            if (!email || !validateEmail(email) || !validatePassword(password)) {
+            // ✅ Validate BEFORE setting loading or making API call
+            if (!email || !password) {
                 Toast.show({
                     type: "error",
-                    text1: "Invalid Input",
-                    text2: "Please fill all fields correctly",
+                    text1: "Missing Fields",
+                    text2: "Please enter your email and password.",
                 });
-                setLoading(false);
                 return { success: false };
             }
+
+            if (!validateEmail(email)) {
+                Toast.show({
+                    type: "error",
+                    text1: "Invalid Email",
+                    text2: "Please enter a valid email format.",
+                });
+                return { success: false };
+            }
+
+            if (!validatePassword(password)) {
+                Toast.show({
+                    type: "error",
+                    text1: "Weak Password",
+                    text2: "Password must be at least 6 characters.",
+                });
+                return { success: false };
+            }
+
+            // ✅ Only set loading AFTER validation passes
+            setLoading(true);
 
             const { data, error } = await supabase.auth.signInWithPassword({
                 email,
