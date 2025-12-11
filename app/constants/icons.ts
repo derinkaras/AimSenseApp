@@ -11,6 +11,7 @@ import privacy from "../assets/icons/user-shield-solid-full.png"
 import power from "../assets/icons/power-off-solid-full.png"
 import chevronRight from "../assets/icons/chevron-right-solid-full.png"
 import trash from "../assets/icons/trash-solid-full.png"
+import file from "../assets/icons/file-regular-full.png"
 const icons = {
     leftArrow,
     mail,
@@ -24,6 +25,7 @@ const icons = {
     privacy,
     power,
     chevronRight,
-    trash
+    trash,
+    file
 }
 export default icons

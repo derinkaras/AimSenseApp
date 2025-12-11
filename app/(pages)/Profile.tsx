@@ -12,6 +12,7 @@ import LogoutContent from "@/app/components/contents/LogoutContent";
 import PrivacyPolicyContent from "@/app/components/contents/PrivacyPolicyContent";
 import DeleteAccountContent from "@/app/components/contents/DeleteAccountContent";
 import {supabase} from "@/app/lib/supabase";
+import TermsOfServiceContent from "@/app/components/contents/TermsOfServiceContent";
 
 const Profile = () => {
     const [profilePhotoUri, setProfilePhotoUri] = useState("");
@@ -159,7 +160,9 @@ const Profile = () => {
         }
     }
 
-
+    const closeModal = async () => {
+        setActiveModal("");
+    }
 
 
 
@@ -175,6 +178,7 @@ const Profile = () => {
 
     const options = Object.entries({
         "Privacy": {icon: icons.privacy},
+        "Terms of Service": {icon: icons.file},
         "Logout": {icon: icons.power},
         "Delete Account": {icon: icons.trash}
     })
@@ -228,10 +232,10 @@ const Profile = () => {
                 {/*Modal content*/}
                 <UniversalModal
                     visible={activeModal === "Logout"}
-                    onClose={()=>setActiveModal("")}
+                    onClose={closeModal}
                 >
                     <LogoutContent
-                        onCancel={() => setActiveModal("")}
+                        onCancel={closeModal}
                         onConfirm={() => {
                             logout()
                             Toast.show({
@@ -244,19 +248,27 @@ const Profile = () => {
                 </UniversalModal>
                 <UniversalModal
                     visible={activeModal === "Privacy"}
-                    onClose={() => setActiveModal("")}
+                    onClose={closeModal}
                 >
                     <PrivacyPolicyContent
-                        onClose={() => setActiveModal("")}
+                        onClose={closeModal}
                     />
                 </UniversalModal>
 
                 <UniversalModal
+                    visible={activeModal === "Terms of Service"}
+                    onClose={closeModal}
+                >
+                    <TermsOfServiceContent onClose={closeModal}/>
+                </UniversalModal>
+
+
+                <UniversalModal
                     visible={activeModal === "Delete Account"}
-                    onClose={() => setActiveModal("")}
+                    onClose={closeModal}
                 >
                     <DeleteAccountContent
-                        onCancel={() => setActiveModal("")}
+                        onCancel={closeModal}
                         onConfirm={handleDeleteAccount}
                     />
                 </UniversalModal>
@@ -300,6 +312,15 @@ const Profile = () => {
                     }}
                 />
 
+                {/* Support Contact */}
+                <View className="mx-6 mt-6 mb-4">
+                    <Text className="text-gray-500 text-sm text-center">
+                        Need help? Contact us at
+                    </Text>
+                    <Text className="text-gray-400 text-sm text-center mt-1">
+                        support@aimsense.app
+                    </Text>
+                </View>
 
 
             </SafeAreaView>

@@ -13,7 +13,7 @@ const PrivacyPolicyContent = ({onClose}: PrivacyPolicyContentProps) => {
             {/* Icon */}
             <View className="flex-row relative items-center justify-center">
                 <TouchableOpacity
-                    className="absolute left-0 top-0 p-2"
+                    className="absolute left-0 p-2"
                     onPress={onClose}
                 >
                     <Image
