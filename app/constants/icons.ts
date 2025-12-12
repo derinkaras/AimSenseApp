@@ -13,6 +13,8 @@ import chevronRight from "../assets/icons/chevron-right-solid-full.png"
 import trash from "../assets/icons/trash-solid-full.png"
 import file from "../assets/icons/file-regular-full.png"
 import plus from "../assets/icons/plus-solid-full.png"
+import camera from "../assets/icons/camera-regular-full.png"
+import diamond from "../assets/icons/gem-regular-full.png"
 
 const icons = {
     leftArrow,
@@ -30,5 +32,7 @@ const icons = {
     trash,
     file,
     plus,
+    camera,
+    diamond
 }
 export default icons

@@ -1,18 +1,29 @@
-import React, {useEffect, useState} from 'react';
-import {View, Text, TouchableOpacity, Image, ActivityIndicator, FlatList} from 'react-native';
-import {SafeAreaView} from "react-native-safe-area-context";
+import React, { useEffect, useState } from "react";
+import {
+    View,
+    Text,
+    TouchableOpacity,
+    Image,
+    ActivityIndicator,
+    FlatList,
+    ScrollView,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import Toast from "react-native-toast-message";
+
 import icons from "@/app/constants/icons";
-import {useAuth} from "@/app/contexts/AuthContext";
+import { useAuth } from "@/app/contexts/AuthContext";
 import EditNameModal from "@/app/components/EditNameModal";
-import {userProfileApi} from "@/app/api/userProfile";
+import { userProfileApi } from "@/app/api/userProfile";
 import UniversalModal from "@/app/components/UniversalModal";
 import LogoutContent from "@/app/components/contents/LogoutContent";
 import PrivacyPolicyContent from "@/app/components/contents/PrivacyPolicyContent";
 import DeleteAccountContent from "@/app/components/contents/DeleteAccountContent";
-import {supabase} from "@/app/lib/supabase";
 import TermsOfServiceContent from "@/app/components/contents/TermsOfServiceContent";
+import PremiumBadge from "@/app/components/profile/PremiumBadge";
+import TrialBadge from "@/app/components/profile/TrialBadge";
+import FreeBadge from "@/app/components/profile/FreeBadge";
 
 const Profile = () => {
     const [profilePhotoUri, setProfilePhotoUri] = useState("");
@@ -20,84 +31,99 @@ const Profile = () => {
     const [lastName, setLastName] = useState("");
     const [showEditNameModal, setShowEditNameModal] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [activeModal, setActiveModal] = useState<"" | "Privacy" | "Terms of Service" | "Logout" | "Delete Account">("");
+    const { user, logout } = useAuth();
+    const [subscription, setSubscription] = useState("premium");
 
-    const [activeModal, setActiveModal] = useState("");
-    const {user, logout} = useAuth()
 
+    // ---------- Load profile ----------
     const loadProfile = async () => {
         try {
             setLoading(true);
-            const profileData = await userProfileApi.getMyProfile()
+            const profileData = await userProfileApi.getMyProfile();
+
             if (profileData) {
-                //Keys val might be null since these are optional therefor fall back to ''
-                setFirstName(profileData.firstName || '')
-                setLastName(profileData.lastName || '')
-                setProfilePhotoUri(profileData.profilePhotoUri || '')
+                setFirstName(profileData.firstName || "");
+                setLastName(profileData.lastName || "");
+                setProfilePhotoUri(profileData.profilePhotoUri || "");
             }
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Something went wrong loading the profile'
-            console.log("An unexpected error occurred in load profile getMyProfile api call", message);
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : "Something went wrong loading the profile";
+            console.log("loadProfile error:", message);
         } finally {
             setLoading(false);
         }
-    }
+    };
 
     useEffect(() => {
         loadProfile();
-    }, [])
+    }, []);
 
-
-    const handleSave = async (firstName: string, lastName: string) => {
+    // ---------- Save name (and current photo) ----------
+    const handleSaveName = async (newFirst: string, newLast: string) => {
         try {
             const profile = await userProfileApi.getMyProfile();
-            const data = {
-                ...(firstName && { firstName }),
-                ...(lastName && { lastName }),
+
+            const data: any = {
+                ...(newFirst && { firstName: newFirst }),
+                ...(newLast && { lastName: newLast }),
                 ...(profilePhotoUri && { profilePhotoUri }),
-            }
+            };
+
             if (!profile) {
-                const createdProfile = await userProfileApi.createProfile(data);
+                await userProfileApi.createProfile(data);
                 Toast.show({
                     type: "success",
                     text1: "Profile Created",
-                    text2: "Your profile has been saved",
+                    text2: "Your profile has been saved.",
                 });
             } else {
-                const updatedProfile = await userProfileApi.updateProfile(data)
+                await userProfileApi.updateProfile(data);
                 Toast.show({
                     type: "success",
                     text1: "Profile Updated",
-                    text2: "Changes saved successfully",
+                    text2: "Changes saved successfully.",
                 });
             }
 
+            setFirstName(newFirst);
+            setLastName(newLast);
+            setShowEditNameModal(false);
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Something went wrong loading the profile'
-            console.log("An unexpected error occurred in handle saves api call", message);
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : "Something went wrong saving your name";
+            console.log("handleSaveName error:", message);
+            Toast.show({
+                type: "error",
+                text1: "Save failed",
+                text2: message,
+            });
         }
-    }
+    };
 
-
+    // ---------- Image picking ----------
     const pickImage = async () => {
-        // 1. Ask for permission
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== "granted") {
             Toast.show({
                 type: "error",
                 text1: "Permission Denied",
-                text2: "Permissions needed to upload profile picture",
-            })
+                text2: "We need access to your photos to set a profile picture.",
+            });
             return;
         }
 
-        // 2. Launch picker
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ["images"],
             allowsEditing: true,
             quality: 0.8,
         });
 
-        // 3. Handle image
         if (!result.canceled) {
             const uri = result.assets[0].uri;
             Toast.show({
@@ -107,85 +133,116 @@ const Profile = () => {
             });
             return uri;
         }
-    }
+    };
 
-    const handlePick = async () => {
+    const handlePickPhoto = async () => {
         const imageUri = await pickImage();
-        if (imageUri) {
-            setProfilePhotoUri(imageUri);
-            try {
-                const profile = await userProfileApi.getMyProfile();
-                const data = { profilePhotoUri: imageUri };
-                if (!profile) {
-                    await userProfileApi.createProfile(data);
-                } else {
-                    await userProfileApi.updateProfile(data);
-                }
-            } catch (error: any) {
-                Toast.show({
-                    type: "error",
-                    text1: "Failed to save photo",
-                    text2: error.message,
-                });
+        if (!imageUri) return;
+
+        setProfilePhotoUri(imageUri);
+
+        try {
+            const profile = await userProfileApi.getMyProfile();
+            const data = { profilePhotoUri: imageUri };
+
+            if (!profile) {
+                await userProfileApi.createProfile(data);
+            } else {
+                await userProfileApi.updateProfile(data);
             }
+
+            Toast.show({
+                type: "success",
+                text1: "Profile Updated",
+                text2: "Profile picture saved.",
+            });
+        } catch (error: any) {
+            Toast.show({
+                type: "error",
+                text1: "Failed to save photo",
+                text2: error?.message || "Please try again.",
+            });
         }
     };
 
+    const handleRemovePhoto = async () => {
+        if (!profilePhotoUri) return;
+
+        try {
+            setProfilePhotoUri("");
+            // send empty string to clear on backend
+            await userProfileApi.updateProfile({ profilePhotoUri: "" });
+
+            Toast.show({
+                type: "success",
+                text1: "Photo Removed",
+                text2: "Your profile picture has been cleared.",
+            });
+        } catch (error: any) {
+            Toast.show({
+                type: "error",
+                text1: "Failed to remove photo",
+                text2: error?.message || "Please try again.",
+            });
+        }
+    };
+
+    // ---------- Delete account ----------
     const handleDeleteAccount = async () => {
         try {
-            if (!user) {
-                return
-            }
+            if (!user) return;
+
             setLoading(true);
-            await userProfileApi.deleteAccount()
+            await userProfileApi.deleteAccount();
+
             Toast.show({
                 type: "success",
                 text1: "Account Deleted",
-                text2: "Your account has been permanently deleted",
+                text2: "Your account has been permanently deleted.",
             });
-            setActiveModal("");
-            await logout()
 
+            setActiveModal("");
+            await logout();
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Failed to delete account';
+            const message =
+                error instanceof Error ? error.message : "Failed to delete account";
             console.log("Error deleting account:", message);
             Toast.show({
                 type: "error",
-                text1: "Delete Failed",
+                text1: "Delete failed",
                 text2: message,
             });
-
         } finally {
             setLoading(false);
         }
-    }
+    };
 
-    const closeModal = async () => {
-        setActiveModal("");
-    }
+    const closeModal = () => setActiveModal("");
 
-
-
+    // ---------- Loading state ----------
     if (loading) {
         return (
             <View className="flex-1 bg-brand-black justify-center items-center">
                 <ActivityIndicator size="large" color="#0b7f4f" />
                 <Text className="text-white mt-4">Loading profile...</Text>
             </View>
-        )
+        );
     }
 
+    const displayFirst = firstName || "AimSense";
+    const displayLast = lastName || "Shooter";
 
     const options = Object.entries({
-        "Privacy": {icon: icons.privacy},
-        "Terms of Service": {icon: icons.file},
-        "Logout": {icon: icons.power},
-        "Delete Account": {icon: icons.trash}
-    })
+        Privacy: { icon: icons.privacy },
+        "Terms of Service": { icon: icons.file },
+        Logout: { icon: icons.power },
+        "Delete Account": { icon: icons.trash },
+    });
 
     return (
         <View className="flex-1 bg-brand-black">
-            <SafeAreaView>
+            <SafeAreaView className="flex-1">
+                {/* Edit name modal */}
                 <EditNameModal
                     showEditNameModal={showEditNameModal}
                     onClose={() => setShowEditNameModal(false)}
@@ -193,51 +250,16 @@ const Profile = () => {
                     lastName={lastName}
                     setFirstName={setFirstName}
                     setLastName={setLastName}
-                    handleSave={handleSave}
+                    handleSave={handleSaveName}
                 />
-                <View className="mt-10 flex-row items-center justify-center">
-                    <TouchableOpacity
-                        onPress={() => handlePick()}
-                        className="size-32 items-center justify-center overflow-hidden rounded-full
-                        bg-brand-greenDark shadow-sm border-2 border-brand-green">
-                        <Image
-                            source={profilePhotoUri ? { uri: profilePhotoUri } : icons.user}
-                            className="size-full"
-                            style={{
-                                tintColor: profilePhotoUri ? undefined : "#0b7f4f",
-                                resizeMode: profilePhotoUri ? "cover" : "contain"
-                            }}
-                        />
-                    </TouchableOpacity>
-                </View>
 
-                <View className="flex-row items-center justify-center gap-1 text-white text-xl mt-4">
-                    <Text className="text-white text-lg">{firstName ? firstName : "AimSense"}</Text>
-                    <Text className="text-white text-lg">{lastName ? lastName : "Shooter"}</Text>
-                    <TouchableOpacity
-                        onPress={() => setShowEditNameModal(true)}
-                    >
-                        <Image
-                            source={icons.pencil}
-                            className="size-5"
-                            tintColor="white"
-                        />
-                    </TouchableOpacity>
-                </View>
-                <Text className="text-gray-500 text-lg text-center mt-2">
-                    {user ? user.email : "AimSense@app.com"}
-                </Text>
-
-
-                {/*Modal content*/}
-                <UniversalModal
-                    visible={activeModal === "Logout"}
-                    onClose={closeModal}
-                >
+                {/* Modals */}
+                <UniversalModal visible={activeModal === "Logout"} onClose={closeModal}>
                     <LogoutContent
                         onCancel={closeModal}
-                        onConfirm={() => {
-                            logout()
+                        onConfirm={async () => {
+                            await logout();
+                            closeModal();
                             Toast.show({
                                 type: "success",
                                 text1: "Logged Out",
@@ -246,22 +268,17 @@ const Profile = () => {
                         }}
                     />
                 </UniversalModal>
-                <UniversalModal
-                    visible={activeModal === "Privacy"}
-                    onClose={closeModal}
-                >
-                    <PrivacyPolicyContent
-                        onClose={closeModal}
-                    />
+
+                <UniversalModal visible={activeModal === "Privacy"} onClose={closeModal}>
+                    <PrivacyPolicyContent onClose={closeModal} />
                 </UniversalModal>
 
                 <UniversalModal
                     visible={activeModal === "Terms of Service"}
                     onClose={closeModal}
                 >
-                    <TermsOfServiceContent onClose={closeModal}/>
+                    <TermsOfServiceContent onClose={closeModal} />
                 </UniversalModal>
-
 
                 <UniversalModal
                     visible={activeModal === "Delete Account"}
@@ -273,56 +290,154 @@ const Profile = () => {
                     />
                 </UniversalModal>
 
-
-                <FlatList
-                    data={options}
-                    keyExtractor={(item, index) => index.toString()}
-                    scrollEnabled={false}
-                    className="mx-6 mt-8"
-                    renderItem={({ item }) => {
-                        const [key, value] = item;
-                        return (
+                <ScrollView
+                    className="flex-1"
+                    contentContainerStyle={{ paddingBottom: 32 }}
+                    showsVerticalScrollIndicator={false}
+                >
+                    {/* PROFILE CARD */}
+                    <View className="mx-6 mt-6 rounded-2xl bg-brand-greenDark/30 border border-brand-green/40 p-5">
+                        {/* Avatar */}
+                        <View className="items-center">
                             <TouchableOpacity
-                                className="bg-brand-greenDark border border-brand-green flex-row w-full h-14
-                                justify-between items-center rounded-xl mb-3 px-4"
-                                activeOpacity={0.7}
-                                onPress={() => setActiveModal(key)}
+                                onPress={handlePickPhoto}
+                                activeOpacity={0.85}
+                                className="size-32 items-center justify-center overflow-hidden rounded-full
+                           bg-brand-greenDark shadow-sm border-2 border-brand-green/80"
                             >
-                                <View className="flex-row items-center flex-1">
-                                    <View className="bg-brand-black p-2 rounded-lg">
-                                        <Image
-                                            source={value.icon}
-                                            className="size-5"
-                                            tintColor="#0b7f4f"
-                                            resizeMode="contain"
-                                        />
-                                    </View>
-                                    <Text className="text-white text-base font-medium ml-3">
-                                        {key}
-                                    </Text>
-                                </View>
                                 <Image
-                                    source={icons.chevronRight}
-                                    className="size-5"
-                                    tintColor="#0b7f4f"
+                                    source={profilePhotoUri ? { uri: profilePhotoUri } : icons.user}
+                                    className="w-full h-full"
+                                    style={{
+                                        tintColor: profilePhotoUri ? undefined : "#0b7f4f",
+                                        resizeMode: profilePhotoUri ? "cover" : "contain",
+                                    }}
+                                />
+
+                            </TouchableOpacity>
+
+                            {/* Remove photo */}
+                            {profilePhotoUri ? (
+                                <TouchableOpacity
+                                    onPress={handleRemovePhoto}
+                                    className="mt-3 px-3 py-1 rounded-full bg-brand-black/60 border border-brand-green/60"
+                                    activeOpacity={0.85}
+                                >
+                                    <Text className="text-xs text-gray-300">
+                                        Remove profile photo
+                                    </Text>
+                                </TouchableOpacity>
+                            ) : (
+                                <Text className="mt-3 text-xs text-gray-400">
+                                    Tap the avatar to add a photo
+                                </Text>
+                            )}
+                        </View>
+
+                        {/* Name + edit */}
+                        <View className="items-center mt-4">
+                            <Text className="text-white text-xl font-semibold">
+                                {displayFirst} {displayLast}
+                            </Text>
+
+                            <TouchableOpacity
+                                onPress={() => setShowEditNameModal(true)}
+                                className="mt-2 flex-row items-center px-3 py-1.5 rounded-full bg-brand-black/60 border border-brand-green/70"
+                                activeOpacity={0.85}
+                            >
+                                <Image
+                                    source={icons.pencil}
+                                    className="w-4 h-4 mr-1"
+                                    tintColor="#10b981"
                                     resizeMode="contain"
                                 />
+                                <Text className="text-gray-200 text-xs">
+                                    Edit display name
+                                </Text>
                             </TouchableOpacity>
-                        )
-                    }}
-                />
+                        </View>
 
-                {/* Support Contact */}
-                <View className="mx-6 mt-6 mb-4">
-                    <Text className="text-gray-500 text-sm text-center">
-                        Need help? Contact us at
+                        {/* Email + plan chip */}
+                        <View className="items-center mt-3">
+                            <Text
+                                className="text-gray-400 text-xs text-center"
+                                numberOfLines={1}
+                            >
+                                {user ? user.email : "aimsense@app.com"}
+                            </Text>
+
+                            <View className="mt-2">
+                                {subscription === "premium" && <PremiumBadge />}
+                                {subscription === "trial" && <TrialBadge />}
+                                {subscription === "free" && <FreeBadge />}
+                            </View>
+
+                        </View>
+                    </View>
+
+                    {/* SETTINGS SECTION */}
+                    <Text className="mx-6 mt-8 mb-2 text-gray-500 text-xs uppercase tracking-[2px]">
+                        Account & App
                     </Text>
-                    <Text className="text-gray-400 text-sm text-center mt-1">
-                        support@aimsense.app
-                    </Text>
-                </View>
 
+                    <FlatList
+                        data={options}
+                        keyExtractor={(_, index) => index.toString()}
+                        scrollEnabled={false}
+                        className="mx-6"
+                        renderItem={({ item }) => {
+                            const [key, value] = item;
+                            const isDanger = key === "Delete Account";
 
+                            return (
+                                <TouchableOpacity
+                                    className={`flex-row w-full h-12 justify-between items-center rounded-xl mb-3 px-4
+                             bg-brand-black/70 border ${
+                                        isDanger
+                                            ? "border-red-500/70"
+                                            : "border-brand-green/70"
+                                    }`}
+                                    activeOpacity={0.85}
+                                    onPress={() => setActiveModal(key as typeof activeModal)}
+                                >
+                                    <View className="flex-row items-center flex-1">
+                                        <View
+                                            className={`p-2 rounded-lg ${
+                                                isDanger ? "bg-red-900/60" : "bg-brand-greenDark/70"
+                                            }`}
+                                        >
+                                            <Image
+                                                source={value.icon}
+                                                className="w-5 h-5"
+                                                tintColor={isDanger ? "#f97373" : "#10b981"}
+                                                resizeMode="contain"
+                                            />
+                                        </View>
+                                        <Text className="text-white text-base font-medium ml-3">
+                                            {key}
+                                        </Text>
+                                    </View>
+                                    <Image
+                                        source={icons.chevronRight}
+                                        className="w-5 h-5"
+                                        tintColor={isDanger ? "#f97373" : "#10b981"}
+                                        resizeMode="contain"
+                                    />
+                                </TouchableOpacity>
+                            );
+                        }}
+                    />
+
+                    {/* SUPPORT */}
+                    <View className="mx-6 mt-6 mb-4">
+                        <Text className="text-gray-500 text-sm text-center">
+                            Need help? Contact us at
+                        </Text>
+                        <Text className="text-gray-400 text-sm text-center mt-1">
+                            support@aimsense.app
+                        </Text>
+                    </View>
+                </ScrollView>
             </SafeAreaView>
         </View>
     );

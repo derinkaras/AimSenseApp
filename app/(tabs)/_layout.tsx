@@ -1,15 +1,17 @@
-import React, {useEffect} from "react";
+import React, { useEffect } from "react";
 import {
     View,
     Text,
     Pressable,
     Image,
     ImageSourcePropType,
+    PressableProps,
 } from "react-native";
-import {Tabs, useRouter} from "expo-router";
+import { Tabs, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
+import type { BottomTabBarButtonProps } from "@react-navigation/bottom-tabs"; // ⬅️ add this
 import icons from "@/app/constants/icons";
-import {useAuth} from "@/app/contexts/AuthContext";
+import { useAuth } from "@/app/contexts/AuthContext";
 
 const ICON_BOX = 28;   // outer box
 const ICON_SIZE = 22;  // base inner size
@@ -26,7 +28,6 @@ const TabIcon = ({ focused, icon, title, scale = 1 }: TabIconProps) => {
 
     return (
         <View className="items-center justify-center px-3 py-3 w-full">
-            {/* fixed box so layout is identical */}
             <View
                 style={{
                     width: ICON_BOX,
@@ -62,14 +63,28 @@ const TabIcon = ({ focused, icon, title, scale = 1 }: TabIconProps) => {
     );
 };
 
-export default function Layout(){
+// ✅ Custom tab bar button with proper typing
+const TabBarButton: React.FC<BottomTabBarButtonProps> = ({
+                                                             onPress,
+                                                             ...rest
+                                                         }) => {
+    return (
+        <Pressable
+            {...(rest as PressableProps)} // cast navigation's extras into PressableProps
+            onPress={(e) => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                onPress?.(e);
+            }}
+        />
+    );
+};
+
+export default function Layout() {
     const { session, loading } = useAuth();
     const router = useRouter();
 
-    // If session disappears (logout), redirect to onboarding
     useEffect(() => {
         if (loading) return;
-
         if (!session) {
             router.replace("/(onboarding)");
         }
@@ -92,15 +107,7 @@ export default function Layout(){
                     paddingTop: 14,
                     paddingBottom: 16,
                 },
-                tabBarButton: (props) => (
-                    <Pressable
-                        {...props}
-                        onPress={(e) => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            props.onPress?.(e);
-                        }}
-                    />
-                ),
+                tabBarButton: (props) => <TabBarButton {...props} />, // ⬅️ use wrapper
             }}
         >
             <Tabs.Screen
@@ -113,7 +120,7 @@ export default function Layout(){
                             focused={focused}
                             icon={icons.crosshair}
                             title="Home"
-                            scale={1.50} // tweak if crosshair feels bigger
+                            scale={1.5}
                         />
                     ),
                 }}
@@ -129,7 +136,7 @@ export default function Layout(){
                             focused={focused}
                             icon={icons.rifle}
                             title="Guns"
-                            scale={1.60} // tweak if user feels smaller
+                            scale={1.6}
                         />
                     ),
                 }}
@@ -144,14 +151,11 @@ export default function Layout(){
                             focused={focused}
                             icon={icons.user}
                             title="Profile"
-                            scale={1.05} // tweak if user feels smaller
+                            scale={1.05}
                         />
                     ),
                 }}
             />
-
-
         </Tabs>
     );
-};
-
+}

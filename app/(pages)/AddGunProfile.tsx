@@ -13,6 +13,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
+import Toast from "react-native-toast-message";
 
 import icons from "@/app/constants/icons";
 import { gunProfileApi } from "@/app/api/gunProfile";
@@ -29,13 +31,45 @@ const AddGunProfile = () => {
     const [zeroDistance, setZeroDistance] = useState("");
     const [scopeHeight, setScopeHeight] = useState("");
     const [unitSystem, setUnitSystem] = useState<"METRIC" | "IMPERIAL">("IMPERIAL");
-    const [gunPhotoUri, setGunPhotoUri] = useState<string | undefined>(undefined); // future: image picker
+    const [gunPhotoUri, setGunPhotoUri] = useState<string | undefined>(undefined);
 
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+
+    const pickImage = async () => {
+        // 1. Ask for permission
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== "granted") {
+            Toast.show({
+                type: "error",
+                text1: "Permission denied",
+                text2: "Photo library access is required to add a rifle photo.",
+            });
+            return;
+        }
+
+        // 2. Launch picker
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ["images"],
+            allowsEditing: true,
+            quality: 0.8,
+        });
+
+        // 3. Handle image
+        if (!result.canceled) {
+            const uri = result.assets[0].uri;
+            setGunPhotoUri(uri);
+            Toast.show({
+                type: "success",
+                text1: "Photo selected",
+                text2: "Your rifle photo has been loaded.",
+            });
+        }
+    };
+
+
     const handleCreateProfile = async () => {
-        // light haptic on tap
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
         // Basic validation
@@ -74,11 +108,15 @@ const AddGunProfile = () => {
                 zeroDistance: zeroDistanceNum,
                 scopeHeight: scopeHeightNum,
                 unitSystem,
-                gunPhotoUri,
+                gunPhotoUri, // <-- send the photo URI
             });
 
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            // You could also show a toast/snackbar here
+            Toast.show({
+                type: "success",
+                text1: "Profile saved",
+                text2: "Your rifle profile has been created.",
+            });
             router.back();
         } catch (err) {
             const msg =
@@ -86,10 +124,17 @@ const AddGunProfile = () => {
             setError(msg);
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             console.log("Error creating gun profile:", msg);
+            Toast.show({
+                type: "error",
+                text1: "Error",
+                text2: msg,
+            });
         } finally {
             setSubmitting(false);
         }
     };
+
+    // ---------- SMALL INPUT RENDER HELPER ----------
 
     const renderInput = (
         label: string,
@@ -143,7 +188,6 @@ const AddGunProfile = () => {
                         <Text className="text-white text-lg font-semibold">
                             New Rifle Profile
                         </Text>
-                        {/* spacer to balance layout */}
                         <View className="w-6 h-6" />
                     </View>
 
@@ -158,8 +202,8 @@ const AddGunProfile = () => {
                                 Dial in your rifle
                             </Text>
                             <Text className="text-gray-500 text-sm">
-                                Enter your rifle and ammo details so AimSense can calculate
-                                accurate drops and holds for your shots.
+                                Enter your rifle and ammo details so AimSense can calculate accurate drops and holds
+                                for your shots.
                             </Text>
                         </View>
 
@@ -169,7 +213,7 @@ const AddGunProfile = () => {
                             </View>
                         )}
 
-                        {/* Rifle details */}
+                        {/* Rifle */}
                         <Text className="text-gray-400 text-xs uppercase tracking-[0.16em] mb-2">
                             Rifle
                         </Text>
@@ -187,10 +231,15 @@ const AddGunProfile = () => {
                             Ammo & Ballistics
                         </Text>
 
-                        {renderInput("Bullet weight (grains)", bulletWeightGrains, setBulletWeightGrains, {
-                            placeholder: "e.g. 168",
-                            keyboardType: "numeric",
-                        })}
+                        {renderInput(
+                            "Bullet weight (grains)",
+                            bulletWeightGrains,
+                            setBulletWeightGrains,
+                            {
+                                placeholder: "e.g. 168",
+                                keyboardType: "numeric",
+                            }
+                        )}
 
                         {renderInput(
                             "Ballistic coefficient (G1)",
@@ -202,11 +251,17 @@ const AddGunProfile = () => {
                             }
                         )}
 
-                        {renderInput("Muzzle velocity (fps)", muzzleVelocityFps, setMuzzleVelocityFps, {
-                            placeholder: "e.g. 2650",
-                            keyboardType: "numeric",
-                        })}
+                        {renderInput(
+                            "Muzzle velocity (fps)",
+                            muzzleVelocityFps,
+                            setMuzzleVelocityFps,
+                            {
+                                placeholder: "e.g. 2650",
+                                keyboardType: "numeric",
+                            }
+                        )}
 
+                        {/* Zero & scope */}
                         <Text className="text-gray-400 text-xs uppercase tracking-[0.16em] mt-2 mb-2">
                             Zero & Scope
                         </Text>
@@ -216,22 +271,21 @@ const AddGunProfile = () => {
                             keyboardType: "numeric",
                         })}
 
-                        {renderInput("Scope height (inches)", scopeHeight, setScopeHeight, {
-                            placeholder: unitSystem === "IMPERIAL" ? "e.g. 1.5" : "e.g. 3.8 cm (converted)",
+                        {renderInput("Scope height", scopeHeight, setScopeHeight, {
+                            placeholder:
+                                unitSystem === "IMPERIAL"
+                                    ? "e.g. 1.5 in (center to bore)"
+                                    : "e.g. 3.8 cm (converted)",
                             keyboardType: "numeric",
                         })}
 
                         {/* Unit system toggle */}
-                        <View className="mt-4 mb-6">
-                            <Text className="text-gray-300 text-sm mb-2">
-                                Unit system
-                            </Text>
+                        <View className="mt-4 mb-4">
+                            <Text className="text-gray-300 text-sm mb-2">Unit system</Text>
                             <View className="flex-row bg-zinc-900 rounded-2xl p-1">
                                 <TouchableOpacity
                                     className={`flex-1 py-2 rounded-xl items-center ${
-                                        unitSystem === "IMPERIAL"
-                                            ? "bg-brand-greenDark"
-                                            : ""
+                                        unitSystem === "IMPERIAL" ? "bg-brand-greenDark" : ""
                                     }`}
                                     onPress={() => setUnitSystem("IMPERIAL")}
                                 >
@@ -257,9 +311,7 @@ const AddGunProfile = () => {
 
                                 <TouchableOpacity
                                     className={`flex-1 py-2 rounded-xl items-center ${
-                                        unitSystem === "METRIC"
-                                            ? "bg-brand-greenDark"
-                                            : ""
+                                        unitSystem === "METRIC" ? "bg-brand-greenDark" : ""
                                     }`}
                                     onPress={() => setUnitSystem("METRIC")}
                                 >
@@ -285,10 +337,49 @@ const AddGunProfile = () => {
                             </View>
                         </View>
 
-                        {/* Future: photo picker */}
-                        {/* <TouchableOpacity className="bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 items-center mb-6">
-              <Text className="text-gray-300 text-sm">Add rifle photo (optional)</Text>
-            </TouchableOpacity> */}
+                        {/* Rifle photo */}
+                        <Text className="text-gray-400 text-xs uppercase tracking-[0.16em] mt-2 mb-2">
+                            Rifle Photo (Optional)
+                        </Text>
+
+                        <TouchableOpacity
+                            onPress={pickImage}
+                            activeOpacity={0.9}
+                            className="bg-zinc-900 border border-dashed border-zinc-700 rounded-2xl px-4 py-4 items-center justify-center mb-8"
+                        >
+                            {gunPhotoUri ? (
+                                <View className="w-full items-center">
+                                    <Image
+                                        source={{ uri: gunPhotoUri }}
+                                        className="w-full h-40 rounded-xl mb-3"
+                                        resizeMode="cover"
+                                    />
+                                    <Text className="text-emerald-300 text-sm font-medium">
+                                        Change rifle photo
+                                    </Text>
+                                    <Text className="text-gray-500 text-xs mt-1">
+                                        Make sure the scope and barrel are clearly visible.
+                                    </Text>
+                                </View>
+                            ) : (
+                                <>
+                                    <View className="w-12 h-12 rounded-full bg-zinc-800 items-center justify-center mb-2">
+                                        <Image
+                                            source={icons.camera || icons.plus}
+                                            className="w-6 h-6"
+                                            resizeMode="contain"
+                                            tintColor="#9ca3af"
+                                        />
+                                    </View>
+                                    <Text className="text-gray-200 text-sm font-medium">
+                                        Add rifle photo
+                                    </Text>
+                                    <Text className="text-gray-500 text-xs mt-1 text-center">
+                                        Optional, but helps you quickly recognize this profile.
+                                    </Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
                     </ScrollView>
 
                     {/* Submit button */}
@@ -305,13 +396,7 @@ const AddGunProfile = () => {
                                 <ActivityIndicator color="#022c22" />
                             ) : (
                                 <>
-                                    <Image
-                                        source={icons.plus}
-                                        className="w-5 h-5 mr-2"
-                                        tintColor="#022c22"
-                                        resizeMode="contain"
-                                    />
-                                    <Text className="text-sm font-semibold text-emerald-50">
+                                    <Text className="text-lg font-semibold text-emerald-50">
                                         Save profile
                                     </Text>
                                 </>
