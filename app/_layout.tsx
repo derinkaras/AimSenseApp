@@ -13,29 +13,31 @@ export const toastConfig = {
         <BaseToast
             {...props}
             style={{
-                backgroundColor: "#284a37", // brand.green
-                borderLeftColor: "#0b7f4f", // brand.greenLight
-                borderRadius: 12,
-                elevation: 5,
+                backgroundColor: "#0f1815",     // SOLID dark surface
+                borderLeftWidth: 4,
+                borderLeftColor: "#22c55e",     // emerald accent
+                borderRadius: 14,
+                paddingVertical: 10,
+
+                // Make sure it floats ON TOP
+                elevation: 20,
                 shadowColor: "#000",
-                shadowOpacity: 0.25,
-                shadowOffset: { width: 0, height: 2 },
-                shadowRadius: 4,
+                shadowOpacity: 0.35,
+                shadowOffset: { width: 0, height: 4 },
+                shadowRadius: 12,
+                zIndex: 99999,
             }}
             contentContainerStyle={{
                 paddingHorizontal: 16,
-                alignItems: "center",
             }}
             text1Style={{
-                fontSize: 16,
-                fontWeight: "bold",
-                color: "#fff",
-                textAlign: "center",
+                fontSize: 15,
+                fontWeight: "600",
+                color: "#ffffff",
             }}
             text2Style={{
-                fontSize: 14,
-                color: "#e4eee8",
-                textAlign: "center",
+                fontSize: 13,
+                color: "#d1e7db",
             }}
         />
     ),
@@ -44,33 +46,36 @@ export const toastConfig = {
         <ErrorToast
             {...props}
             style={{
-                backgroundColor: "#0e2018", // brand.greenDark
-                borderLeftColor: "#EF4444", // danger red accent
-                borderRadius: 12,
-                elevation: 5,
+                backgroundColor: "#1f1414",      // SOLID dark red surface
+                borderLeftWidth: 4,
+                borderLeftColor: "#ef4444",      // red accent
+                borderRadius: 14,
+                paddingVertical: 10,
+
+                // On top
+                elevation: 20,
                 shadowColor: "#000",
-                shadowOpacity: 0.25,
-                shadowOffset: { width: 0, height: 2 },
-                shadowRadius: 4,
+                shadowOpacity: 0.35,
+                shadowOffset: { width: 0, height: 4 },
+                shadowRadius: 12,
+                zIndex: 99999,
             }}
             contentContainerStyle={{
                 paddingHorizontal: 16,
-                alignItems: "center",
             }}
             text1Style={{
-                fontSize: 16,
-                fontWeight: "bold",
-                color: "#fff",
-                textAlign: "center",
+                fontSize: 15,
+                fontWeight: "600",
+                color: "#ffffff",
             }}
             text2Style={{
-                fontSize: 14,
-                color: "#dbe4de",
-                textAlign: "center",
+                fontSize: 13,
+                color: "#f2d6d6",
             }}
         />
     ),
 };
+
 
 export default function RootLayout() {
 

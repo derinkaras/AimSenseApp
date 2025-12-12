@@ -1,10 +1,10 @@
-import React from 'react';
-import { View, Text } from 'react-native';
+import React from "react";
+import { View, Text } from "react-native";
 
 const TrialBadge = () => {
     return (
-        <View className="px-4 py-1.5 rounded-full bg-brand-greenLight border border-brand-green/50">
-            <Text className="text-white text-xs font-semibold">
+        <View className="px-5 py-2 rounded-full bg-brand-greenLight border border-brand-green/60">
+            <Text className="text-white text-sm font-semibold">
                 Trial Active
             </Text>
         </View>

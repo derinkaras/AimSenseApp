@@ -37,7 +37,7 @@ const Authentication = () => {
     };
 
     return (
-      <View className="flex-1 bg-brand-greenDark">
+      <View className="flex-1 bg-brand-black">
         <UniversalModal visible={showForgotPasswordModal} onClose={()=>setForgotPasswordModal(false)} >
             <ForgotPasswordContent
                 onSuccess={()=>setForgotPasswordModal(false)}
@@ -46,18 +46,17 @@ const Authentication = () => {
         </UniversalModal>
 
         <SafeAreaView>
-          <TouchableOpacity
-            className="ml-6 mt-6"
-            onPress={() => {
-              router.back();
-            }}>
-            <Image
-              source={icons.leftArrow}
-              className="size-10"
-              resizeMode="contain"
-              tintColor="white"
-            />
-          </TouchableOpacity>
+            <TouchableOpacity
+                onPress={() => router.back()}
+                className="ml-6 mt-6 w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 items-center justify-center"
+            >
+                <Image
+                    source={icons.leftArrow}
+                    className="w-6 h-6"
+                    tintColor="#0b7f4f"
+                    resizeMode="contain"
+                />
+            </TouchableOpacity>
 
           <View className="mt-12 px-6">
             <Text className="text-3xl font-bold text-white">

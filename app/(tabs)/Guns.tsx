@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
     View,
     Image,
@@ -14,6 +14,7 @@ import { useApi } from "@/app/hooks/useApi";
 import AddCircle from "@/app/components/AddCircle";
 import { useFocusEffect, useRouter } from "expo-router";
 import icons from "@/app/constants/icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type GunProfile = {
     id?: string;
@@ -28,20 +29,62 @@ type GunProfile = {
     gunPhotoUri?: string | null;
 };
 
+const STORAGE_KEYS = {
+    DISMISS_RIFLE_TIP: "aimsense.dismissTip.rifles.v1",
+};
+
 const Guns = () => {
     const router = useRouter();
-    const {
-        data: gunProfiles,
-        loading,
-        error,
-        refetch,
-    } = useApi<GunProfile[]>(gunProfileApi.getAllUserGunProfiles);
+    const { data: gunProfiles, loading, error, refetch } = useApi<GunProfile[]>(
+        gunProfileApi.getAllUserGunProfiles
+    );
+
+    const [showTip, setShowTip] = useState(false);
+
+    const loadTipPreference = useCallback(async () => {
+        try {
+            const dismissed = await AsyncStorage.getItem(STORAGE_KEYS.DISMISS_RIFLE_TIP);
+            setShowTip(dismissed !== "1");
+        } catch {
+            setShowTip(true);
+        }
+    }, []);
+
 
     useFocusEffect(
         useCallback(() => {
             refetch();
-        }, [refetch])
+            loadTipPreference();
+        }, [refetch, loadTipPreference])
     );
+
+    useEffect(() => {
+        loadTipPreference();
+    }, [loadTipPreference]);
+
+    const hasProfiles = gunProfiles && gunProfiles.length > 0;
+
+    const handleAddPress = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        router.push("/(pages)/AddGunProfile");
+    };
+
+    const handleEdit = (item: GunProfile) => {
+        if (!item.id) return;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        router.push({
+            pathname: "/(pages)/AddGunProfile",
+            params: { id: item.id },
+        });
+    };
+
+    const dismissTip = async () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setShowTip(false);
+        try {
+            await AsyncStorage.setItem(STORAGE_KEYS.DISMISS_RIFLE_TIP, "1");
+        } catch {}
+    };
 
     if (loading) {
         return (
@@ -72,11 +115,8 @@ const Guns = () => {
         return (
             <TouchableOpacity
                 activeOpacity={0.9}
-                className="w-full bg-zinc-900/90 border border-zinc-800 rounded-3xl px-4 py-3 mb-3 flex-row "
-                onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    // router.push(`/guns/${item.id}`);
-                }}
+                className="w-full bg-zinc-900/90 border border-zinc-800 rounded-3xl px-4 py-3 mb-3 flex-row"
+                onPress={() => handleEdit(item)}
             >
                 {item.gunPhotoUri ? (
                     <Image
@@ -96,7 +136,6 @@ const Guns = () => {
                 )}
 
                 <View className="flex-1">
-                    {/* Top row: name + unit chip */}
                     <View className="flex-row items-center justify-between mb-1">
                         <Text
                             className="text-white font-semibold text-base flex-1 mr-2"
@@ -112,7 +151,6 @@ const Guns = () => {
                         </View>
                     </View>
 
-                    {/* Caliber */}
                     <Text
                         className="text-gray-400 text-xs mb-2"
                         numberOfLines={1}
@@ -121,7 +159,6 @@ const Guns = () => {
                         {item.caliber || "Caliber not set"}
                     </Text>
 
-                    {/* Spec chips */}
                     <View className="flex-row flex-wrap gap-x-2 gap-y-1 mb-1">
                         <View className="px-2 py-0.5 rounded-full bg-zinc-800/80">
                             <Text className="text-[10px] text-gray-200">
@@ -145,53 +182,41 @@ const Guns = () => {
                         </View>
                     </View>
 
-                    {/* Bottom row */}
                     <View className="flex-row items-center justify-between mt-1">
                         <Text className="text-[10px] text-gray-500">
                             Scope height: {item.scopeHeight}
                             {isImperial ? " in" : " cm"}
                         </Text>
-
-                        {/* Placeholder for future chevron or actions */}
-                        {/* <Image source={icons.rightChevron} className="w-3 h-3" /> */}
                     </View>
                 </View>
             </TouchableOpacity>
         );
     };
 
-    const hasProfiles = gunProfiles && gunProfiles.length > 0;
-
-    const handleAddPress = () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        router.push("/(pages)/AddGunProfile");
-    };
-
     return (
         <View className="flex-1 bg-brand-black">
             <SafeAreaView className="flex-1 mx-4">
                 <View className="flex-1">
-                    {/* Nicer header */}
+                    {/* Header */}
                     <View className="mt-3 mb-4 flex-row items-center justify-between">
                         <View className="flex-row items-center">
-                            <View className="w-9 h-9 rounded-2xl bg-zinc-900 border border-zinc-800 items-center justify-center mr-3">
+                            <View className="size-12 rounded-2xl bg-zinc-900 border border-zinc-800 items-center justify-center mr-3">
                                 <Image
                                     source={icons.riflePfp}
-                                    className="w-5 h-5"
+                                    className="size-7"
                                     resizeMode="contain"
                                     tintColor="#22c55e"
                                 />
                             </View>
                             <View>
-                                <Text className="text-white text-lg font-semibold">
+                                <Text className="text-white text-2xl font-semibold">
                                     Rifle profiles
                                 </Text>
-
                             </View>
                         </View>
 
-                        <View className="px-2 py-1 rounded-full bg-zinc-900 border border-zinc-800">
-                            <Text className="text-[11px] text-gray-300">
+                        <View className="px-3 py-2 rounded-full bg-zinc-900 border border-zinc-800">
+                            <Text className="text-md text-gray-300">
                                 {hasProfiles
                                     ? `${gunProfiles!.length} profile${
                                         gunProfiles!.length > 1 ? "s" : ""
@@ -200,6 +225,30 @@ const Guns = () => {
                             </Text>
                         </View>
                     </View>
+
+                    {/* Dismissible tip banner */}
+                    {hasProfiles && showTip && (
+                        <View className="mb-3 px-3 py-2 rounded-2xl bg-zinc-900 border border-zinc-800 flex-row items-start">
+                            <Text className="text-sm text-gray-300 flex-1 pr-3">
+                                Tap any rifle card to edit its details. On the edit screen, you
+                                can also delete the profile using the trash icon.
+                            </Text>
+
+                            <TouchableOpacity
+                                onPress={dismissTip}
+                                activeOpacity={0.85}
+                                className="w-9 h-9 rounded-full bg-zinc-800 items-center justify-center"
+                                hitSlop={10}
+                            >
+                                <Image
+                                    source={icons.cancel}
+                                    className="w-4 h-4"
+                                    resizeMode="contain"
+                                    tintColor="#9ca3af"
+                                />
+                            </TouchableOpacity>
+                        </View>
+                    )}
 
                     {/* Content */}
                     {hasProfiles ? (
@@ -219,8 +268,8 @@ const Guns = () => {
                         />
                     ) : (
                         <View className="flex-1 justify-center items-center">
-                            <Text className="text-gray-500">No gun profiles yet.</Text>
-                            <Text className="text-gray-600 text-xs mt-1 text-center">
+                            <Text className="text-gray-500 text-lg">No gun profiles yet.</Text>
+                            <Text className="text-gray-600 text-md mt-1 text-center ">
                                 Tap the button below to add your first rifle profile.
                             </Text>
                             <View className="mt-6">

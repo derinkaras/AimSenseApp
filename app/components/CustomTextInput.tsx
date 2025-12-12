@@ -14,7 +14,7 @@ const CustomTextInput = (props: CustomTextInputProps) => {
 
     return (
         <View
-            className="border-2 border-white px-4 py-5 w-full rounded-xl mt-4 flex-row gap-2"
+            className="border-2 border-brand-greenLight px-4 py-5 w-full rounded-xl mt-4 flex-row gap-2"
         >
             <Image
                 source={icon}

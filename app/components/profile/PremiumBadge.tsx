@@ -1,17 +1,17 @@
-import React from 'react';
-import { View, Text, Image } from 'react-native';
+import React from "react";
+import { View, Text, Image } from "react-native";
 import icons from "@/app/constants/icons";
 
 const PremiumBadge = () => {
     return (
-        <View className="px-4 py-1.5 rounded-full bg-brand-greenLight border border-brand-green/50 flex-row items-center justify-center">
+        <View className="px-5 py-2 rounded-full bg-brand-greenLight border border-brand-green/60 flex-row items-center justify-center">
             <Image
                 source={icons.diamond}
-                className="w-4 h-4 mr-1.5"
+                className="w-5 h-5 mr-2"
                 tintColor="#ffffff"
                 resizeMode="contain"
             />
-            <Text className="text-white text-xs font-semibold">
+            <Text className="text-white text-sm font-semibold">
                 Premium
             </Text>
         </View>

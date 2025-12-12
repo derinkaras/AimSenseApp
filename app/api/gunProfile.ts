@@ -114,7 +114,7 @@ export const gunProfileApi = {
             throw new Error(err.message || errorMessage);
 
         }
-        return response.json();
+        return
     }
 
 }

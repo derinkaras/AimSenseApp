@@ -31,12 +31,13 @@ const Profile = () => {
     const [lastName, setLastName] = useState("");
     const [showEditNameModal, setShowEditNameModal] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [activeModal, setActiveModal] = useState<"" | "Privacy" | "Terms of Service" | "Logout" | "Delete Account">("");
+    const [activeModal, setActiveModal] = useState<
+        "" | "Privacy" | "Terms of Service" | "Logout" | "Delete Account"
+    >("");
+
     const { user, logout } = useAuth();
     const [subscription, setSubscription] = useState("premium");
 
-
-    // ---------- Load profile ----------
     const loadProfile = async () => {
         try {
             setLoading(true);
@@ -62,7 +63,6 @@ const Profile = () => {
         loadProfile();
     }, []);
 
-    // ---------- Save name (and current photo) ----------
     const handleSaveName = async (newFirst: string, newLast: string) => {
         try {
             const profile = await userProfileApi.getMyProfile();
@@ -106,7 +106,6 @@ const Profile = () => {
         }
     };
 
-    // ---------- Image picking ----------
     const pickImage = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== "granted") {
@@ -125,9 +124,7 @@ const Profile = () => {
         });
 
         if (!result.canceled) {
-            const uri = result.assets[0].uri;
-
-            return uri;
+            return result.assets[0].uri;
         }
     };
 
@@ -166,7 +163,6 @@ const Profile = () => {
 
         try {
             setProfilePhotoUri("");
-            // send empty string to clear on backend
             await userProfileApi.updateProfile({ profilePhotoUri: "" });
 
             Toast.show({
@@ -183,7 +179,6 @@ const Profile = () => {
         }
     };
 
-    // ---------- Delete account ----------
     const handleDeleteAccount = async () => {
         try {
             if (!user) return;
@@ -215,7 +210,6 @@ const Profile = () => {
 
     const closeModal = () => setActiveModal("");
 
-    // ---------- Loading state ----------
     if (loading) {
         return (
             <View className="flex-1 bg-brand-black justify-center items-center">
@@ -292,31 +286,31 @@ const Profile = () => {
                     showsVerticalScrollIndicator={false}
                 >
                     {/* PROFILE CARD */}
-                    <View className="mx-6 mt-6 rounded-2xl bg-brand-greenDark/30 border border-brand-green/40 p-5">
-                        {/* Avatar */}
-                        <View className="items-center">
+                    <View className="mx-6 mt-6 rounded-2xl bg-brand-greenDark/30 border border-brand-green/40 p-6">
+                        <View className="items-center gap-4">
+                            {/* Avatar */}
                             <TouchableOpacity
                                 onPress={handlePickPhoto}
                                 activeOpacity={0.85}
-                                className="size-32 items-center justify-center overflow-hidden rounded-full
-                           bg-brand-greenDark shadow-sm border-2 border-brand-green/80"
+                                className="size-32 items-center justify-center overflow-hidden rounded-full bg-brand-greenDark border-2 border-brand-green/80"
                             >
                                 <Image
-                                    source={profilePhotoUri ? { uri: profilePhotoUri } : icons.user}
+                                    source={
+                                        profilePhotoUri ? { uri: profilePhotoUri } : icons.user
+                                    }
                                     className="w-full h-full"
                                     style={{
                                         tintColor: profilePhotoUri ? undefined : "#0b7f4f",
                                         resizeMode: profilePhotoUri ? "cover" : "contain",
                                     }}
                                 />
-
                             </TouchableOpacity>
 
-                            {/* Remove photo */}
+                            {/* Remove photo / hint */}
                             {profilePhotoUri ? (
                                 <TouchableOpacity
                                     onPress={handleRemovePhoto}
-                                    className="mt-3 px-3 py-1 rounded-full bg-brand-black/60 border border-brand-green/60"
+                                    className="px-3 py-1 rounded-full bg-brand-black/60 border border-brand-green/60"
                                     activeOpacity={0.85}
                                 >
                                     <Text className="text-xs text-gray-300">
@@ -324,21 +318,20 @@ const Profile = () => {
                                     </Text>
                                 </TouchableOpacity>
                             ) : (
-                                <Text className="mt-3 text-xs text-gray-400">
+                                <Text className="text-xs text-gray-400">
                                     Tap the avatar to add a photo
                                 </Text>
                             )}
-                        </View>
 
-                        {/* Name + edit */}
-                        <View className="items-center mt-4">
-                            <Text className="text-white text-xl font-semibold">
+                            {/* Name */}
+                            <Text className="text-white text-2xl font-semibold">
                                 {displayFirst} {displayLast}
                             </Text>
 
+                            {/* Edit */}
                             <TouchableOpacity
                                 onPress={() => setShowEditNameModal(true)}
-                                className="mt-2 flex-row items-center px-3 py-1.5 rounded-full bg-brand-black/60 border border-brand-green/70"
+                                className="flex-row items-center px-3 py-1.5 rounded-full bg-brand-black/60 border border-brand-green/70"
                                 activeOpacity={0.85}
                             >
                                 <Image
@@ -351,80 +344,70 @@ const Profile = () => {
                                     Edit display name
                                 </Text>
                             </TouchableOpacity>
-                        </View>
 
-                        {/* Email + plan chip */}
-                        <View className="items-center mt-3">
+                            {/* Email */}
                             <Text
-                                className="text-gray-400 text-xs text-center"
+                                className="text-gray-400 text-md text-center"
                                 numberOfLines={1}
                             >
-                                {user ? user.email : "aimsense@app.com"}
+                                {user?.email || "aimsense@app.com"}
                             </Text>
 
-                            <View className="mt-2">
+                            {/* Subscription */}
+                            <View>
                                 {subscription === "premium" && <PremiumBadge />}
                                 {subscription === "trial" && <TrialBadge />}
                                 {subscription === "free" && <FreeBadge />}
                             </View>
-
                         </View>
                     </View>
 
-                    {/* SETTINGS SECTION */}
+                    {/* SETTINGS */}
                     <Text className="mx-6 mt-8 mb-2 text-gray-500 text-xs uppercase tracking-[2px]">
                         Account & App
                     </Text>
 
                     <FlatList
                         data={options}
-                        keyExtractor={(_, index) => index.toString()}
+                        keyExtractor={(_, i) => i.toString()}
                         scrollEnabled={false}
                         className="mx-6"
                         renderItem={({ item }) => {
                             const [key, value] = item;
-                            const isDanger = key === "Delete Account";
+                            const danger = key === "Delete Account";
 
                             return (
                                 <TouchableOpacity
-                                    className={`flex-row w-full h-12 justify-between items-center rounded-xl mb-3 px-4
-                             bg-brand-black/70 border ${
-                                        isDanger
+                                    className={`flex-row h-14 items-center justify-between rounded-xl mb-3 px-4
+                                    bg-brand-black/70 border ${
+                                        danger
                                             ? "border-red-500/70"
                                             : "border-brand-green/70"
                                     }`}
                                     activeOpacity={0.85}
                                     onPress={() => setActiveModal(key as typeof activeModal)}
                                 >
-                                    <View className="flex-row items-center flex-1">
-                                        <View
-                                            className={`p-2 rounded-lg ${
-                                                isDanger ? "bg-red-900/60" : "bg-brand-greenDark/70"
-                                            }`}
-                                        >
-                                            <Image
-                                                source={value.icon}
-                                                className="w-5 h-5"
-                                                tintColor={isDanger ? "#f97373" : "#10b981"}
-                                                resizeMode="contain"
-                                            />
-                                        </View>
-                                        <Text className="text-white text-base font-medium ml-3">
+                                    <View className="flex-row items-center">
+                                        <Image
+                                            source={value.icon}
+                                            className="w-5 h-5"
+                                            tintColor={danger ? "#f97373" : "#10b981"}
+                                        />
+                                        <Text className="text-white text-lg ml-3">
                                             {key}
                                         </Text>
                                     </View>
+
                                     <Image
                                         source={icons.chevronRight}
                                         className="w-5 h-5"
-                                        tintColor={isDanger ? "#f97373" : "#10b981"}
+                                        tintColor={danger ? "#f97373" : "#10b981"}
                                         resizeMode="contain"
                                     />
                                 </TouchableOpacity>
                             );
                         }}
                     />
-
-                    {/* SUPPORT */}
                     <View className="mx-6 mt-6 mb-4">
                         <Text className="text-gray-500 text-sm text-center">
                             Need help? Contact us at
