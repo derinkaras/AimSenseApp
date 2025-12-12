@@ -12,6 +12,8 @@ import power from "../assets/icons/power-off-solid-full.png"
 import chevronRight from "../assets/icons/chevron-right-solid-full.png"
 import trash from "../assets/icons/trash-solid-full.png"
 import file from "../assets/icons/file-regular-full.png"
+import plus from "../assets/icons/plus-solid-full.png"
+
 const icons = {
     leftArrow,
     mail,
@@ -26,6 +28,7 @@ const icons = {
     power,
     chevronRight,
     trash,
-    file
+    file,
+    plus,
 }
 export default icons

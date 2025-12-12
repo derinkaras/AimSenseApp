@@ -25,15 +25,13 @@ const Authentication = () => {
         if (isSignUp) {
             const res = await signup(email, password);
             if (res?.success) {
-                router.replace("/(pages)/Home");
+                router.replace("/(tabs)/Home");
             }
             return;
         }
         const res = await login(email, password);
-
-
         if (res?.success) {
-            router.replace("/(pages)/Home");
+            router.replace("/(tabs)/Home");
         }
 
     };

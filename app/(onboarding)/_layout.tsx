@@ -14,9 +14,9 @@ export default function Layout() {
         if (loading) return;
 
         if (session) {
-            console.log("[OnboardingLayout] Session found, router.replace to /(pages)/Home");
+            console.log("[OnboardingLayout] Session found, router.replace to /(tabs)/Home");
             hasCheckedInitialSession.current = true;
-            router.replace("/(pages)/Home");
+            router.replace("/(tabs)/Home");
         } else {
             hasCheckedInitialSession.current = true;
             console.log("[OnboardingLayout] No session, staying on onboarding");
