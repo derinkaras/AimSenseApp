@@ -126,11 +126,7 @@ const Profile = () => {
 
         if (!result.canceled) {
             const uri = result.assets[0].uri;
-            Toast.show({
-                type: "success",
-                text1: "Image Selected",
-                text2: "Your photo has been loaded.",
-            });
+
             return uri;
         }
     };

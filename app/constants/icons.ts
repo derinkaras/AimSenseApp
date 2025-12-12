@@ -15,7 +15,7 @@ import file from "../assets/icons/file-regular-full.png"
 import plus from "../assets/icons/plus-solid-full.png"
 import camera from "../assets/icons/camera-regular-full.png"
 import diamond from "../assets/icons/gem-regular-full.png"
-
+import riflePfp from "../assets/icons/rifle-gun-svgrepo-com.png"
 const icons = {
     leftArrow,
     mail,
@@ -33,6 +33,7 @@ const icons = {
     file,
     plus,
     camera,
-    diamond
+    diamond,
+    riflePfp
 }
 export default icons
