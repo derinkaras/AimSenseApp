@@ -472,7 +472,7 @@ const AddGunProfile = () => {
                             activeOpacity={0.9}
                         >
                             {submitting ? (
-                                <ActivityIndicator color="#022c22" />
+                                <ActivityIndicator color="#22c55e" />
                             ) : (
                                 <Text className="text-lg font-semibold text-emerald-50">
                                     {isEdit ? "Update profile" : "Save profile"}
