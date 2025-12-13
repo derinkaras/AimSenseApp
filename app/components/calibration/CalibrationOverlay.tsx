@@ -3,22 +3,19 @@ import { View, Text, Pressable } from "react-native";
 import { Step1Orientation } from "./Step1Orientation";
 import { Step2Level } from "./Step2Level";
 import { BottomCTA } from "./BottomCTA";
-import { MountOrientation, CalibrationResult } from "@/app/calibration/types";
+import { MountOrientation } from "@/app/calibration/types";
 
-export type CalibStep = "start" | "step1" | "step2" | "dashboard";
+export type CalibStep = "start" | "step1" | "step2";
 
 export function CalibrationOverlay({
                                        step,
                                        mountOrientation,
                                        pendingOrientation,
-                                       calibration,
                                        levelDeg,
                                        isLevel,
                                        onSelectPendingOrientation,
                                        applyPendingAndContinue,
-                                       goStart,
                                        goStep1,
-                                       goStep2,
                                        finish,
                                        cancel,
                                    }: {
@@ -27,17 +24,13 @@ export function CalibrationOverlay({
     mountOrientation: MountOrientation;     // applied
     pendingOrientation: MountOrientation;   // selection in step1
 
-    calibration: CalibrationResult | null;
-
     levelDeg: number;
     isLevel: boolean;
 
     onSelectPendingOrientation: (o: MountOrientation) => void;
     applyPendingAndContinue: () => void;
 
-    goStart: () => void;
     goStep1: () => void;
-    goStep2: () => void;
     finish: () => void;
     cancel: () => void;
 }) {
@@ -47,11 +40,11 @@ export function CalibrationOverlay({
                 <View className="bg-black/50 rounded-2xl p-5">
                     <Text className="text-white text-2xl font-semibold">Calibration</Text>
                     <Text className="text-white/80 mt-2 text-base">
-                        We’ll set your mount orientation and confirm level.
+                        We'll set your mount orientation and confirm level.
                     </Text>
                 </View>
 
-                <BottomCTA>
+                <BottomCTA compact={false}>
                     <Pressable onPress={goStep1} className="bg-brand-green py-5 rounded-2xl items-center">
                         <Text className="text-white text-2xl font-semibold">Start Calibration</Text>
                     </Pressable>
@@ -84,21 +77,6 @@ export function CalibrationOverlay({
         );
     }
 
-    // dashboard
-    return (
-        <View className="flex-1">
-            <View className="bg-black/40 rounded-2xl p-5">
-                <Text className="text-white text-2xl font-semibold">Dashboard</Text>
-                <Text className="text-white/80 mt-2 text-base">
-                    {calibration ? `Calibrated (${calibration.mountOrientation})` : "Not calibrated"}
-                </Text>
-            </View>
-
-            <BottomCTA>
-                <Pressable onPress={goStart} className="bg-brand-green py-5 rounded-2xl items-center">
-                    <Text className="text-white text-2xl font-semibold">Start Calibration</Text>
-                </Pressable>
-            </BottomCTA>
-        </View>
-    );
+    // Should never reach here, but return null just in case
+    return null;
 }

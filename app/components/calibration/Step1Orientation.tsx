@@ -22,11 +22,15 @@ export function Step1Orientation({
     onContinue: () => void;
     onCancel: () => void;
 }) {
+    // Step 1 is always in portrait mode, so compact is always false
+    const isCompact = false;
+
     return (
         <View className="flex-1">
             <CalibrationHeader
                 title="Step 1: Phone Orientation"
                 subtitle="Choose how your phone is mounted. The screen will rotate after you press Continue."
+                compact={isCompact}
             />
 
             <ScrollView
@@ -50,7 +54,7 @@ export function Step1Orientation({
                 })}
             </ScrollView>
 
-            <BottomCTA>
+            <BottomCTA compact={isCompact}>
                 <Pressable
                     onPress={onContinue}
                     className="bg-brand-green py-5 rounded-2xl items-center"

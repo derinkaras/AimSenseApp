@@ -13,9 +13,10 @@ export function BottomCTA({
     const insets = useSafeAreaInsets();
     const tabBarHeight = useBottomTabBarHeight();
 
-    // Compact = tighter spacing (useful when the UI is rotated+scaled)
+    // Compact = tighter spacing + no tab bar (useful when the UI is rotated+scaled during calibration)
+    // Non-compact = normal spacing + account for tab bar (dashboard state)
     const bottomPadding = compact
-        ? Math.max(tabBarHeight, 8)
+        ? Math.max(insets.bottom, 8)
         : tabBarHeight + insets.bottom + 12;
 
     return (

@@ -3,12 +3,12 @@ import { View, StyleSheet } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ScreenOrientation from "expo-screen-orientation";
+import { useNavigation } from "@react-navigation/native";
 
 import { CameraPermissionBanner } from "@/app/components/CameraPermissionBanner";
 import { CalibrationOverlay, CalibStep } from "@/app/components/calibration/CalibrationOverlay";
 
 import { MountOrientation, CalibrationResult } from "@/app/calibration/types";
-import { loadCalibration, saveCalibration } from "@/app/calibration/persistence";
 import { useTiltLevel } from "@/app/hooks/useTiltLevel";
 
 function lockForMount(o: MountOrientation) {
@@ -47,7 +47,8 @@ export default function Home() {
     const [permission] = useCameraPermissions();
     const cameraEnabled = !!permission?.granted;
 
-    const [step, setStep] = useState<CalibStep>("dashboard");
+    const navigation = useNavigation();
+    const [step, setStep] = useState<CalibStep>("start");
 
     // Applied mount orientation (used for sensors + saved calibration)
     const [mountOrientation, setMountOrientation] = useState<MountOrientation>("portrait");
@@ -67,18 +68,36 @@ export default function Home() {
         flatExitGz: 0.75,
     });
 
+    // Hide/show tab bar based on calibration state
     useEffect(() => {
-        (async () => {
-            const existing = await loadCalibration();
-            if (!existing) {
-                setStep("start");
-                return;
-            }
-            setCalibration(existing);
-            setMountOrientation(existing.mountOrientation);
-            setPendingOrientation(existing.mountOrientation);
-            setStep("dashboard");
-        })();
+        const isCalibrating = step === "step1" || step === "step2";
+
+        if (isCalibrating) {
+            navigation.setOptions({
+                tabBarStyle: { display: 'none' },
+            });
+        } else {
+            // Restore the original tab bar style from _layout.tsx
+            navigation.setOptions({
+                tabBarStyle: {
+                    position: "absolute",
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 88,
+                    backgroundColor: "#0e2018",
+                    borderTopWidth: 1,
+                    borderTopColor: "#284a37",
+                    paddingTop: 14,
+                    paddingBottom: 16,
+                },
+            });
+        }
+    }, [step, navigation]);
+
+    useEffect(() => {
+        // Always start on "start" screen
+        setStep("start");
 
         // Safety: if Home unmounts mid-calibration, restore portrait
         return () => {
@@ -86,14 +105,14 @@ export default function Home() {
         };
     }, []);
 
-    // ✅ Step 1 should always be portrait, so always restore before entering it
+    // Step 1 should always be portrait, so always restore before entering it
     async function goStep1() {
         await restoreAppOrientation();
         setPendingOrientation(mountOrientation);
         setStep("step1");
     }
 
-    // ✅ Only lock the app when they click Continue
+    // Only lock the app when they click Continue
     async function applyPendingAndContinue() {
         await lockAppOrientation(pendingOrientation);
         setMountOrientation(pendingOrientation);
@@ -108,42 +127,52 @@ export default function Home() {
         };
 
         setCalibration(result);
-        await saveCalibration(result);
 
-        // ✅ Exit calibration => restore portrait
+        // Exit calibration => restore portrait and go back to start
         await restoreAppOrientation();
-        setStep("dashboard");
+        setStep("start");
     }
 
     async function cancelCalibration() {
         setPendingOrientation(mountOrientation);
         await restoreAppOrientation();
-        setStep(calibration ? "dashboard" : "start");
+        setStep("start");
+    }
+
+    // Determine safe area edges based on orientation and calibration state
+    const isLandscape = mountOrientation.includes("landscape");
+    const isCalibrating = step === "start" || step === "step1" || step === "step2";
+
+    let safeAreaEdges: ("top" | "bottom" | "left" | "right")[] = ["top"];
+
+    if (isCalibrating) {
+        safeAreaEdges.push("bottom");
+    }
+
+    if (isLandscape) {
+        safeAreaEdges.push("left", "right");
     }
 
     return (
         <View className="flex-1 bg-brand-black">
             {cameraEnabled && <CameraView style={StyleSheet.absoluteFill} facing="back" />}
 
-            <SafeAreaView className="flex-1">
+            <SafeAreaView className="flex-1" edges={safeAreaEdges}>
                 {!cameraEnabled ? (
                     <View className="flex-1 justify-center items-center px-6">
                         <CameraPermissionBanner />
                     </View>
                 ) : (
-                    <View className="flex-1 px-6 pt-4">
+                    <View className={`flex-1 pt-4 ${isLandscape ? "px-4" : "px-6"}`}>
                         <CalibrationOverlay
                             step={step}
                             mountOrientation={mountOrientation}
                             pendingOrientation={pendingOrientation}
-                            calibration={calibration}
                             levelDeg={levelDeg}
                             isLevel={isLevel}
                             onSelectPendingOrientation={setPendingOrientation}
                             applyPendingAndContinue={applyPendingAndContinue}
-                            goStart={() => setStep("start")}
-                            goStep1={goStep1} // ✅ used for Start Calibration AND Back; always restores portrait
-                            goStep2={() => setStep("step2")}
+                            goStep1={goStep1}
                             finish={finishCalibration}
                             cancel={cancelCalibration}
                         />
