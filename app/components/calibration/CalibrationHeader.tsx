@@ -1,5 +1,7 @@
+// CalibrationHeader.tsx
 import React from "react";
-import { View, Text } from "react-native";
+import { View, Text, Image } from "react-native";
+import icons from "@/app/constants/icons";
 
 export function CalibrationHeader({
                                       title,
@@ -10,15 +12,28 @@ export function CalibrationHeader({
     subtitle: string;
     compact?: boolean;
 }) {
-    const containerPadding = compact ? "p-3" : "p-5";
+    const pad = compact ? "p-3" : "p-5";
     const titleSize = compact ? "text-xl" : "text-2xl";
     const subtitleSize = compact ? "text-sm" : "text-base";
-    const subtitleMargin = compact ? "mt-1" : "mt-2";
+    const gap = compact ? "mt-1" : "mt-2";
 
     return (
-        <View className={`bg-black/50 rounded-2xl ${containerPadding}`}>
-            <Text className={`text-white ${titleSize} font-semibold`}>{title}</Text>
-            <Text className={`text-white/80 ${subtitleMargin} ${subtitleSize}`}>{subtitle}</Text>
+        <View className={`rounded-3xl ${pad} bg-brand-greenDark/70 border border-brand-green/60`}>
+            <View className="flex-row items-center">
+                <View className="size-11 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-3">
+                    <Image
+                        source={icons.compass}
+                        className="w-6 h-6"
+                        resizeMode="contain"
+                        tintColor="#0b7f4f"
+                    />
+                </View>
+
+                <View className="flex-1">
+                    <Text className={`text-white ${titleSize} font-semibold`}>{title}</Text>
+                    <Text className={`text-white/80 ${gap} ${subtitleSize}`}>{subtitle}</Text>
+                </View>
+            </View>
         </View>
     );
 }

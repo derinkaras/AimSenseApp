@@ -17,6 +17,16 @@ import camera from "../assets/icons/camera-regular-full.png"
 import diamond from "../assets/icons/gem-regular-full.png"
 import riflePfp from "../assets/icons/rifle-gun-svgrepo-com.png"
 import cancel from "../assets/icons/x-solid-full.png"
+import compass from "../assets/icons/compass.png"
+import target from "../assets/icons/target.png"
+import phonePortrait from "../assets/icons/phonePortrait.png"
+import phonePortraitDown from "../assets/icons/phonePortraitDown.png"
+import phoneLandscapeLeft from "../assets/icons/phoneLandscapeLeft.png"
+import phoneLandscapeRight from "../assets/icons/phoneLandscapeRight.png"
+import info from "../assets/icons/info-solid-full.png"
+import check from "../assets/icons/check-solid-full.png"
+import level from "../assets/icons/level.png"
+import tilt from "../assets/icons/tilt.png"
 const icons = {
     leftArrow,
     mail,
@@ -36,6 +46,16 @@ const icons = {
     camera,
     diamond,
     riflePfp,
-    cancel
+    cancel,
+    compass,
+    target,
+    phonePortrait,
+    phonePortraitDown,
+    phoneLandscapeLeft,
+    phoneLandscapeRight,
+    info,
+    check,
+    level,
+    tilt
 }
 export default icons

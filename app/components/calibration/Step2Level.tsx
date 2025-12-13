@@ -1,8 +1,10 @@
+// Step2Level.tsx
 import React from "react";
-import { View, Text, Pressable, ScrollView } from "react-native";
+import { View, Text, Pressable, ScrollView, Image } from "react-native";
 import { CalibrationHeader } from "./CalibrationHeader";
 import { BottomCTA } from "./BottomCTA";
 import { MountOrientation } from "@/app/calibration/types";
+import icons from "@/app/constants/icons";
 
 export function Step2Level({
                                mountOrientation,
@@ -20,16 +22,12 @@ export function Step2Level({
     onCancel: () => void;
 }) {
     const safe = Number.isFinite(levelDeg) ? levelDeg : 0;
-
-    // Detect if we're in landscape mode
     const isLandscape = mountOrientation.includes("landscape");
 
-    // Adjust styling based on orientation
-    const angleFontSize = isLandscape ? "text-4xl" : "text-6xl";
-    const containerPadding = isLandscape ? "p-3" : "p-6";
+    const angleFontSize = isLandscape ? "text-5xl" : "text-6xl";
+    const containerPadding = isLandscape ? "p-4" : "p-6";
     const headerMargin = isLandscape ? "mt-3" : "mt-6";
-    const scrollPadding = isLandscape ? 120 : 220;
-    const angleMargin = isLandscape ? "mt-1" : "mt-2";
+    const scrollPadding = isLandscape ? 140 : 240;
 
     return (
         <View className="flex-1">
@@ -44,27 +42,57 @@ export function Step2Level({
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{ flexGrow: 1, paddingBottom: scrollPadding }}
             >
-                <View className={`bg-black/50 rounded-2xl ${containerPadding} items-center`}>
-                    <Text className={`text-white/80 ${isLandscape ? "text-base" : "text-lg"}`}>Angle</Text>
+                <View
+                    className={[
+                        "rounded-3xl border bg-brand-greenDark/65",
+                        isLevel ? "border-brand-greenLight" : "border-brand-green/45",
+                        containerPadding,
+                    ].join(" ")}
+                >
+                    <View className="flex-row items-center justify-between">
+                        <View>
+                            <Text className="text-white/70 text-sm">Angle</Text>
+                            <Text className={`text-white font-bold ${angleFontSize} mt-2`}>{safe}°</Text>
+                        </View>
 
-                    <Text className={`text-white ${angleFontSize} font-bold ${angleMargin}`}>
-                        {safe}°
-                    </Text>
+                        <View
+                            className={[
+                                "size-16 rounded-3xl items-center justify-center border",
+                                isLevel ? "bg-brand-greenLight/15 border-brand-greenLight" : "bg-brand-black/40 border-brand-green/35",
+                            ].join(" ")}
+                        >
+                            <Image
+                                source={isLevel ? icons.level : icons.tilt}
+                                className="w-8 h-8"
+                                resizeMode="contain"
+                                tintColor={isLevel ? "#0b7f4f" : "#9ca3af"}
+                            />
+                        </View>
+                    </View>
 
                     <View
-                        className={`${isLandscape ? "mt-2" : "mt-4"} px-4 py-2 rounded-full ${
-                            isLevel ? "bg-brand-green" : "bg-black/40"
-                        }`}
+                        className={[
+                            "mt-5 px-4 py-3 rounded-2xl border",
+                            isLevel ? "bg-brand-greenLight/10 border-brand-greenLight/70" : "bg-brand-black/30 border-brand-green/30",
+                        ].join(" ")}
                     >
                         <Text className={`text-white font-semibold ${isLandscape ? "text-base" : "text-lg"}`}>
-                            {isLevel ? "Level ✅" : "Keep adjusting…"}
+                            {isLevel ? "Level — ready to finish" : "Keep adjusting…"}
+                        </Text>
+                        <Text className="text-white/70 mt-1 text-sm">
+                            Hold steady for a moment to confirm.
                         </Text>
                     </View>
 
                     {isLevel && safe !== 0 && (
-                        <Text className={`${isLandscape ? "mt-2" : "mt-4"} text-white/70 text-center text-sm`}>
-                            A reading of ±1° can still be acceptable once stabilized.
-                        </Text>
+                        <View className="mt-4 flex-row items-start">
+                            <View className="size-10 rounded-2xl bg-brand-black/40 border border-brand-green/35 items-center justify-center mr-3">
+                                <Image source={icons.info} className="w-5 h-5" resizeMode="contain" tintColor="#9ca3af" />
+                            </View>
+                            <Text className="flex-1 text-white/65 text-sm">
+                                A reading of ±1° can still be acceptable once stabilized.
+                            </Text>
+                        </View>
                     )}
                 </View>
             </ScrollView>
@@ -73,32 +101,44 @@ export function Step2Level({
                 <Pressable
                     onPress={onFinish}
                     disabled={!isLevel}
-                    className={`${isLandscape ? "py-4" : "py-5"} rounded-2xl items-center ${
-                        isLevel ? "bg-brand-green" : "bg-black/50"
-                    }`}
+                    className={[
+                        "rounded-2xl items-center border",
+                        isLandscape ? "py-4" : "py-5",
+                        isLevel
+                            ? "bg-brand-greenLight border-brand-green/60"
+                            : "bg-brand-black/50 border-brand-green/30",
+                    ].join(" ")}
                 >
-                    <Text className={`text-white font-semibold ${isLandscape ? "text-lg" : "text-2xl"}`}>
+                    <Text className={`text-white font-semibold ${isLandscape ? "text-lg" : "text-xl"}`}>
                         {isLevel ? "Finish Calibration" : "Hold steady to finish"}
                     </Text>
                 </Pressable>
 
-                <Pressable
-                    onPress={onBack}
-                    className={`mt-3 ${isLandscape ? "py-3" : "py-4"} rounded-2xl items-center bg-black/40`}
-                >
-                    <Text className={`text-white/90 font-semibold ${isLandscape ? "text-sm" : "text-lg"}`}>
-                        Back
-                    </Text>
-                </Pressable>
+                <View className="flex-row mt-3 gap-3">
+                    <Pressable
+                        onPress={onBack}
+                        className={[
+                            "flex-1 rounded-2xl items-center border bg-brand-black/50 border-brand-green/35",
+                            isLandscape ? "py-3" : "py-4",
+                        ].join(" ")}
+                    >
+                        <Text className={`text-white/90 font-semibold ${isLandscape ? "text-sm" : "text-base"}`}>
+                            Back
+                        </Text>
+                    </Pressable>
 
-                <Pressable
-                    onPress={onCancel}
-                    className={`mt-3 ${isLandscape ? "py-3" : "py-4"} rounded-2xl items-center bg-black/40`}
-                >
-                    <Text className={`text-white/90 font-semibold ${isLandscape ? "text-sm" : "text-lg"}`}>
-                        Cancel
-                    </Text>
-                </Pressable>
+                    <Pressable
+                        onPress={onCancel}
+                        className={[
+                            "flex-1 rounded-2xl items-center border bg-brand-black/50 border-brand-green/35",
+                            isLandscape ? "py-3" : "py-4",
+                        ].join(" ")}
+                    >
+                        <Text className={`text-white/90 font-semibold ${isLandscape ? "text-sm" : "text-base"}`}>
+                            Cancel
+                        </Text>
+                    </Pressable>
+                </View>
             </BottomCTA>
         </View>
     );

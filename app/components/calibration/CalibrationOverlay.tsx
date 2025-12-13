@@ -1,9 +1,11 @@
+// CalibrationOverlay.tsx
 import React from "react";
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, Image } from "react-native";
 import { Step1Orientation } from "./Step1Orientation";
 import { Step2Level } from "./Step2Level";
 import { BottomCTA } from "./BottomCTA";
 import { MountOrientation } from "@/app/calibration/types";
+import icons from "@/app/constants/icons";
 
 export type CalibStep = "start" | "step1" | "step2";
 
@@ -21,8 +23,8 @@ export function CalibrationOverlay({
                                    }: {
     step: CalibStep;
 
-    mountOrientation: MountOrientation;     // applied
-    pendingOrientation: MountOrientation;   // selection in step1
+    mountOrientation: MountOrientation;
+    pendingOrientation: MountOrientation;
 
     levelDeg: number;
     isLevel: boolean;
@@ -37,16 +39,33 @@ export function CalibrationOverlay({
     if (step === "start") {
         return (
             <View className="flex-1">
-                <View className="bg-black/50 rounded-2xl p-5">
-                    <Text className="text-white text-2xl font-semibold">Calibration</Text>
-                    <Text className="text-white/80 mt-2 text-base">
-                        We'll set your mount orientation and confirm level.
-                    </Text>
+                <View className="rounded-3xl bg-brand-greenDark/70 border border-brand-green/60 p-5">
+                    <View className="flex-row items-center">
+                        <View className="size-12 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-3">
+                            <Image source={icons.target} className="w-7 h-7" resizeMode="contain" tintColor="#0b7f4f" />
+                        </View>
+
+                        <View className="flex-1">
+                            <Text className="text-white text-2xl font-semibold">Calibration</Text>
+                            <Text className="text-white/80 mt-1 text-base">
+                                We’ll set your mount orientation and confirm level.
+                            </Text>
+                        </View>
+                    </View>
+
+                    <View className="mt-4 rounded-2xl bg-brand-black/35 border border-brand-green/25 px-4 py-3">
+                        <Text className="text-white/80 text-sm">
+                            This takes about 20 seconds and improves AR alignment.
+                        </Text>
+                    </View>
                 </View>
 
                 <BottomCTA compact={false}>
-                    <Pressable onPress={goStep1} className="bg-brand-green py-5 rounded-2xl items-center">
-                        <Text className="text-white text-2xl font-semibold">Start Calibration</Text>
+                    <Pressable
+                        onPress={goStep1}
+                        className="bg-brand-greenLight py-5 rounded-2xl items-center border border-brand-green/60"
+                    >
+                        <Text className="text-white text-xl font-semibold">Start Calibration</Text>
                     </Pressable>
                 </BottomCTA>
             </View>
@@ -77,6 +96,5 @@ export function CalibrationOverlay({
         );
     }
 
-    // Should never reach here, but return null just in case
     return null;
 }

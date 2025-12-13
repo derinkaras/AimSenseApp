@@ -1,14 +1,16 @@
+// Step1Orientation.tsx
 import React from "react";
-import { View, Text, Pressable, ScrollView } from "react-native";
+import { View, Text, Pressable, ScrollView, Image } from "react-native";
 import { CalibrationHeader } from "./CalibrationHeader";
 import { BottomCTA } from "./BottomCTA";
 import { MountOrientation } from "@/app/calibration/types";
+import icons from "@/app/constants/icons";
 
-const OPTIONS: { key: MountOrientation; label: string; sub: string }[] = [
-    { key: "portrait", label: "Portrait", sub: "Normal upright" },
-    { key: "portrait-upside-down", label: "Portrait (Upside Down)", sub: "Phone flipped" },
-    { key: "landscape-left", label: "Landscape (Left)", sub: "Rotated left" },
-    { key: "landscape-right", label: "Landscape (Right)", sub: "Rotated right" },
+const OPTIONS: { key: MountOrientation; label: string; sub: string; icon: any }[] = [
+    { key: "portrait", label: "Portrait", sub: "Normal upright", icon: icons.phonePortrait },
+    { key: "portrait-upside-down", label: "Portrait (Upside Down)", sub: "Phone flipped", icon: icons.phonePortraitDown },
+    { key: "landscape-left", label: "Landscape (Left)", sub: "Rotated left", icon: icons.phoneLandscapeLeft },
+    { key: "landscape-right", label: "Landscape (Right)", sub: "Rotated right", icon: icons.phoneLandscapeRight },
 ];
 
 export function Step1Orientation({
@@ -22,7 +24,6 @@ export function Step1Orientation({
     onContinue: () => void;
     onCancel: () => void;
 }) {
-    // Step 1 is always in portrait mode, so compact is always false
     const isCompact = false;
 
     return (
@@ -45,28 +46,69 @@ export function Step1Orientation({
                         <Pressable
                             key={o.key}
                             onPress={() => onSelect(o.key)}
-                            className={`rounded-2xl p-5 ${selected ? "bg-brand-green" : "bg-black/50"}`}
+                            className={[
+                                "rounded-3xl px-4 py-4 flex-row items-center border",
+                                selected
+                                    ? "bg-brand-greenDark/80 border-brand-greenLight"
+                                    : "bg-brand-black/60 border-brand-green/35",
+                            ].join(" ")}
                         >
-                            <Text className="text-white text-xl font-semibold">{o.label}</Text>
-                            <Text className="text-white/80 mt-1 text-base">{o.sub}</Text>
+                            <View
+                                className={[
+                                    "size-12 rounded-2xl items-center justify-center border mr-4",
+                                    selected ? "bg-brand-black/50 border-brand-greenLight" : "bg-brand-black/40 border-brand-green/40",
+                                ].join(" ")}
+                            >
+                                <Image source={o.icon} className="w-7 h-7" resizeMode="contain" tintColor={selected ? "#0b7f4f" : "#9ca3af"} />
+                            </View>
+
+                            <View className="flex-1">
+                                <Text className="text-white text-lg font-semibold">{o.label}</Text>
+                                <Text className="text-white/70 mt-0.5 text-sm">{o.sub}</Text>
+                            </View>
+
+                            <View
+                                className={[
+                                    "size-6 rounded-full border items-center justify-center",
+                                    selected ? "border-brand-greenLight bg-brand-greenLight/15" : "border-brand-green/40 bg-transparent",
+                                ].join(" ")}
+                            >
+                                {selected && (
+                                    <Image source={icons.check} className="w-4 h-4" resizeMode="contain" tintColor="#0b7f4f" />
+                                )}
+                            </View>
                         </Pressable>
                     );
                 })}
+
+                <View className="rounded-3xl bg-brand-black/40 border border-brand-green/25 px-4 py-4">
+                    <View className="flex-row items-start">
+                        <View className="size-10 rounded-2xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mr-3">
+                            <Image source={icons.info} className="w-5 h-5" resizeMode="contain" tintColor="#9ca3af" />
+                        </View>
+                        <View className="flex-1">
+                            <Text className="text-white font-semibold text-sm">Tip</Text>
+                            <Text className="text-white/70 mt-1 text-sm">
+                                Pick the orientation that matches how the phone sits in your mount. You can change this later.
+                            </Text>
+                        </View>
+                    </View>
+                </View>
             </ScrollView>
 
             <BottomCTA compact={isCompact}>
                 <Pressable
                     onPress={onContinue}
-                    className="bg-brand-green py-5 rounded-2xl items-center"
+                    className="rounded-2xl py-5 items-center bg-brand-greenLight border border-brand-green/60"
                 >
-                    <Text className="text-white text-2xl font-semibold">Continue</Text>
+                    <Text className="text-white text-xl font-semibold">Continue</Text>
                 </Pressable>
 
                 <Pressable
                     onPress={onCancel}
-                    className="mt-3 py-4 rounded-2xl items-center bg-black/40"
+                    className="mt-3 py-4 rounded-2xl items-center bg-brand-black/50 border border-brand-green/35"
                 >
-                    <Text className="text-white/90 text-lg font-semibold">Cancel</Text>
+                    <Text className="text-white/90 text-base font-semibold">Cancel</Text>
                 </Pressable>
             </BottomCTA>
         </View>
