@@ -23,6 +23,9 @@ export default function Layout() {
         }
     }, [loading, session, router]);
 
+
+
+
     // While loading auth OR while redirecting, show a simple loader
     if (loading && !hasCheckedInitialSession.current) {
         return (
