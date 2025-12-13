@@ -29,7 +29,7 @@ const LogoutContent = ({ onConfirm, onCancel }: LogoutContentProps) => {
                     Logout Confirmation
                 </Text>
                 <Text className="text-gray-400 text-base text-center px-4">
-                    Are you sure you want to logout? You'll need to sign in again to access your account.
+                    Are you sure you want to logout? You&apos ll need to sign in again to access your account.
                 </Text>
             </View>
 

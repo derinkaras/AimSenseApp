@@ -1,6 +1,5 @@
 import {View, Text, Image, Pressable} from 'react-native';
 import images from "@/app/constants/images";
-import {SafeAreaView} from 'react-native-safe-area-context'
 import {useRouter} from "expo-router";
 
 export default function Index() {
