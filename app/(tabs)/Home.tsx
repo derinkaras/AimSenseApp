@@ -66,6 +66,7 @@ export default function Home() {
     const [mountOrientation, setMountOrientation] = useState<MountOrientation>("portrait");
     const [pendingOrientation, setPendingOrientation] = useState<MountOrientation>("portrait");
     const [calibration, setCalibration] = useState<CalibrationResult | null>(null);
+    const [startScreenKey, setStartScreenKey] = useState(0);
 
     // Sensor data
     const { levelDeg, isLevel } = useTiltLevel(mountOrientation, {
@@ -116,6 +117,7 @@ export default function Home() {
 
         setCalibration(result);
         await unlockOrientation();
+        setStartScreenKey(prev => prev + 1);
         setStep("start");
     }
 
@@ -123,6 +125,7 @@ export default function Home() {
         await unlockOrientation();
         setMountOrientation("portrait");
         setPendingOrientation("portrait");
+        setStartScreenKey(prev => prev + 1);
         setStep("start");
     }
 
@@ -152,6 +155,7 @@ export default function Home() {
                     <View className={`flex-1 pt-4 ${isLandscape ? "px-4" : "px-6"}`}>
                         <CalibrationOverlay
                             step={step}
+                            startScreenKey={startScreenKey}
                             mountOrientation={mountOrientation}
                             pendingOrientation={pendingOrientation}
                             levelDeg={levelDeg}

@@ -8,6 +8,7 @@ export type CalibStep = "start" | "step1" | "step2";
 
 interface CalibrationOverlayProps {
     step: CalibStep;
+    startScreenKey: number;
     mountOrientation: MountOrientation;
     pendingOrientation: MountOrientation;
     levelDeg: number;
@@ -22,7 +23,7 @@ interface CalibrationOverlayProps {
 export function CalibrationOverlay(props: CalibrationOverlayProps) {
     switch (props.step) {
         case "start":
-            return <StartScreen onStart={props.goStep1} />;
+            return <StartScreen key={`start-${props.startScreenKey}`} remountKey={props.startScreenKey} onStart={props.goStep1} />;
 
         case "step1":
             return (

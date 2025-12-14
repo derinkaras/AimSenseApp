@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import {
     View,
     Text,
@@ -22,8 +22,27 @@ export function SlideToStart({ onComplete }: SlideToStartProps) {
     const PADDING = 6;
 
     // Use measured width or fallback to screen width minus padding
-    const effectiveWidth = containerWidth || (Dimensions.get('window').width - 48); // 48 = px-6 from parent
+    const effectiveWidth = containerWidth || (Dimensions.get('window').width - 48);
     const MAX_SLIDE = Math.max(0, effectiveWidth - THUMB_SIZE - PADDING * 2);
+
+    // Store MAX_SLIDE in a ref so PanResponder can access current value
+    const maxSlideRef = useRef(MAX_SLIDE);
+    const onCompleteRef = useRef(onComplete);
+
+    // Update refs when values change
+    useEffect(() => {
+        maxSlideRef.current = MAX_SLIDE;
+    }, [MAX_SLIDE]);
+
+    useEffect(() => {
+        onCompleteRef.current = onComplete;
+    }, [onComplete]);
+
+    // Reset animation value on mount to ensure clean state
+    useEffect(() => {
+        slideX.setValue(0);
+        setContainerWidth(0); // Force remeasurement
+    }, []);
 
     const panResponder = useRef(
         PanResponder.create({
@@ -41,12 +60,14 @@ export function SlideToStart({ onComplete }: SlideToStartProps) {
             },
 
             onPanResponderMove: (_, gesture) => {
-                const newValue = Math.max(0, Math.min(gesture.dx, MAX_SLIDE));
+                const currentMaxSlide = maxSlideRef.current;
+                const newValue = Math.max(0, Math.min(gesture.dx, currentMaxSlide));
                 slideX.setValue(newValue);
             },
 
             onPanResponderRelease: (_, gesture) => {
-                const threshold = MAX_SLIDE * 0.8;
+                const currentMaxSlide = maxSlideRef.current;
+                const threshold = currentMaxSlide * 0.8;
 
                 if (gesture.dx >= threshold) {
                     // Success - complete the slide
@@ -57,12 +78,12 @@ export function SlideToStart({ onComplete }: SlideToStartProps) {
                     }
 
                     Animated.timing(slideX, {
-                        toValue: MAX_SLIDE,
+                        toValue: currentMaxSlide,
                         duration: 200,
                         useNativeDriver: false,
                     }).start(() => {
                         setTimeout(() => {
-                            onComplete();
+                            onCompleteRef.current();
                         }, 100);
                     });
                 } else {
@@ -83,8 +104,10 @@ export function SlideToStart({ onComplete }: SlideToStartProps) {
             onLayout={(e) => {
                 const width = e.nativeEvent.layout.width;
 
-                if (width > 0 && width !== containerWidth) {
-                    setContainerWidth(width);
+                if (width > 0) {
+                    if (containerWidth === 0 || Math.abs(width - containerWidth) > 1) {
+                        setContainerWidth(width);
+                    }
                 }
             }}
             style={{

@@ -7,9 +7,10 @@ import {SlideToStart} from "@/app/components/calibration/ui/SlideToStart";
 
 interface StartScreenProps {
     onStart: () => void;
+    remountKey?: number;
 }
 
-export function StartScreen({ onStart }: StartScreenProps) {
+export function StartScreen({ onStart, remountKey = 0 }: StartScreenProps) {
     const insets = useSafeAreaInsets();
     const tabBarHeight = useBottomTabBarHeight();
     const bottomPadding = tabBarHeight + insets.bottom + 12;
@@ -70,7 +71,7 @@ export function StartScreen({ onStart }: StartScreenProps) {
 
             {/* CTA - Full width slider */}
             <View style={{ paddingBottom: bottomPadding, width: '100%' }} className="mt-auto">
-                <SlideToStart onComplete={onStart} />
+                <SlideToStart key={`slide-${remountKey}`} onComplete={onStart} />
             </View>
         </View>
     );
