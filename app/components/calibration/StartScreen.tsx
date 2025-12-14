@@ -32,7 +32,7 @@ export function StartScreen({ onStart, remountKey = 0 }: StartScreenProps) {
                 </View>
 
                 {/* Calibration Steps */}
-                <View className="mt-5 space-y-3">
+                <View className="mt-5 gap-2">
                     <View className="flex-row items-center">
                         <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3">
                             <Text className="text-brand-greenLight text-sm font-bold">1</Text>

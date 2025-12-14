@@ -13,7 +13,6 @@ interface Step1OrientationProps {
 
 const ORIENTATION_OPTIONS: { key: MountOrientation; label: string; sub: string; icon: any }[] = [
     { key: "portrait", label: "Portrait", sub: "Normal upright", icon: icons.phonePortrait },
-    { key: "portrait-upside-down", label: "Portrait (Upside Down)", sub: "Phone flipped", icon: icons.phonePortraitDown },
     { key: "landscape-left", label: "Landscape (Left)", sub: "Rotated left", icon: icons.phoneLandscapeLeft },
     { key: "landscape-right", label: "Landscape (Right)", sub: "Rotated right", icon: icons.phoneLandscapeRight },
 ];

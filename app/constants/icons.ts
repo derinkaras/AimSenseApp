@@ -20,9 +20,8 @@ import cancel from "../assets/icons/x-solid-full.png"
 import compass from "../assets/icons/compass.png"
 import target from "../assets/icons/target.png"
 import phonePortrait from "../assets/icons/phonePortrait.png"
-import phonePortraitDown from "../assets/icons/phonePortraitDown.png"
-import phoneLandscapeLeft from "../assets/icons/phoneLandscapeLeft.png"
-import phoneLandscapeRight from "../assets/icons/phoneLandscapeRight.png"
+import phoneLandscapeLeft from "../assets/icons/phoneLandscapeRight.png"
+import phoneLandscapeRight from "../assets/icons/phoneLandscapeLeft.png"
 import info from "../assets/icons/info-solid-full.png"
 import check from "../assets/icons/check-solid-full.png"
 import level from "../assets/icons/level.png"
@@ -51,7 +50,6 @@ const icons = {
     compass,
     target,
     phonePortrait,
-    phonePortraitDown,
     phoneLandscapeLeft,
     phoneLandscapeRight,
     info,

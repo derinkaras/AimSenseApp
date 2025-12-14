@@ -15,8 +15,6 @@ function getLockForOrientation(orientation: MountOrientation) {
     switch (orientation) {
         case "portrait":
             return ScreenOrientation.OrientationLock.PORTRAIT_UP;
-        case "portrait-upside-down":
-            return ScreenOrientation.OrientationLock.PORTRAIT_DOWN;
         case "landscape-left":
             return ScreenOrientation.OrientationLock.LANDSCAPE_LEFT;
         case "landscape-right":
@@ -28,17 +26,21 @@ function getLockForOrientation(orientation: MountOrientation) {
 
 async function lockOrientation(orientation: MountOrientation) {
     try {
-        await ScreenOrientation.lockAsync(getLockForOrientation(orientation));
+        const lock = getLockForOrientation(orientation);
+        console.log(`🔒 Attempting to lock to ${orientation} (${lock})`);
+        await ScreenOrientation.lockAsync(lock);
+        console.log(`✅ Successfully locked to ${orientation}`);
     } catch (err) {
-        console.warn("Failed to lock orientation:", err);
+        console.warn(`❌ Failed to lock to ${orientation}:`, err);
     }
 }
 
-async function unlockOrientation() {
+async function lockToPortrait() {
     try {
         await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+        console.log("🔒 Locked back to portrait");
     } catch (err) {
-        console.warn("Failed to unlock orientation:", err);
+        console.warn("Failed to lock to portrait:", err);
     }
 }
 
@@ -88,16 +90,31 @@ export default function Home() {
         });
     }, [step, navigation]);
 
+    // ==================== INITIAL ORIENTATION LOCK ====================
+    useEffect(() => {
+        // Lock to portrait on mount
+        const initOrientation = async () => {
+            try {
+                await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+                console.log("🔒 App locked to portrait on mount");
+            } catch (err) {
+                console.warn("Failed to lock orientation on mount:", err);
+            }
+        };
+
+        void initOrientation();
+    }, []);
+
     // ==================== CLEANUP ON UNMOUNT ====================
     useEffect(() => {
         return () => {
-            void unlockOrientation();
+            void lockToPortrait();
         };
     }, []);
 
     // ==================== NAVIGATION HANDLERS ====================
     async function handleStartCalibration() {
-        await unlockOrientation();
+        // Stay locked to portrait during Step 1 (just selecting)
         setPendingOrientation(mountOrientation);
         setStep("step1");
     }
@@ -108,6 +125,14 @@ export default function Home() {
         setStep("step2");
     }
 
+    async function handleBackToStep1() {
+        // Lock back to portrait when returning to Step 1
+        await lockToPortrait();
+        setMountOrientation("portrait");
+        setPendingOrientation("portrait");
+        setStep("step1");
+    }
+
     async function handleFinishCalibration() {
         const result: CalibrationResult = {
             mountOrientation,
@@ -116,13 +141,13 @@ export default function Home() {
         };
 
         setCalibration(result);
-        await unlockOrientation();
+        await lockToPortrait();
         setStartScreenKey(prev => prev + 1);
         setStep("start");
     }
 
     async function handleCancelCalibration() {
-        await unlockOrientation();
+        await lockToPortrait();
         setMountOrientation("portrait");
         setPendingOrientation("portrait");
         setStartScreenKey(prev => prev + 1);
@@ -163,6 +188,7 @@ export default function Home() {
                             onSelectPendingOrientation={setPendingOrientation}
                             applyPendingAndContinue={handleContinueToStep2}
                             goStep1={handleStartCalibration}
+                            backToStep1={handleBackToStep1}
                             finish={handleFinishCalibration}
                             cancel={handleCancelCalibration}
                         />

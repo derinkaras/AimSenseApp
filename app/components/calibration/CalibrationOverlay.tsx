@@ -16,6 +16,7 @@ interface CalibrationOverlayProps {
     onSelectPendingOrientation: (orientation: MountOrientation) => void;
     applyPendingAndContinue: () => void;
     goStep1: () => void;
+    backToStep1: () => void;
     finish: () => void;
     cancel: () => void;
 }
@@ -42,7 +43,7 @@ export function CalibrationOverlay(props: CalibrationOverlayProps) {
                     levelDeg={props.levelDeg}
                     isLevel={props.isLevel}
                     onFinish={props.finish}
-                    onBack={props.goStep1}
+                    onBack={props.backToStep1}
                     onCancel={props.cancel}
                 />
             );
