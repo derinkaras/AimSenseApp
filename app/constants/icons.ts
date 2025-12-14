@@ -27,6 +27,7 @@ import info from "../assets/icons/info-solid-full.png"
 import check from "../assets/icons/check-solid-full.png"
 import level from "../assets/icons/level.png"
 import tilt from "../assets/icons/tilt.png"
+import arrowRight from "../assets/icons/arrow-right.png"
 const icons = {
     leftArrow,
     mail,
@@ -56,6 +57,7 @@ const icons = {
     info,
     check,
     level,
-    tilt
+    tilt,
+    arrowRight
 }
 export default icons
