@@ -1,22 +1,27 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
-    View,
-    Image,
-    TouchableOpacity,
-    ActivityIndicator,
-    Text,
-    FlatList,
-} from "react-native";
+  View,
+  Image,
+  TouchableOpacity,
+  ActivityIndicator,
+  Text,
+  FlatList,
+  RefreshControl,
+} from 'react-native';
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import { useFocusEffect, useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import { gunProfileApi } from "@/app/api/gunProfile";
 import { useApi } from "@/app/hooks/useApi";
+import { useGunProfilesDirty } from "@/app/contexts/GunProfilesDirtyContext";
+
 import AddCircle from "@/app/components/AddCircle";
-import { useFocusEffect, useRouter } from "expo-router";
 import icons from "@/app/constants/icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { GunProfile } from "../types/apiTypes";
 import { OfflineBanner } from "@/app/components/OfflineBanner";
+import { DebugPanel } from "@/app/components/DebugPanel";
 
 const STORAGE_KEYS = {
     DISMISS_RIFLE_TIP: "aimsense.dismissTip.rifles.v1",
@@ -24,11 +29,14 @@ const STORAGE_KEYS = {
 
 const Guns = () => {
     const router = useRouter();
+    const { consumeDirty } = useGunProfilesDirty();
+
     const { data: gunProfiles, loading, error, refetch } = useApi<GunProfile[]>(
         gunProfileApi.getAllUserGunProfiles
     );
 
     const [showTip, setShowTip] = useState(false);
+    const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
     const loadTipPreference = useCallback(async () => {
         try {
@@ -39,19 +47,28 @@ const Guns = () => {
         }
     }, []);
 
+    // Mark "loaded once" so we don't flash the big loader on tab switches
+    useEffect(() => {
+        if (gunProfiles) setHasLoadedOnce(true);
+    }, [gunProfiles]);
 
+    // Only refetch when something actually changed + always load tip preference
     useFocusEffect(
         useCallback(() => {
-            refetch();
             loadTipPreference();
-        }, [refetch, loadTipPreference])
+
+            if (consumeDirty()) {
+                refetch();
+            }
+        }, [consumeDirty, refetch, loadTipPreference])
     );
 
+    // Initial load of tip preference (first mount)
     useEffect(() => {
         loadTipPreference();
     }, [loadTipPreference]);
 
-    const hasProfiles = gunProfiles && gunProfiles.length > 0;
+    const hasProfiles = !!(gunProfiles && gunProfiles.length > 0);
 
     const handleAddPress = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -63,7 +80,7 @@ const Guns = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         router.push({
             pathname: "/(pages)/AddGunProfile",
-            params: { id: item.id },
+            params: { id: String(item.id) },
         });
     };
 
@@ -75,7 +92,8 @@ const Guns = () => {
         } catch {}
     };
 
-    if (loading) {
+    // First-load only full screen loader
+    if (loading && !hasLoadedOnce) {
         return (
             <View className="flex-1 bg-brand-black justify-center items-center">
                 <ActivityIndicator size="large" color="#22c55e" />
@@ -87,7 +105,7 @@ const Guns = () => {
     if (error) {
         return (
             <View className="flex-1 bg-brand-black justify-center items-center">
-                <Text className="text-red-500 mb-3">{error}</Text>
+                <Text className="text-red-500 mb-3">{String(error)}</Text>
                 <TouchableOpacity
                     onPress={refetch}
                     className="px-4 py-2 rounded-xl bg-brand-green"
@@ -156,7 +174,7 @@ const Guns = () => {
                         </View>
                         <View className="px-2 py-0.5 rounded-full bg-zinc-800/80">
                             <Text className="text-[10px] text-gray-200">
-                                BC {item.ballisticCoefficient.toFixed(2)}
+                                BC {Number(item.ballisticCoefficient).toFixed(2)}
                             </Text>
                         </View>
                         <View className="px-2 py-0.5 rounded-full bg-zinc-800/80">
@@ -204,18 +222,21 @@ const Guns = () => {
                             </View>
                         </View>
 
-                        <View className="px-3 py-2 rounded-full bg-zinc-900 border border-zinc-800">
-                            <Text className="text-md text-gray-300">
-                                {hasProfiles
-                                    ? `${gunProfiles!.length} profile${
-                                        gunProfiles!.length > 1 ? "s" : ""
-                                    }`
-                                    : "No profiles"}
-                            </Text>
+                        <View className="flex-row items-center gap-2">
+
+                            <View className="px-3 py-2 rounded-full bg-zinc-900 border border-zinc-800">
+                                <Text className="text-md text-gray-300">
+                                    {hasProfiles
+                                        ? `${gunProfiles!.length} profile${
+                                            gunProfiles!.length > 1 ? "s" : ""
+                                        }`
+                                        : "No profiles"}
+                                </Text>
+                            </View>
                         </View>
                     </View>
 
-                    {/* ✅ Offline Banner */}
+                    {/* Offline Banner */}
                     <OfflineBanner />
 
                     {/* Dismissible tip banner */}
@@ -245,13 +266,20 @@ const Guns = () => {
                     {/* Content */}
                     {hasProfiles ? (
                         <FlatList
-                            data={gunProfiles}
-                            keyExtractor={(item, index) =>
-                                (item.id as string) || index.toString()
-                            }
+                            data={gunProfiles ?? []}
+                            keyExtractor={(item, index) => String(item.id ?? `gun-${index}`)}
                             renderItem={renderGunCard}
                             showsVerticalScrollIndicator={false}
-                            contentContainerStyle={{ paddingBottom: 32 }}
+                            contentContainerStyle={{ paddingBottom: 120 }}
+                            refreshControl={
+                                <RefreshControl
+                                    refreshing={loading && hasLoadedOnce}
+                                    onRefresh={refetch}
+                                    colors={["#0b7f4f"]}
+                                    tintColor="#0b7f4f"       // ✅ iOS spinner color
+                                    progressBackgroundColor="#0b7f4f" // optional nice dark bg on Android
+                                />
+                            }
                             ListFooterComponent={
                                 <View className="mt-2 mb-4 items-center">
                                     <AddCircle onPress={handleAddPress} />
@@ -270,6 +298,9 @@ const Guns = () => {
                         </View>
                     )}
                 </View>
+
+                {/*/!* ✅ Debug Panel *!/*/}
+                {/*<DebugPanel />*/}
             </SafeAreaView>
         </View>
     );

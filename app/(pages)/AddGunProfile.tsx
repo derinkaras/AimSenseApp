@@ -19,6 +19,7 @@ import Toast from "react-native-toast-message";
 
 import icons from "@/app/constants/icons";
 import { gunProfileApi } from "@/app/api/gunProfile";
+import { useGunProfilesDirty } from "@/app/contexts/GunProfilesDirtyContext";
 
 type UnitSystem = "METRIC" | "IMPERIAL";
 
@@ -26,6 +27,8 @@ const AddGunProfile = () => {
     const router = useRouter();
     const { id } = useLocalSearchParams<{ id?: string }>();
     const isEdit = !!id;
+
+    const { markDirty } = useGunProfilesDirty();
 
     // Form state
     const [name, setName] = useState("");
@@ -49,7 +52,7 @@ const AddGunProfile = () => {
         const load = async () => {
             try {
                 setLoadingExisting(true);
-                const p = await gunProfileApi.getSpecificGunProfile(id);
+                const p = await gunProfileApi.getSpecificGunProfile(String(id));
 
                 setName(p.name ?? "");
                 setCaliber(p.caliber ?? "");
@@ -135,15 +138,18 @@ const AddGunProfile = () => {
 
         try {
             if (isEdit && id) {
-                await gunProfileApi.updateSpecificGunProfile(id, payload);
+                await gunProfileApi.updateSpecificGunProfile(String(id), payload);
             } else {
                 await gunProfileApi.createProfile(payload);
             }
+
+            markDirty(); // ✅ tells Guns to refresh once
 
             Toast.show({
                 type: "success",
                 text1: isEdit ? "Profile updated" : "Profile created",
             });
+
             router.back();
         } catch (e) {
             console.error("Error saving profile", e);
@@ -162,36 +168,33 @@ const AddGunProfile = () => {
 
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-        Alert.alert(
-            "Delete rifle?",
-            "This will remove this rifle profile from AimSense.",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            setSubmitting(true);
-                            await gunProfileApi.deleteSpecificGunProfile(id);
-                            Toast.show({
-                                type: "success",
-                                text1: "Profile deleted",
-                            });
-                            router.back();
-                        } catch (e) {
-                            console.error("Error deleting profile", e);
-                            Alert.alert(
-                                "Error",
-                                "Failed to delete profile. Please try again."
-                            );
-                        } finally {
-                            setSubmitting(false);
-                        }
-                    },
+        Alert.alert("Delete rifle?", "This will remove this rifle profile from AimSense.", [
+            { text: "Cancel", style: "cancel" },
+            {
+                text: "Delete",
+                style: "destructive",
+                onPress: async () => {
+                    try {
+                        setSubmitting(true);
+                        await gunProfileApi.deleteSpecificGunProfile(String(id));
+
+                        markDirty(); // ✅ tells Guns to refresh once
+
+                        Toast.show({
+                            type: "success",
+                            text1: "Profile deleted",
+                        });
+
+                        router.back();
+                    } catch (e) {
+                        console.error("Error deleting profile", e);
+                        Alert.alert("Error", "Failed to delete profile. Please try again.");
+                    } finally {
+                        setSubmitting(false);
+                    }
                 },
-            ]
-        );
+            },
+        ]);
     };
 
     const renderInput = (
@@ -240,11 +243,7 @@ const AddGunProfile = () => {
                 >
                     {/* Header */}
                     <View className="flex-row items-center justify-between px-6 pt-2 pb-4">
-                        <TouchableOpacity
-                            onPress={() => router.back()}
-                            className="p-2 -ml-2"
-                            hitSlop={8}
-                        >
+                        <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2" hitSlop={8}>
                             <Image
                                 source={icons.leftArrow}
                                 className="size-7"
@@ -252,18 +251,14 @@ const AddGunProfile = () => {
                                 resizeMode="contain"
                             />
                         </TouchableOpacity>
+
                         <Text className="text-white text-xl font-semibold">
                             {isEdit ? "Edit Rifle Profile" : "New Rifle Profile"}
                         </Text>
 
                         {/* Right: delete button only in edit mode */}
                         {isEdit ? (
-                            <TouchableOpacity
-                                onPress={handleDelete}
-                                disabled={submitting}
-                                className="p-2"
-                                hitSlop={8}
-                            >
+                            <TouchableOpacity onPress={handleDelete} disabled={submitting} className="p-2" hitSlop={8}>
                                 <Image
                                     source={icons.trash}
                                     className="size-7"
@@ -287,8 +282,7 @@ const AddGunProfile = () => {
                                 Dial in your rifle
                             </Text>
                             <Text className="text-gray-500 text-sm">
-                                Enter your rifle and ammo details so AimSense can calculate
-                                accurate drops and holds for your shots.
+                                Enter your rifle and ammo details so AimSense can calculate accurate drops and holds for your shots.
                             </Text>
                         </View>
 
@@ -316,26 +310,20 @@ const AddGunProfile = () => {
                             Ammo & Ballistics
                         </Text>
 
-                        {renderInput(
-                            "Bullet weight (grains)",
-                            bulletWeightGrains,
-                            setBulletWeightGrains,
-                            { placeholder: "e.g. 168", keyboardType: "numeric" }
-                        )}
+                        {renderInput("Bullet weight (grains)", bulletWeightGrains, setBulletWeightGrains, {
+                            placeholder: "e.g. 168",
+                            keyboardType: "numeric",
+                        })}
 
-                        {renderInput(
-                            "Ballistic coefficient (G1)",
-                            ballisticCoefficient,
-                            setBallisticCoefficient,
-                            { placeholder: "e.g. 0.47", keyboardType: "numeric" }
-                        )}
+                        {renderInput("Ballistic coefficient (G1)", ballisticCoefficient, setBallisticCoefficient, {
+                            placeholder: "e.g. 0.47",
+                            keyboardType: "numeric",
+                        })}
 
-                        {renderInput(
-                            "Muzzle velocity (fps)",
-                            muzzleVelocityFps,
-                            setMuzzleVelocityFps,
-                            { placeholder: "e.g. 2650", keyboardType: "numeric" }
-                        )}
+                        {renderInput("Muzzle velocity (fps)", muzzleVelocityFps, setMuzzleVelocityFps, {
+                            placeholder: "e.g. 2650",
+                            keyboardType: "numeric",
+                        })}
 
                         {/* Zero & scope */}
                         <Text className="text-gray-400 text-xs uppercase tracking-[0.16em] mt-2 mb-2">
@@ -343,10 +331,7 @@ const AddGunProfile = () => {
                         </Text>
 
                         {renderInput("Zero distance", zeroDistance, setZeroDistance, {
-                            placeholder:
-                                unitSystem === "IMPERIAL"
-                                    ? "e.g. 100 (yards)"
-                                    : "e.g. 100 (meters)",
+                            placeholder: unitSystem === "IMPERIAL" ? "e.g. 100 (yards)" : "e.g. 100 (meters)",
                             keyboardType: "numeric",
                         })}
 

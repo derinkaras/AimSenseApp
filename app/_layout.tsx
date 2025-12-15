@@ -8,6 +8,7 @@ import Toast, {
 } from "react-native-toast-message";
 import { AuthProvider } from "@/app/contexts/AuthContext";
 import {NetworkStatusProvider} from "@/app/contexts/NetworkStatusContext";
+import {GunProfilesDirtyProvider} from "@/app/contexts/GunProfilesDirtyContext";
 
 export const toastConfig = {
     success: (props: BaseToastProps) => (
@@ -83,33 +84,35 @@ export default function RootLayout() {
     return (
         <AuthProvider>
             <NetworkStatusProvider>
-                <Stack screenOptions={{ headerShown: false }}>
-                    <Stack.Screen
-                        name="(onboarding)"
-                        options={{
-                            headerShown: false,
-                        }}
-                    />
-                    <Stack.Screen
-                        name="(tabs)"
-                        options={{
-                            headerShown: false,
-                        }}
-                    />
-                    <Stack.Screen
-                        name="(pages)"
-                        options={{
-                            headerShown: false,
-                        }}
-                    />
-                </Stack>
+                <GunProfilesDirtyProvider>
+                    <Stack screenOptions={{ headerShown: false }}>
+                        <Stack.Screen
+                            name="(onboarding)"
+                            options={{
+                                headerShown: false,
+                            }}
+                        />
+                        <Stack.Screen
+                            name="(tabs)"
+                            options={{
+                                headerShown: false,
+                            }}
+                        />
+                        <Stack.Screen
+                            name="(pages)"
+                            options={{
+                                headerShown: false,
+                            }}
+                        />
+                    </Stack>
 
-                <Toast
-                    position="top"
-                    visibilityTime={2000}
-                    topOffset={60}
-                    config={toastConfig}
-                />
+                    <Toast
+                        position="top"
+                        visibilityTime={2000}
+                        topOffset={60}
+                        config={toastConfig}
+                    />
+                </GunProfilesDirtyProvider>
             </NetworkStatusProvider>
         </AuthProvider>
     );
