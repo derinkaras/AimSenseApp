@@ -10,11 +10,11 @@ import {
 import * as Haptics from "expo-haptics";
 import icons from "@/app/constants/icons";
 
-interface SlideToStartProps {
+type Props = {
     onComplete: () => void;
-}
-
-export function SlideToStartCalibration({ onComplete }: SlideToStartProps) {
+    label?: string;
+};
+export function SlideToStartCalibration({ onComplete, label }: Props) {
     const slideX = useRef(new Animated.Value(0)).current;
     const [containerWidth, setContainerWidth] = useState(0);
 
@@ -158,7 +158,7 @@ export function SlideToStartCalibration({ onComplete }: SlideToStartProps) {
                     fontSize: 18,
                     textAlign: 'center',
                 }}>
-                    Slide to calibrate
+                    {label}
                 </Text>
                 <Text style={{
                     color: 'rgba(255, 255, 255, 0.6)',

@@ -104,7 +104,7 @@ export default function Home() {
                                             <Image source={icons.check} className="w-4 h-4" resizeMode="contain" tintColor="#0b7f4f" />
                                         </View>
                                         <Text className="text-white/90 text-base flex-1">
-                                            Level offset: {savedResult.levelZeroRollDeg.toFixed(2)}°
+                                            Calibrated: {new Date(savedResult.calibratedAt).toLocaleString()}
                                         </Text>
                                     </View>
                                 </View>
@@ -152,6 +152,7 @@ export default function Home() {
                             <SlideToStartCalibration
                                 key={`slide-${sliderKey}`}
                                 onComplete={isCalibrated ? handleRecalibrate : handleStart}
+                                label={isCalibrated ? "Recalibrate" : "Calibrate"}
                             />
                         </View>
                     </View>
