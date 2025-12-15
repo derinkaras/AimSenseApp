@@ -19,6 +19,15 @@ const getAuthHeaders = async () => {
     };
 };
 
+// Helper to detect network errors
+const isNetworkError = (error: any): boolean => {
+    const message = error?.message || '';
+    return message.includes('Network') ||
+        message.includes('fetch') ||
+        message.includes('Failed to fetch') ||
+        message.includes('network request failed');
+};
+
 export const userProfileApi = {
     createProfile: async (data: CreateUserProfileData) => {
         const headers = await getAuthHeaders();
@@ -79,6 +88,13 @@ export const userProfileApi = {
                 return cached;
             }
 
+            // ✅ If network error with no cache, return null (not an error!)
+            if (isNetworkError(error)) {
+                console.log('📡 Offline with no cache - returning null (no profile yet)');
+                return null; // User sees default "First Last" name, which is fine
+            }
+
+            // ❌ Real API error (server error, auth error, etc.) - throw it
             throw error;
         }
     },

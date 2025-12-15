@@ -20,6 +20,15 @@ const getAuthHeaders = async () => {
     };
 };
 
+// Helper to detect network errors
+const isNetworkError = (error: any): boolean => {
+    const message = error?.message || '';
+    return message.includes('Network') ||
+        message.includes('fetch') ||
+        message.includes('Failed to fetch') ||
+        message.includes('network request failed');
+};
+
 export const gunProfileApi = {
     createProfile: async (data: CreateGunProfileData) => {
         const headers = await getAuthHeaders();
@@ -65,14 +74,20 @@ export const gunProfileApi = {
         } catch (error) {
             console.log('API call failed, checking cache...', error);
 
-            // ✅ Return cached data if API fails
+            // ✅ Return cached data if available
             const cached = await apiCache.get(cacheKey);
             if (cached) {
                 console.log('✅ Returning cached gun profiles');
                 return cached;
             }
 
-            // No cache available, throw error
+            // ✅ If network error with no cache, return empty array (not an error!)
+            if (isNetworkError(error)) {
+                console.log('📡 Offline with no cache - returning empty array');
+                return []; // User sees "No profiles" screen, which is fine
+            }
+
+            // ❌ Real API error (server error, auth error, etc.) - throw it
             throw error;
         }
     },
@@ -107,6 +122,8 @@ export const gunProfileApi = {
                 return cached;
             }
 
+            // ❌ No fallback for specific profile - throw error
+            // (This is called when editing, so we need the specific data)
             throw error;
         }
     },
