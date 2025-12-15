@@ -64,7 +64,7 @@ export function StartScreen({ onStart, remountKey = 0 }: StartScreenProps) {
 
                 <View className="mt-4 rounded-2xl bg-brand-black/35 border border-brand-green/25 px-4 py-3">
                     <Text className="text-white/70 text-sm text-center">
-                        Takes about 90 seconds • Improves AR accuracy
+                        Takes about 90 seconds • Guarantees Accuracy
                     </Text>
                 </View>
             </View>

@@ -1,32 +1,26 @@
-import {supabase} from "@/app/lib/supabase";
+// app/api/userProfile.ts
+import { supabase } from "@/app/lib/supabase";
+import { apiCache } from "./apiCache";
+import type {
+    UserProfile,
+    CreateUserProfileData,
+    UpdateUserProfileData
+} from "../types/apiTypes";
 
 const API_BASE_URL = "http://10.0.0.78:8080/api/v1";
 
-type userProfileData = {
-    firstName?: string;
-    lastName?: string;
-    profilePhotoUri?: string;
-}
-
-type updateUserProfileData = {
-    firstName?: string;
-    lastName?: string;
-    profilePhotoUri?: string;
-}
-
 const getAuthHeaders = async () => {
-    const {data: {session}} = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession();
     return {
         'Content-Type': 'application/json',
-        ...(
-            session?.access_token &&
-            {'Authorization': `Bearer ${session.access_token}`}
-        )
-    }
-}
+        ...(session?.access_token && {
+            'Authorization': `Bearer ${session.access_token}`
+        })
+    };
+};
 
 export const userProfileApi = {
-    createProfile: async (data: userProfileData) => {
+    createProfile: async (data: CreateUserProfileData) => {
         const headers = await getAuthHeaders();
         const response = await fetch(
             `${API_BASE_URL}/userProfile/create`,
@@ -43,33 +37,53 @@ export const userProfileApi = {
             throw new Error(responseData.message || 'Failed to create user profile');
         }
 
+        // Cache the newly created profile
+        await apiCache.set('user_profile_me', responseData);
+
         return responseData;
     },
 
-    getMyProfile: async () => {
-        const headers = await getAuthHeaders();
-        const response = await fetch(
-            `${API_BASE_URL}/userProfile/me`,
-            {
-                method: 'GET',
-                headers,
-            }
-        );
+    getMyProfile: async (): Promise<UserProfile | null> => {
+        const cacheKey = 'user_profile_me';
 
-        const data = await response.json();
+        try {
+            const headers = await getAuthHeaders();
+            const response = await fetch(
+                `${API_BASE_URL}/userProfile/me`,
+                {
+                    method: 'GET',
+                    headers,
+                }
+            );
 
-        if (!response.ok) {
-            if (response.status === 404) {
-                return null;
+            const data = await response.json();
+
+            if (!response.ok) {
+                if (response.status === 404) {
+                    return null;
+                }
+                throw new Error(data.message || 'Failed to get user profile');
             }
-            console.log("Gets here")
-            throw new Error(data.message || 'Failed to get user profile');
+
+            // ✅ Cache successful response
+            await apiCache.set(cacheKey, data);
+
+            return data;
+        } catch (error) {
+            console.log('API call failed, checking cache...', error);
+
+            // ✅ Return cached data if available
+            const cached = await apiCache.get(cacheKey);
+            if (cached) {
+                console.log('✅ Returning cached user profile');
+                return cached;
+            }
+
+            throw error;
         }
-
-        return data;
     },
 
-    updateProfile: async (req: updateUserProfileData) => {
+    updateProfile: async (req: UpdateUserProfileData) => {
         const headers = await getAuthHeaders();
         const response = await fetch(
             `${API_BASE_URL}/userProfile/me`,
@@ -86,6 +100,9 @@ export const userProfileApi = {
             throw new Error(data.message || 'Failed to update profile');
         }
 
+        // ✅ Update cache after successful update
+        await apiCache.set('user_profile_me', data);
+
         return data;
     },
 
@@ -98,26 +115,30 @@ export const userProfileApi = {
                 headers,
             }
         );
-        // BE CAREFUL WITH NO CONTENT RETURNS THEY CANNOT BE .json() like above .json() should strickly be done
-        // if there is an error in these cases
+
         if (!response.ok) {
-            // DELETE might not have a body, so catch parsing errors
             const data = await response.json().catch(() => ({}));
             throw new Error(data.message || 'Failed to delete profile');
         }
 
+        // ✅ Clear cache after deletion
+        await apiCache.clear('user_profile_me');
     },
-    deleteAccount: async () =>{
+
+    deleteAccount: async () => {
         const headers = await getAuthHeaders();
         const response = await fetch(`${API_BASE_URL}/userProfile/deleteAccount`, {
             method: 'DELETE',
             headers,
-        })
-        // BE CAREFUL WITH NO CONTENT RETURNS THEY CANNOT BE .json() like above .json() should strickly be done
-        // if there is an error in these cases
+        });
+
         if (!response.ok) {
             const data = await response.json().catch(() => ({}));
             throw new Error(data.message || 'Failed to delete account');
         }
+
+        // ✅ Clear all cache after account deletion
+        await apiCache.clear('user_profile_me');
+        await apiCache.clear('gun_profiles_all');
     }
-}
+};

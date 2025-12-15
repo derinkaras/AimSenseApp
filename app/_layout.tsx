@@ -7,6 +7,7 @@ import Toast, {
     BaseToastProps,
 } from "react-native-toast-message";
 import { AuthProvider } from "@/app/contexts/AuthContext";
+import {NetworkStatusProvider} from "@/app/contexts/NetworkStatusContext";
 
 export const toastConfig = {
     success: (props: BaseToastProps) => (
@@ -81,7 +82,7 @@ export default function RootLayout() {
 
     return (
         <AuthProvider>
-            <>
+            <NetworkStatusProvider>
                 <Stack screenOptions={{ headerShown: false }}>
                     <Stack.Screen
                         name="(onboarding)"
@@ -109,7 +110,7 @@ export default function RootLayout() {
                     topOffset={60}
                     config={toastConfig}
                 />
-            </>
+            </NetworkStatusProvider>
         </AuthProvider>
     );
 }

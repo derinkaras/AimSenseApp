@@ -5,7 +5,6 @@ import {
     TouchableOpacity,
     Image,
     ActivityIndicator,
-    FlatList,
     ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -24,6 +23,8 @@ import TermsOfServiceContent from "@/app/components/contents/TermsOfServiceConte
 import PremiumBadge from "@/app/components/profile/PremiumBadge";
 import TrialBadge from "@/app/components/profile/TrialBadge";
 import FreeBadge from "@/app/components/profile/FreeBadge";
+import { OfflineBanner } from "@/app/components/OfflineBanner";
+import { DebugPanel } from "@/app/components/DebugPanel";
 
 const Profile = () => {
     const [profilePhotoUri, setProfilePhotoUri] = useState("");
@@ -200,7 +201,7 @@ const Profile = () => {
             console.log("Error deleting account:", message);
             Toast.show({
                 type: "error",
-                text1: "Delete failed",
+                text1: "Delete Failed",
                 text2: message,
             });
         } finally {
@@ -208,19 +209,10 @@ const Profile = () => {
         }
     };
 
+    const displayFirst = firstName.trim() || "First";
+    const displayLast = lastName.trim() || "Last";
+
     const closeModal = () => setActiveModal("");
-
-    if (loading) {
-        return (
-            <View className="flex-1 bg-brand-black justify-center items-center">
-                <ActivityIndicator size="large" color="#0b7f4f" />
-                <Text className="text-white mt-4">Loading profile...</Text>
-            </View>
-        );
-    }
-
-    const displayFirst = firstName || "AimSense";
-    const displayLast = lastName || "Shooter";
 
     const options = Object.entries({
         Privacy: { icon: icons.privacy },
@@ -231,7 +223,7 @@ const Profile = () => {
 
     return (
         <View className="flex-1 bg-brand-black">
-            <SafeAreaView className="flex-1">
+            <SafeAreaView className="flex-1" edges={['top']}>
                 {/* Edit name modal */}
                 <EditNameModal
                     showEditNameModal={showEditNameModal}
@@ -280,13 +272,18 @@ const Profile = () => {
                     />
                 </UniversalModal>
 
+                {/* ✅ Single ScrollView with proper padding */}
                 <ScrollView
                     className="flex-1"
-                    contentContainerStyle={{ paddingBottom: 32 }}
+                    contentContainerStyle={{ paddingBottom: 120 }}
                     showsVerticalScrollIndicator={false}
                 >
                     {/* PROFILE CARD */}
                     <View className="mx-6 mt-6 rounded-2xl bg-brand-greenDark/30 border border-brand-green/40 p-6">
+                        <View className="mb-2">
+                            <OfflineBanner />
+                        </View>
+
                         <View className="items-center gap-4">
                             {/* Avatar */}
                             <TouchableOpacity
@@ -367,17 +364,15 @@ const Profile = () => {
                         Account & App
                     </Text>
 
-                    <FlatList
-                        data={options}
-                        keyExtractor={(_, i) => i.toString()}
-                        scrollEnabled={false}
-                        className="mx-6"
-                        renderItem={({ item }) => {
+                    {/* ✅ Use map instead of FlatList - no nested scrolling */}
+                    <View className="mx-6">
+                        {options.map((item, index) => {
                             const [key, value] = item;
                             const danger = key === "Delete Account";
 
                             return (
                                 <TouchableOpacity
+                                    key={index}
                                     className={`flex-row h-14 items-center justify-between rounded-xl mb-3 px-4
                                     bg-brand-black/70 border ${
                                         danger
@@ -406,8 +401,10 @@ const Profile = () => {
                                     />
                                 </TouchableOpacity>
                             );
-                        }}
-                    />
+                        })}
+                    </View>
+
+                    {/* Contact Info */}
                     <View className="mx-6 mt-6 mb-4">
                         <Text className="text-gray-500 text-sm text-center">
                             Need help? Contact us at
@@ -417,6 +414,9 @@ const Profile = () => {
                         </Text>
                     </View>
                 </ScrollView>
+
+                {/*/!* Debug Panel - fixed position *!/*/}
+                {/*<DebugPanel />*/}
             </SafeAreaView>
         </View>
     );

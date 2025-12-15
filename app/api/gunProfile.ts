@@ -1,121 +1,154 @@
-import {supabase} from "@/app/lib/supabase";
-
+// app/api/gunProfile.ts
+import { supabase } from "@/app/lib/supabase";
+import { apiCache } from "./apiCache";
+import type {
+    GunProfile,
+    CreateGunProfileData,
+    UpdateGunProfileData
+} from "../types/apiTypes";
 
 const API_BASE_URL = 'http://10.0.0.78:8080/api/v1';
 
-type GunProfileData = {
-    name: string;                     // required
-    caliber: string;                  // required
-    bulletWeightGrains: number;       // BigDecimal → number
-    ballisticCoefficient: number;     // BigDecimal → number
-    muzzleVelocityFps: number;        // required
-    zeroDistance: number;             // required
-    scopeHeight: number;              // BigDecimal → number
-    unitSystem: "METRIC" | "IMPERIAL"; // matches your UnitSystem enum
-
-    // optional
-    gunPhotoUri?: string;
-};
-
-type UpdateGunProfileData = {
-    name?: string;                     // required
-    caliber?: string;                  // required
-    bulletWeightGrains?: number;       // BigDecimal → number
-    ballisticCoefficient?: number;     // BigDecimal → number
-    muzzleVelocityFps?: number;        // required
-    zeroDistance?: number;             // required
-    scopeHeight?: number;              // BigDecimal → number
-    unitSystem?: "METRIC" | "IMPERIAL"; // matches your UnitSystem enum
-
-    // optional
-    gunPhotoUri?: string;
-};
-
 const getAuthHeaders = async () => {
-    const {data: {session}} = await supabase.auth.getSession();
+    const { data: { session } } = await supabase.auth.getSession();
     return {
         "Content-Type": "application/json",
         "Accept": "application/json",
         ...(session?.access_token && {
             "Authorization": `Bearer ${session.access_token}`
         })
-    }
-}
+    };
+};
 
 export const gunProfileApi = {
-    createProfile: async  (data: GunProfileData) => {
+    createProfile: async (data: CreateGunProfileData) => {
         const headers = await getAuthHeaders();
         const response = await fetch(`${API_BASE_URL}/gunProfile/create`, {
             headers,
             method: 'POST',
             body: JSON.stringify(data),
-        })
+        });
+
         if (!response.ok) {
-            let errorMessage = `Error ${response.statusText}`;
             const err = await response.json();
-            throw new Error(err.message || errorMessage);
+            throw new Error(err.message || `Error ${response.statusText}`);
         }
-        return response.json();
+
+        const result = await response.json();
+
+        // Clear cache after creating new profile
+        await apiCache.clear('gun_profiles_all');
+
+        return result;
     },
 
-    getAllUserGunProfiles: async() => {
-        const headers = await getAuthHeaders();
-        const response = await fetch(`${API_BASE_URL}/gunProfile/me`, {
-            headers,
-            method: 'GET',
-        })
-        if (!response.ok) {
-            let errorMessage = `Error ${response.statusText}`;
-            const err = await response.json();
-            throw new Error(err.message || errorMessage);
+    getAllUserGunProfiles: async (): Promise<GunProfile[]> => {
+        const cacheKey = 'gun_profiles_all';
+
+        try {
+            const headers = await getAuthHeaders();
+            const response = await fetch(`${API_BASE_URL}/gunProfile/me`, {
+                headers,
+                method: 'GET',
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error ${response.statusText}`);
+            }
+
+            const data = await response.json();
+
+            // ✅ Cache the successful response
+            await apiCache.set(cacheKey, data);
+
+            return data;
+        } catch (error) {
+            console.log('API call failed, checking cache...', error);
+
+            // ✅ Return cached data if API fails
+            const cached = await apiCache.get(cacheKey);
+            if (cached) {
+                console.log('✅ Returning cached gun profiles');
+                return cached;
+            }
+
+            // No cache available, throw error
+            throw error;
         }
-        return response.json();
     },
 
-    getSpecificGunProfile: async(id: string) => {
-        const headers = await getAuthHeaders();
-        const response = await fetch(`${API_BASE_URL}/gunProfile/me/${id}`, {
-            headers,
-            method: 'GET',
-        })
-        if (!response.ok) {
-            let errorMessage = `Error ${response.statusText}`;
-            const err = await response.json();
-            throw new Error(err.message || errorMessage);
+    getSpecificGunProfile: async (id: string): Promise<GunProfile> => {
+        const cacheKey = `gun_profile_${id}`;
+
+        try {
+            const headers = await getAuthHeaders();
+            const response = await fetch(`${API_BASE_URL}/gunProfile/me/${id}`, {
+                headers,
+                method: 'GET',
+            });
+
+            if (!response.ok) {
+                throw new Error(`Error ${response.statusText}`);
+            }
+
+            const data = await response.json();
+
+            // ✅ Cache the response
+            await apiCache.set(cacheKey, data);
+
+            return data;
+        } catch (error) {
+            console.log('API call failed, checking cache...', error);
+
+            // ✅ Return cached data if available
+            const cached = await apiCache.get(cacheKey);
+            if (cached) {
+                console.log('✅ Returning cached gun profile');
+                return cached;
+            }
+
+            throw error;
         }
-        return response.json();
     },
 
-    updateSpecificGunProfile: async(id: string, data: UpdateGunProfileData) => {
+    updateSpecificGunProfile: async (id: string, data: UpdateGunProfileData) => {
         const headers = await getAuthHeaders();
         const response = await fetch(`${API_BASE_URL}/gunProfile/me/${id}`, {
             headers,
             method: 'PATCH',
             body: JSON.stringify(data),
-        })
-        if (!response.ok) {
-            let errorMessage = `Error ${response.statusText}`;
-            const err = await response.json();
-            throw new Error(err.message || errorMessage);
-        }
-        return response.json();
+        });
 
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.message || `Error ${response.statusText}`);
+        }
+
+        const result = await response.json();
+
+        // ✅ Clear cache after successful update
+        await apiCache.clear(`gun_profile_${id}`);
+        await apiCache.clear('gun_profiles_all');
+
+        return result;
     },
 
-    deleteSpecificGunProfile: async(id: string) => {
+    deleteSpecificGunProfile: async (id: string) => {
         const headers = await getAuthHeaders();
         const response = await fetch(`${API_BASE_URL}/gunProfile/me/${id}`, {
             headers,
             method: 'DELETE',
-        })
+        });
+
         if (!response.ok) {
-            let errorMessage = `Error ${response.statusText}`;
             const err = await response.json();
-            throw new Error(err.message || errorMessage);
-
+            throw new Error(err.message || `Error ${response.statusText}`);
         }
-        return
+
+        // ✅ Clear cache after successful delete
+        await apiCache.clear(`gun_profile_${id}`);
+        await apiCache.clear('gun_profiles_all');
+
+        return;
     }
-
-}
-
+};

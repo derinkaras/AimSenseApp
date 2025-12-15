@@ -15,19 +15,8 @@ import AddCircle from "@/app/components/AddCircle";
 import { useFocusEffect, useRouter } from "expo-router";
 import icons from "@/app/constants/icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
-type GunProfile = {
-    id?: string;
-    name: string;
-    caliber: string;
-    bulletWeightGrains: number;
-    ballisticCoefficient: number;
-    muzzleVelocityFps: number;
-    zeroDistance: number;
-    scopeHeight: number;
-    unitSystem: "IMPERIAL" | "METRIC";
-    gunPhotoUri?: string | null;
-};
+import type { GunProfile } from "../types/apiTypes";
+import { OfflineBanner } from "@/app/components/OfflineBanner";
 
 const STORAGE_KEYS = {
     DISMISS_RIFLE_TIP: "aimsense.dismissTip.rifles.v1",
@@ -225,6 +214,9 @@ const Guns = () => {
                             </Text>
                         </View>
                     </View>
+
+                    {/* ✅ Offline Banner */}
+                    <OfflineBanner />
 
                     {/* Dismissible tip banner */}
                     {hasProfiles && showTip && (
