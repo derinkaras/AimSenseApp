@@ -11,6 +11,7 @@ import {
   MountOrientation,
 } from "@/app/calibration/exports";
 import icons from "@/app/constants/icons";
+import {CommonActions, useNavigation} from "@react-navigation/native";
 
 const ORIENTATION_OPTIONS: { key: MountOrientation; label: string; sub: string; icon: any }[] = [
   { key: "portrait", label: "Portrait", sub: "Normal upright", icon: icons.phonePortrait },
@@ -28,6 +29,7 @@ export default function Step1() {
   const setPending = useCalibrationStore((s) => s.setPendingOrientation);
   const confirmOrientation = useCalibrationStore((s) => s.confirmOrientation);
   const reset = useCalibrationStore((s) => s.resetCalibration);
+  const navigation = useNavigation();
 
   const handleNext = async () => {
     await confirmOrientation();
@@ -36,7 +38,12 @@ export default function Step1() {
 
   const handleCancel = async () => {
     await reset();
-    router.back();
+    navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: "(tabs)" }], // resets to tabs root (no calibration history)
+        })
+    );
   };
 
   return (

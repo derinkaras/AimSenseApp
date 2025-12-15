@@ -13,6 +13,7 @@ import {
 } from "@/app/calibration/exports";
 import { useTiltLevel } from "@/app/hooks/useTiltLevel";
 import icons from "@/app/constants/icons";
+import {CommonActions, useNavigation} from "@react-navigation/native";
 
 export default function Step2() {
   const [permission] = useCameraPermissions();
@@ -29,6 +30,7 @@ export default function Step2() {
   const isLandscapeMode = isLandscape(mountOrientation);
 
   const safe = Number.isFinite(levelDeg) ? levelDeg : 0;
+  const navigation = useNavigation();
 
   // Haptic feedback when level is achieved
   useEffect(() => {
@@ -52,7 +54,13 @@ export default function Step2() {
 
   const handleCancel = async () => {
     await reset();
-    router.replace("/(tabs)/Home");
+    navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: "(tabs)" }], // resets to tabs root (no calibration history)
+        })
+    );
+
   };
 
   // Adjust sizing for landscape
