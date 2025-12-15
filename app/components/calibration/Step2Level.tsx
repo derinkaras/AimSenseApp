@@ -9,12 +9,12 @@ interface Step2LevelProps {
     mountOrientation: MountOrientation;
     levelDeg: number;
     isLevel: boolean;
-    onFinish: () => void;
+    onContinue: () => void;
     onBack: () => void;
     onCancel: () => void;
 }
 
-export function Step2Level({ mountOrientation, levelDeg, isLevel, onFinish, onBack, onCancel }: Step2LevelProps) {
+export function Step2Level({ mountOrientation, levelDeg, isLevel, onContinue, onBack, onCancel }: Step2LevelProps) {
     const insets = useSafeAreaInsets();
     const bottomPadding = Math.max(insets.bottom, 8);
     const wasLevel = useRef(false);
@@ -124,7 +124,7 @@ export function Step2Level({ mountOrientation, levelDeg, isLevel, onFinish, onBa
             {/* CTAs */}
             <View style={{ paddingBottom: bottomPadding }} className="mt-auto">
                 <Pressable
-                    onPress={onFinish}
+                    onPress={onContinue}
                     disabled={!isLevel}
                     className={[
                         "rounded-2xl items-center border",
@@ -135,7 +135,7 @@ export function Step2Level({ mountOrientation, levelDeg, isLevel, onFinish, onBa
                     ].join(" ")}
                 >
                     <Text className={`text-white font-semibold ${isLandscape ? "text-lg" : "text-xl"}`}>
-                        {isLevel ? "Finish Calibration" : "Hold steady to finish"}
+                        {isLevel ? "Continue" : "Hold steady to continue"}
                     </Text>
                 </Pressable>
 

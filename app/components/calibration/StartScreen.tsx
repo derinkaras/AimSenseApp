@@ -3,7 +3,7 @@ import { View, Text, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import icons from "@/app/constants/icons";
-import {SlideToStart} from "@/app/components/calibration/ui/SlideToStart";
+import {SlideToStartCalibration} from "@/app/components/calibration/ui/SlideToStartCalibration";
 
 interface StartScreenProps {
     onStart: () => void;
@@ -71,7 +71,7 @@ export function StartScreen({ onStart, remountKey = 0 }: StartScreenProps) {
 
             {/* CTA - Full width slider */}
             <View style={{ paddingBottom: bottomPadding, width: '100%' }} className="mt-auto">
-                <SlideToStart key={`slide-${remountKey}`} onComplete={onStart} />
+                <SlideToStartCalibration key={`slide-${remountKey}`} onComplete={onStart} />
             </View>
         </View>
     );

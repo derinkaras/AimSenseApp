@@ -6,7 +6,12 @@ export type MountOrientation =
 
 export type CalibrationResult = {
     mountOrientation: MountOrientation;
-    // You can extend later:
     levelZeroRollDeg?: number;
-    calibratedAtISO: string;
+    // Add important calibration details later:
+
 };
+
+
+export const CALIBRATING_STEPS = ["start", "rifleProfile", "step1", "step2", "step3"] as const;
+
+export type CalibStep = typeof CALIBRATING_STEPS[number];

@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  View,
-  Image,
-  TouchableOpacity,
-  ActivityIndicator,
-  Text,
-  FlatList,
-  RefreshControl,
-} from 'react-native';
+    View,
+    Image,
+    TouchableOpacity,
+    ActivityIndicator,
+    Text,
+    FlatList,
+    RefreshControl,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -22,6 +22,7 @@ import icons from "@/app/constants/icons";
 import type { GunProfile } from "../types/apiTypes";
 import { OfflineBanner } from "@/app/components/OfflineBanner";
 import { DebugPanel } from "@/app/components/DebugPanel";
+
 
 const STORAGE_KEYS = {
     DISMISS_RIFLE_TIP: "aimsense.dismissTip.rifles.v1",
@@ -40,19 +41,21 @@ const Guns = () => {
 
     const loadTipPreference = useCallback(async () => {
         try {
-            const dismissed = await AsyncStorage.getItem(STORAGE_KEYS.DISMISS_RIFLE_TIP);
+            const dismissed = await AsyncStorage.getItem(
+                STORAGE_KEYS.DISMISS_RIFLE_TIP
+            );
             setShowTip(dismissed !== "1");
         } catch {
             setShowTip(true);
         }
     }, []);
 
-    // Mark "loaded once" so we don't flash the big loader on tab switches
+    // Mark first successful load
     useEffect(() => {
         if (gunProfiles) setHasLoadedOnce(true);
     }, [gunProfiles]);
 
-    // Only refetch when something actually changed + always load tip preference
+    // Refetch ONLY when something changed elsewhere
     useFocusEffect(
         useCallback(() => {
             loadTipPreference();
@@ -63,7 +66,7 @@ const Guns = () => {
         }, [consumeDirty, refetch, loadTipPreference])
     );
 
-    // Initial load of tip preference (first mount)
+    // Initial tip load
     useEffect(() => {
         loadTipPreference();
     }, [loadTipPreference]);
@@ -92,12 +95,14 @@ const Guns = () => {
         } catch {}
     };
 
-    // First-load only full screen loader
+    // Full-screen loader ONLY on first ever load
     if (loading && !hasLoadedOnce) {
         return (
             <View className="flex-1 bg-brand-black justify-center items-center">
                 <ActivityIndicator size="large" color="#22c55e" />
-                <Text className="text-gray-400 mt-3">Loading your rifles...</Text>
+                <Text className="text-gray-400 mt-3">
+                    Loading your rifles...
+                </Text>
             </View>
         );
     }
@@ -137,7 +142,7 @@ const Guns = () => {
                             source={icons.riflePfp}
                             className="w-8 h-8 opacity-80"
                             resizeMode="contain"
-                            tintColor="#9ca3af"
+                            style={{ tintColor: "#9ca3af" }}
                         />
                     </View>
                 )}
@@ -161,7 +166,6 @@ const Guns = () => {
                     <Text
                         className="text-gray-400 text-xs mb-2"
                         numberOfLines={1}
-                        ellipsizeMode="tail"
                     >
                         {item.caliber || "Caliber not set"}
                     </Text>
@@ -184,17 +188,16 @@ const Guns = () => {
                         </View>
                         <View className="px-2 py-0.5 rounded-full bg-zinc-800/80">
                             <Text className="text-[10px] text-gray-200">
-                                Zero {item.zeroDistance} {isImperial ? "yd" : "m"}
+                                Zero {item.zeroDistance}{" "}
+                                {isImperial ? "yd" : "m"}
                             </Text>
                         </View>
                     </View>
 
-                    <View className="flex-row items-center justify-between mt-1">
-                        <Text className="text-[10px] text-gray-500">
-                            Scope height: {item.scopeHeight}
-                            {isImperial ? " in" : " cm"}
-                        </Text>
-                    </View>
+                    <Text className="text-[10px] text-gray-500">
+                        Scope height: {item.scopeHeight}
+                        {isImperial ? " in" : " cm"}
+                    </Text>
                 </View>
             </TouchableOpacity>
         );
@@ -215,71 +218,57 @@ const Guns = () => {
                                     tintColor="#22c55e"
                                 />
                             </View>
-                            <View>
-                                <Text className="text-white text-2xl font-semibold">
-                                    Rifle profiles
-                                </Text>
-                            </View>
+                            <Text className="text-white text-2xl font-semibold">
+                                Rifle profiles
+                            </Text>
                         </View>
 
-                        <View className="flex-row items-center gap-2">
-
-                            <View className="px-3 py-2 rounded-full bg-zinc-900 border border-zinc-800">
-                                <Text className="text-md text-gray-300">
-                                    {hasProfiles
-                                        ? `${gunProfiles!.length} profile${
-                                            gunProfiles!.length > 1 ? "s" : ""
-                                        }`
-                                        : "No profiles"}
-                                </Text>
-                            </View>
+                        <View className="px-3 py-2 rounded-full bg-zinc-900 border border-zinc-800">
+                            <Text className="text-md text-gray-300">
+                                {hasProfiles
+                                    ? `${gunProfiles!.length} profile${
+                                        gunProfiles!.length > 1 ? "s" : ""
+                                    }`
+                                    : "No profiles"}
+                            </Text>
                         </View>
                     </View>
 
-                    {/* Offline Banner */}
                     <OfflineBanner />
 
-                    {/* Dismissible tip banner */}
+                    {/* Tip */}
                     {hasProfiles && showTip && (
                         <View className="mb-3 px-3 py-2 rounded-2xl bg-zinc-900 border border-zinc-800 flex-row items-start">
                             <Text className="text-sm text-gray-300 flex-1 pr-3">
-                                Tap any rifle card to edit its details. On the edit screen, you
-                                can also delete the profile using the trash icon.
+                                Tap any rifle card to edit its details. On the
+                                edit screen, you can also delete the profile.
                             </Text>
 
                             <TouchableOpacity
                                 onPress={dismissTip}
-                                activeOpacity={0.85}
                                 className="w-9 h-9 rounded-full bg-zinc-800 items-center justify-center"
-                                hitSlop={10}
                             >
                                 <Image
                                     source={icons.cancel}
                                     className="w-4 h-4"
                                     resizeMode="contain"
-                                    tintColor="#9ca3af"
+                                    style={{ tintColor: "#9ca3af" }}
                                 />
                             </TouchableOpacity>
                         </View>
                     )}
 
-                    {/* Content */}
+                    {/* List */}
                     {hasProfiles ? (
                         <FlatList
                             data={gunProfiles ?? []}
-                            keyExtractor={(item, index) => String(item.id ?? `gun-${index}`)}
+                            keyExtractor={(item, index) =>
+                                String(item.id ?? `gun-${index}`)
+                            }
                             renderItem={renderGunCard}
                             showsVerticalScrollIndicator={false}
                             contentContainerStyle={{ paddingBottom: 120 }}
-                            refreshControl={
-                                <RefreshControl
-                                    refreshing={loading && hasLoadedOnce}
-                                    onRefresh={refetch}
-                                    colors={["#0b7f4f"]}
-                                    tintColor="#0b7f4f"       // ✅ iOS spinner color
-                                    progressBackgroundColor="#0b7f4f" // optional nice dark bg on Android
-                                />
-                            }
+
                             ListFooterComponent={
                                 <View className="mt-2 mb-4 items-center">
                                     <AddCircle onPress={handleAddPress} />
@@ -288,9 +277,11 @@ const Guns = () => {
                         />
                     ) : (
                         <View className="flex-1 justify-center items-center">
-                            <Text className="text-gray-500 text-lg">No gun profiles yet.</Text>
-                            <Text className="text-gray-600 text-md mt-1 text-center ">
-                                Tap the button below to add your first rifle profile.
+                            <Text className="text-gray-500 text-lg">
+                                No gun profiles yet.
+                            </Text>
+                            <Text className="text-gray-600 text-md mt-1 text-center">
+                                Tap below to add your first rifle profile.
                             </Text>
                             <View className="mt-6">
                                 <AddCircle onPress={handleAddPress} />
@@ -299,7 +290,6 @@ const Guns = () => {
                     )}
                 </View>
 
-                {/*/!* ✅ Debug Panel *!/*/}
                 {/*<DebugPanel />*/}
             </SafeAreaView>
         </View>

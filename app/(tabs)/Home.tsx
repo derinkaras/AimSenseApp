@@ -6,60 +6,16 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import { useNavigation } from "@react-navigation/native";
 
 import { CameraPermissionBanner } from "@/app/components/CameraPermissionBanner";
-import { CalibrationOverlay, CalibStep } from "@/app/components/calibration/CalibrationOverlay";
-import { MountOrientation, CalibrationResult } from "@/app/calibration/types";
-import { useTiltLevel } from "@/app/hooks/useTiltLevel";
+import { CalibrationOverlay } from "@/app/components/calibration/CalibrationOverlay";
+import {MountOrientation, CalibrationResult, CalibStep, CALIBRATING_STEPS} from "@/app/calibration/types";
+import { useTiltLevel } from '@/app/hooks/useTiltLevel';
+import {lockOrientation, lockToPortrait, TAB_BAR_STYLE} from "../calibration/services";
 
-// ==================== ORIENTATION HELPERS ====================
-function getLockForOrientation(orientation: MountOrientation) {
-    switch (orientation) {
-        case "portrait":
-            return ScreenOrientation.OrientationLock.PORTRAIT_UP;
-        case "landscape-left":
-            return ScreenOrientation.OrientationLock.LANDSCAPE_LEFT;
-        case "landscape-right":
-            return ScreenOrientation.OrientationLock.LANDSCAPE_RIGHT;
-        default:
-            return ScreenOrientation.OrientationLock.PORTRAIT_UP;
-    }
-}
 
-async function lockOrientation(orientation: MountOrientation) {
-    try {
-        const lock = getLockForOrientation(orientation);
-        console.log(`🔒 Attempting to lock to ${orientation} (${lock})`);
-        await ScreenOrientation.lockAsync(lock);
-        console.log(`✅ Successfully locked to ${orientation}`);
-    } catch (err) {
-        console.warn(`❌ Failed to lock to ${orientation}:`, err);
-    }
-}
-
-async function lockToPortrait() {
-    try {
-        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-        console.log("🔒 Locked back to portrait");
-    } catch (err) {
-        console.warn("Failed to lock to portrait:", err);
-    }
-}
-
-// ==================== TAB BAR STYLE ====================
-const TAB_BAR_STYLE = {
-    position: "absolute" as const,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 88,
-    backgroundColor: "#0e2018",
-    borderTopWidth: 1,
-    borderTopColor: "#284a37",
-    paddingTop: 14,
-    paddingBottom: 16,
-};
 
 // ==================== MAIN COMPONENT ====================
 export default function Home() {
+
     const [permission] = useCameraPermissions();
     const navigation = useNavigation(); // This connects to the stack
 
@@ -83,12 +39,12 @@ export default function Home() {
 
     // ==================== TAB BAR VISIBILITY ====================
     useEffect(() => {
-        const isCalibrating = step === "step1" || step === "step2";
-
+        const isCalibrating = CALIBRATING_STEPS.includes(step);
         navigation.setOptions({
             tabBarStyle: isCalibrating ? { display: "none" } : TAB_BAR_STYLE,
         });
     }, [step, navigation]);
+
 
     // ==================== INITIAL ORIENTATION LOCK ====================
     useEffect(() => {
@@ -96,7 +52,6 @@ export default function Home() {
         const initOrientation = async () => {
             try {
                 await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-                console.log("🔒 App locked to portrait on mount");
             } catch (err) {
                 console.warn("Failed to lock orientation on mount:", err);
             }
@@ -119,7 +74,7 @@ export default function Home() {
         setStep("step1");
     }
 
-    async function handleContinueToStep2() {
+    async function goToStep2() {
         await lockOrientation(pendingOrientation);
         setMountOrientation(pendingOrientation);
         setStep("step2");
@@ -133,11 +88,21 @@ export default function Home() {
         setStep("step1");
     }
 
+    async function goToStep3() {
+        setStep("step3");
+    }
+
+    async function handleBackToStep2() {
+        setStep("step2");
+    }
+
+
+
+
     async function handleFinishCalibration() {
         const result: CalibrationResult = {
             mountOrientation,
             levelZeroRollDeg: levelDeg,
-            calibratedAtISO: new Date().toISOString(),
         };
 
         setCalibration(result);
@@ -156,7 +121,7 @@ export default function Home() {
 
     // ==================== SAFE AREA EDGES ====================
     const isLandscape = mountOrientation.includes("landscape");
-    const isCalibrating = step === "start" || step === "step1" || step === "step2";
+    const isCalibrating = step === "start" || step === "step1" || step === "step2" || step === "step3";
 
     const safeAreaEdges: ("top" | "bottom" | "left" | "right")[] = ["top"];
     if (isCalibrating) safeAreaEdges.push("bottom");
@@ -185,10 +150,16 @@ export default function Home() {
                             pendingOrientation={pendingOrientation}
                             levelDeg={levelDeg}
                             isLevel={isLevel}
+
+                            // Steps
                             onSelectPendingOrientation={setPendingOrientation}
-                            applyPendingAndContinue={handleContinueToStep2}
+
                             goStep1={handleStartCalibration}
+                            goToStep2={goToStep2}
                             backToStep1={handleBackToStep1}
+                            goToStep3={goToStep3}
+                            backToStep2={handleBackToStep2}
+
                             finish={handleFinishCalibration}
                             cancel={handleCancelCalibration}
                         />

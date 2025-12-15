@@ -14,7 +14,7 @@ interface SlideToStartProps {
     onComplete: () => void;
 }
 
-export function SlideToStart({ onComplete }: SlideToStartProps) {
+export function SlideToStartCalibration({ onComplete }: SlideToStartProps) {
     const slideX = useRef(new Animated.Value(0)).current;
     const [containerWidth, setContainerWidth] = useState(0);
 
@@ -158,7 +158,7 @@ export function SlideToStart({ onComplete }: SlideToStartProps) {
                     fontSize: 18,
                     textAlign: 'center',
                 }}>
-                    Slide to start hunt
+                    Slide to calibrate
                 </Text>
                 <Text style={{
                     color: 'rgba(255, 255, 255, 0.6)',
