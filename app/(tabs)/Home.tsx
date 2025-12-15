@@ -1,168 +1,159 @@
-import React, { useEffect, useState } from "react";
-import { View, StyleSheet } from "react-native";
+import React, { useEffect, useState, useCallback } from "react";
+import { View, Text, Image, StyleSheet } from "react-native";
+import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import * as ScreenOrientation from "expo-screen-orientation";
-import { useNavigation } from "@react-navigation/native";
-
 import { CameraPermissionBanner } from "@/app/components/CameraPermissionBanner";
-import { CalibrationOverlay } from "@/app/components/calibration/CalibrationOverlay";
-import {MountOrientation, CalibrationResult, CalibStep, CALIBRATING_STEPS} from "@/app/calibration/types";
-import { useTiltLevel } from '@/app/hooks/useTiltLevel';
-import {lockOrientation, lockToPortrait, TAB_BAR_STYLE} from "../calibration/services";
+import {
+    useCalibrationStore,
+    selectIsCalibrated,
+    selectSavedResult,
+    lockToPortrait,
+} from "@/app/calibration/exports";
+import icons from "@/app/constants/icons";
+import {SlideToStartCalibration} from "@/app/components/SlideToStartCalibration";
 
-
-
-// ==================== MAIN COMPONENT ====================
 export default function Home() {
-
     const [permission] = useCameraPermissions();
-    const navigation = useNavigation(); // This connects to the stack
-
-    // Calibration state
-    const [step, setStep] = useState<CalibStep>("start");
-    const [mountOrientation, setMountOrientation] = useState<MountOrientation>("portrait");
-    const [pendingOrientation, setPendingOrientation] = useState<MountOrientation>("portrait");
-    const [calibration, setCalibration] = useState<CalibrationResult | null>(null);
-    const [startScreenKey, setStartScreenKey] = useState(0);
-
-    // Sensor data
-    const { levelDeg, isLevel } = useTiltLevel(mountOrientation, {
-        toleranceDeg: 0.5,
-        holdMs: 600,
-        zeroEnterDeg: 0.12,
-        zeroExitDeg: 0.6,
-        smoothingAlpha: 0.18,
-        flatEnterGz: 0.85,
-        flatExitGz: 0.75,
-    });
-
-    // ==================== TAB BAR VISIBILITY ====================
-    useEffect(() => {
-        const isCalibrating = CALIBRATING_STEPS.includes(step);
-        navigation.setOptions({
-            tabBarStyle: isCalibrating ? { display: "none" } : TAB_BAR_STYLE,
-        });
-    }, [step, navigation]);
-
-
-    // ==================== INITIAL ORIENTATION LOCK ====================
-    useEffect(() => {
-        // Lock to portrait on mount
-        const initOrientation = async () => {
-            try {
-                await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-            } catch (err) {
-                console.warn("Failed to lock orientation on mount:", err);
-            }
-        };
-
-        void initOrientation();
-    }, []);
-
-    // ==================== CLEANUP ON UNMOUNT ====================
-    useEffect(() => {
-        return () => {
-            void lockToPortrait();
-        };
-    }, []);
-
-    // ==================== NAVIGATION HANDLERS ====================
-    async function handleStartCalibration() {
-        // Stay locked to portrait during Step 1 (just selecting)
-        setPendingOrientation(mountOrientation);
-        setStep("step1");
-    }
-
-    async function goToStep2() {
-        await lockOrientation(pendingOrientation);
-        setMountOrientation(pendingOrientation);
-        setStep("step2");
-    }
-
-    async function handleBackToStep1() {
-        // Lock back to portrait when returning to Step 1
-        await lockToPortrait();
-        setMountOrientation("portrait");
-        setPendingOrientation("portrait");
-        setStep("step1");
-    }
-
-    async function goToStep3() {
-        setStep("step3");
-    }
-
-    async function handleBackToStep2() {
-        setStep("step2");
-    }
-
-
-
-
-    async function handleFinishCalibration() {
-        const result: CalibrationResult = {
-            mountOrientation,
-            levelZeroRollDeg: levelDeg,
-        };
-
-        setCalibration(result);
-        await lockToPortrait();
-        setStartScreenKey(prev => prev + 1);
-        setStep("start");
-    }
-
-    async function handleCancelCalibration() {
-        await lockToPortrait();
-        setMountOrientation("portrait");
-        setPendingOrientation("portrait");
-        setStartScreenKey(prev => prev + 1);
-        setStep("start");
-    }
-
-    // ==================== SAFE AREA EDGES ====================
-    const isLandscape = mountOrientation.includes("landscape");
-    const isCalibrating = step === "start" || step === "step1" || step === "step2" || step === "step3";
-
-    const safeAreaEdges: ("top" | "bottom" | "left" | "right")[] = ["top"];
-    if (isCalibrating) safeAreaEdges.push("bottom");
-    if (isLandscape) safeAreaEdges.push("left", "right");
-
-    // ==================== RENDER ====================
     const cameraEnabled = !!permission?.granted;
+    const insets = useSafeAreaInsets();
+    const tabBarHeight = useBottomTabBarHeight();
+    const bottomPadding = tabBarHeight + insets.bottom + 12;
+
+    // Key to force slider reset when returning to this screen
+    const [sliderKey, setSliderKey] = useState(0);
+
+    // Store
+    const isCalibrated = useCalibrationStore(selectIsCalibrated);
+    const savedResult = useCalibrationStore(selectSavedResult);
+    const hydrate = useCalibrationStore((s) => s.hydrate);
+    const isHydrated = useCalibrationStore((s) => s.isHydrated);
+    const clearSaved = useCalibrationStore((s) => s.clearSavedCalibration);
+
+    // Reset slider and re-hydrate whenever screen comes into focus
+    useFocusEffect(
+        useCallback(() => {
+            setSliderKey(prev => prev + 1);
+            hydrate();
+        }, [hydrate])
+    );
+
+    // Lock to portrait on mount
+    useEffect(() => {
+        ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+    }, []);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => { lockToPortrait(); };
+    }, []);
+
+    const handleStart = () => router.push("/(calibration)/step1");
+
+    const handleRecalibrate = async () => {
+        await clearSaved();
+        router.push("/(calibration)/step1");
+    };
 
     return (
         <View className="flex-1 bg-brand-black">
-            {/* Background Camera */}
             {cameraEnabled && <CameraView style={StyleSheet.absoluteFill} facing="back" />}
 
-            {/* UI Overlay */}
-            <SafeAreaView className="flex-1" edges={safeAreaEdges}>
+            <SafeAreaView className="flex-1" edges={["top"]}>
                 {!cameraEnabled ? (
-                    <View className="flex-1 justify-center items-center px-6">
+                    <View className="flex-1 justify-center items-center px-6 pb-24">
                         <CameraPermissionBanner />
                     </View>
+                ) : !isHydrated ? (
+                    <View className="flex-1 justify-center items-center pb-24">
+                        <Text className="text-white text-lg">Loading...</Text>
+                    </View>
                 ) : (
-                    <View className={`flex-1 pt-4 ${isLandscape ? "px-4" : "px-6"}`}>
-                        <CalibrationOverlay
-                            step={step}
-                            startScreenKey={startScreenKey}
-                            mountOrientation={mountOrientation}
-                            pendingOrientation={pendingOrientation}
-                            levelDeg={levelDeg}
-                            isLevel={isLevel}
+                    <View className="flex-1 pt-4 px-6">
+                        {/* Main Message */}
+                        <View className="rounded-3xl bg-brand-greenDark/70 border border-brand-green/60 p-6">
+                            <View className="flex-row items-center">
+                                <View className="size-14 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-4">
+                                    <Image source={icons.target} className="w-8 h-8" resizeMode="contain" tintColor="#0b7f4f" />
+                                </View>
+                                <View className="flex-1">
+                                    <Text className="text-white text-3xl font-bold">
+                                        {isCalibrated ? "Ready to Hunt" : "Ready to Hunt?"}
+                                    </Text>
+                                    <Text className="text-white/80 mt-1 text-base">
+                                        {isCalibrated ? "Calibration complete" : "Quick setup to get you zeroed in"}
+                                    </Text>
+                                </View>
+                            </View>
 
-                            // Steps
-                            onSelectPendingOrientation={setPendingOrientation}
+                            {/* Calibration Steps or Status */}
+                            {isCalibrated && savedResult ? (
+                                <View className="mt-5 gap-2">
+                                    <View className="flex-row items-center">
+                                        <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3">
+                                            <Image source={icons.check} className="w-4 h-4" resizeMode="contain" tintColor="#0b7f4f" />
+                                        </View>
+                                        <Text className="text-white/90 text-base flex-1">
+                                            Orientation: {savedResult.mountOrientation}
+                                        </Text>
+                                    </View>
+                                    <View className="flex-row items-center">
+                                        <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3">
+                                            <Image source={icons.check} className="w-4 h-4" resizeMode="contain" tintColor="#0b7f4f" />
+                                        </View>
+                                        <Text className="text-white/90 text-base flex-1">
+                                            Level offset: {savedResult.levelZeroRollDeg.toFixed(2)}°
+                                        </Text>
+                                    </View>
+                                </View>
+                            ) : (
+                                <View className="mt-5 gap-2">
+                                    <View className="flex-row items-center">
+                                        <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3">
+                                            <Text className="text-brand-greenLight text-sm font-bold">1</Text>
+                                        </View>
+                                        <Text className="text-white/90 text-base flex-1">Phone orientation</Text>
+                                    </View>
 
-                            goStep1={handleStartCalibration}
-                            goToStep2={goToStep2}
-                            backToStep1={handleBackToStep1}
-                            goToStep3={goToStep3}
-                            backToStep2={handleBackToStep2}
+                                    <View className="flex-row items-center">
+                                        <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3">
+                                            <Text className="text-brand-greenLight text-sm font-bold">2</Text>
+                                        </View>
+                                        <Text className="text-white/90 text-base flex-1">Level calibration</Text>
+                                    </View>
 
-                            finish={handleFinishCalibration}
-                            cancel={handleCancelCalibration}
-                        />
+                                    <View className="flex-row items-center">
+                                        <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3">
+                                            <Text className="text-brand-greenLight text-sm font-bold">3</Text>
+                                        </View>
+                                        <Text className="text-white/90 text-base flex-1">Phone to scope reference</Text>
+                                    </View>
+
+                                    <View className="flex-row items-center">
+                                        <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3">
+                                            <Text className="text-brand-greenLight text-sm font-bold">4</Text>
+                                        </View>
+                                        <Text className="text-white/90 text-base flex-1">Confirm & begin</Text>
+                                    </View>
+                                </View>
+                            )}
+
+                            <View className="mt-4 rounded-2xl bg-brand-black/35 border border-brand-green/25 px-4 py-3">
+                                <Text className="text-white/70 text-sm text-center">
+                                    {isCalibrated ? "Tap below to recalibrate" : "Takes about 90 seconds • Guarantees Accuracy"}
+                                </Text>
+                            </View>
+                        </View>
+
+                        {/* CTA - Full width slider */}
+                        <View style={{ paddingBottom: bottomPadding, width: '100%' }} className="mt-auto">
+                            <SlideToStartCalibration
+                                key={`slide-${sliderKey}`}
+                                onComplete={isCalibrated ? handleRecalibrate : handleStart}
+                            />
+                        </View>
                     </View>
                 )}
             </SafeAreaView>
