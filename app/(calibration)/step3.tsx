@@ -11,6 +11,7 @@ import {
   isLandscape,
 } from "@/app/calibration/exports";
 import icons from "@/app/constants/icons";
+import { CommonActions, useNavigation } from "@react-navigation/native";
 
 export default function Step3() {
   const [permission] = useCameraPermissions();
@@ -24,17 +25,23 @@ export default function Step3() {
   const reset = useCalibrationStore((s) => s.resetCalibration);
 
   const isLandscapeMode = isLandscape(mountOrientation);
+  const navigation = useNavigation();
 
   const handleConfirm = async () => {
     await finishCalibration();
-    router.replace("/(tabs)/Home");
-  };
 
+    navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: "(tabs)" }], // resets to tabs root (no calibration history)
+        })
+    );
+  };
   const handleBack = () => router.back();
 
   const handleCancel = async () => {
     await reset();
-    router.replace("//(tabs)/Home");
+    router.replace("/(tabs)/Home");
   };
 
   // Adjust sizing for landscape
