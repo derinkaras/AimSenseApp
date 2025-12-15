@@ -1,4 +1,4 @@
-// src/context/AuthContext.tsx (or wherever you keep it)
+// app/contexts/AuthContext.tsx
 
 import React, {
     createContext,
@@ -9,7 +9,8 @@ import React, {
 } from "react";
 import Toast from "react-native-toast-message";
 import type { Session, User } from "@supabase/supabase-js";
-import {supabase} from "@/app/lib/supabase";
+import { supabase } from "@/app/lib/supabase";
+import { apiCache } from "@/app/api/apiCache";
 
 type AuthContextType = {
     user: User | null;
@@ -25,10 +26,36 @@ type AuthContextType = {
         email: string,
         password: string
     ) => Promise<{ success: boolean } | undefined>;
-    logout: () => Promise<void>;
+    logout: () => Promise<{ success: boolean }>;
+    // Helper to check if we can reach the auth server
+    checkAuthConnectivity: () => Promise<boolean>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Timeout for auth operations
+const AUTH_TIMEOUT_MS = 8000;
+
+/**
+ * Check if we can reach Supabase auth (quick connectivity test)
+ */
+const canReachSupabase = async (timeout: number = 5000): Promise<boolean> => {
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+        // Try to get current session - this is a lightweight call
+        const { error } = await supabase.auth.getSession();
+
+        clearTimeout(timeoutId);
+
+        // If no error, we can reach Supabase
+        return !error;
+    } catch (error) {
+        console.log('Supabase connectivity check failed:', error);
+        return false;
+    }
+};
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<User | null>(null);
@@ -58,7 +85,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         initSession();
 
-        // 🔁 Keep user/session synced with Supabase
+        // 🔐 Keep user/session synced with Supabase
         const {
             data: { subscription },
         } = supabase.auth.onAuthStateChange((_event, newSession) => {
@@ -68,6 +95,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         return () => subscription.unsubscribe();
     }, []);
+
+    /**
+     * Check if we can perform auth operations (for UI to disable buttons)
+     */
+    const checkAuthConnectivity = async (): Promise<boolean> => {
+        return await canReachSupabase();
+    };
 
     const signup = async (email: string, password: string) => {
         try {
@@ -153,9 +187,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 text2: msg,
             });
             setLoading(false);
+            return { success: false };
         }
     };
-
 
     // 🔓 LOGIN (email/password only — standard Supabase login)
     const login = async (email: string, password: string) => {
@@ -221,7 +255,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setLoading(false);
             return { success: true };
         } catch (e: any) {
-            console.log("gets here")
+            console.log("Login error:", e);
             const msg = e?.message ?? "Login failed";
             setError(msg);
             Toast.show({
@@ -230,15 +264,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 text2: msg,
             });
             setLoading(false);
+            return { success: false };
         }
     };
 
-    // 🚪 LOGOUT
-    const logout = async () => {
+    // 🚪 LOGOUT - Requires internet connection
+    const logout = async (): Promise<{ success: boolean }> => {
         try {
             clearError();
             setLoading(true);
 
+            // ✅ Check connectivity first
+            const canConnect = await canReachSupabase(AUTH_TIMEOUT_MS);
+            if (!canConnect) {
+                Toast.show({
+                    type: "error",
+                    text1: "No Connection",
+                    text2: "Please connect to the internet to log out.",
+                });
+                setLoading(false);
+                return { success: false };
+            }
+
+            // ✅ Sign out from Supabase (invalidates token server-side)
             const { error } = await supabase.auth.signOut();
             if (error) {
                 setError(error.message);
@@ -248,23 +296,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     text2: error.message || "Please try again",
                 });
                 setLoading(false);
-                return;
+                return { success: false };
             }
 
+            // ✅ Clear local state
             setUser(null);
             setSession(null);
-            // Not showing logout toast message here since we dont want account deletion toast to be overwritten
+
+            // ✅ Clear all cached data (important for security)
+            await apiCache.clearAll();
 
             setLoading(false);
+            return { success: true };
         } catch (e: any) {
             const msg = e?.message ?? "Logout failed";
             setError(msg);
-            Toast.show({
-                type: "error",
-                text1: "Logout Error",
-                text2: msg,
-            });
+
+            // Check if it's a network error
+            if (msg.includes('Network') || msg.includes('fetch') || msg.includes('timeout')) {
+                Toast.show({
+                    type: "error",
+                    text1: "No Connection",
+                    text2: "Please connect to the internet to log out.",
+                });
+            } else {
+                Toast.show({
+                    type: "error",
+                    text1: "Logout Error",
+                    text2: msg,
+                });
+            }
+
             setLoading(false);
+            return { success: false };
         }
     };
 
@@ -279,6 +343,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 signup,
                 login,
                 logout,
+                checkAuthConnectivity,
             }}
         >
             {children}

@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+// app/(tabs)/Profile.tsx
+import React, { useEffect, useRef, useState } from "react";
 import {
     View,
     Text,
@@ -13,6 +14,7 @@ import Toast from "react-native-toast-message";
 
 import icons from "@/app/constants/icons";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useNetworkStatus } from "@/app/contexts/NetworkStatusContext";
 import EditNameModal from "@/app/components/EditNameModal";
 import { userProfileApi } from "@/app/api/userProfile";
 import UniversalModal from "@/app/components/UniversalModal";
@@ -26,37 +28,57 @@ import FreeBadge from "@/app/components/profile/FreeBadge";
 import { OfflineBanner } from "@/app/components/OfflineBanner";
 import { DebugPanel } from "@/app/components/DebugPanel";
 
+type ActiveModal = "" | "Privacy" | "Terms of Service" | "Logout" | "Delete Account";
+type SubscriptionTier = "premium" | "trial" | "free";
+
 const Profile = () => {
     const [profilePhotoUri, setProfilePhotoUri] = useState("");
     const [firstName, setFirstName] = useState("");
     const [lastName, setLastName] = useState("");
     const [showEditNameModal, setShowEditNameModal] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [activeModal, setActiveModal] = useState<
-        "" | "Privacy" | "Terms of Service" | "Logout" | "Delete Account"
-    >("");
+    const [activeModal, setActiveModal] = useState<ActiveModal>("");
+    const [subscription, setSubscription] = useState<SubscriptionTier>("premium");
+
+    // ✅ Keep whether a profile exists so we don't re-fetch on every save
+    const [hasProfile, setHasProfile] = useState<boolean>(false);
 
     const { user, logout } = useAuth();
-    const [subscription, setSubscription] = useState("premium");
+    const { isOnline, connectionQuality } = useNetworkStatus();
+
+    // Check if we have a stable connection for sensitive operations
+    const hasStableConnection = isOnline && connectionQuality === "good";
+
+    // Avoid setState on unmounted screen
+    const mountedRef = useRef(true);
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+        };
+    }, []);
 
     const loadProfile = async () => {
         try {
             setLoading(true);
             const profileData = await userProfileApi.getMyProfile();
 
+            if (!mountedRef.current) return;
+
             if (profileData) {
+                setHasProfile(true);
                 setFirstName(profileData.firstName || "");
                 setLastName(profileData.lastName || "");
                 setProfilePhotoUri(profileData.profilePhotoUri || "");
+            } else {
+                setHasProfile(false);
             }
         } catch (error) {
             const message =
-                error instanceof Error
-                    ? error.message
-                    : "Something went wrong loading the profile";
+                error instanceof Error ? error.message : "Something went wrong loading the profile";
             console.log("loadProfile error:", message);
         } finally {
-            setLoading(false);
+            if (mountedRef.current) setLoading(false);
         }
     };
 
@@ -66,16 +88,17 @@ const Profile = () => {
 
     const handleSaveName = async (newFirst: string, newLast: string) => {
         try {
-            const profile = await userProfileApi.getMyProfile();
-
             const data: any = {
                 ...(newFirst && { firstName: newFirst }),
                 ...(newLast && { lastName: newLast }),
                 ...(profilePhotoUri && { profilePhotoUri }),
             };
 
-            if (!profile) {
+            if (!hasProfile) {
                 await userProfileApi.createProfile(data);
+                if (!mountedRef.current) return;
+                setHasProfile(true);
+
                 Toast.show({
                     type: "success",
                     text1: "Profile Created",
@@ -83,6 +106,8 @@ const Profile = () => {
                 });
             } else {
                 await userProfileApi.updateProfile(data);
+                if (!mountedRef.current) return;
+
                 Toast.show({
                     type: "success",
                     text1: "Profile Updated",
@@ -95,9 +120,7 @@ const Profile = () => {
             setShowEditNameModal(false);
         } catch (error) {
             const message =
-                error instanceof Error
-                    ? error.message
-                    : "Something went wrong saving your name";
+                error instanceof Error ? error.message : "Something went wrong saving your name";
             console.log("handleSaveName error:", message);
             Toast.show({
                 type: "error",
@@ -133,16 +156,19 @@ const Profile = () => {
         const imageUri = await pickImage();
         if (!imageUri) return;
 
+        // Optimistic UI
         setProfilePhotoUri(imageUri);
 
         try {
-            const profile = await userProfileApi.getMyProfile();
             const data = { profilePhotoUri: imageUri };
 
-            if (!profile) {
+            if (!hasProfile) {
                 await userProfileApi.createProfile(data);
+                if (!mountedRef.current) return;
+                setHasProfile(true);
             } else {
                 await userProfileApi.updateProfile(data);
+                if (!mountedRef.current) return;
             }
 
             Toast.show({
@@ -180,9 +206,33 @@ const Profile = () => {
         }
     };
 
+    // ✅ Open modals with connection check for sensitive operations
+    const handleOpenModal = (modalType: ActiveModal) => {
+        if (modalType === "Logout" || modalType === "Delete Account") {
+            if (!hasStableConnection) {
+                Toast.show({
+                    type: "error",
+                    text1: "No Connection",
+                });
+                return;
+            }
+        }
+        setActiveModal(modalType);
+    };
+
     const handleDeleteAccount = async () => {
         try {
             if (!user) return;
+
+            if (!hasStableConnection) {
+                Toast.show({
+                    type: "error",
+                    text1: "No Connection",
+
+                });
+                setActiveModal("");
+                return;
+            }
 
             setLoading(true);
             await userProfileApi.deleteAccount();
@@ -196,34 +246,68 @@ const Profile = () => {
             setActiveModal("");
             await logout();
         } catch (error) {
-            const message =
-                error instanceof Error ? error.message : "Failed to delete account";
-            console.log("Error deleting account:", message);
+            const message = error instanceof Error ? error.message : "Failed to delete account";
+            console.log("handleDeleteAccount error:", message);
             Toast.show({
                 type: "error",
                 text1: "Delete Failed",
                 text2: message,
             });
         } finally {
-            setLoading(false);
+            if (mountedRef.current) setLoading(false);
         }
+    };
+
+    const handleLogout = async () => {
+        if (!hasStableConnection) {
+            Toast.show({
+                type: "error",
+                text1: "No Connection",
+                text2: "You need a stable internet connection to log out.",
+            });
+            setActiveModal("");
+            return;
+        }
+
+        const result = await logout();
+
+        if (result?.success) {
+            setActiveModal("");
+            Toast.show({
+                type: "success",
+                text1: "Logged Out",
+                text2: "See you soon!",
+            });
+        }
+        // If AuthContext shows error toast, no need to duplicate.
     };
 
     const displayFirst = firstName.trim() || "First";
     const displayLast = lastName.trim() || "Last";
-
     const closeModal = () => setActiveModal("");
 
+    // ✅ Match the UI you said you want to keep
     const options = Object.entries({
         Privacy: { icon: icons.privacy },
         "Terms of Service": { icon: icons.file },
         Logout: { icon: icons.power },
         "Delete Account": { icon: icons.trash },
-    });
+    }) as Array<[ActiveModal extends "" ? never : Exclude<ActiveModal, "">, { icon: any }]>;
+
+    const requiresConnection = (key: string) => key === "Logout" || key === "Delete Account";
+
+    // Keep your initial full-screen loader behavior
+    if (loading && !firstName && !lastName) {
+        return (
+            <View className="flex-1 bg-brand-black justify-center items-center">
+                <ActivityIndicator size="large" color="#22c55e" />
+            </View>
+        );
+    }
 
     return (
         <View className="flex-1 bg-brand-black">
-            <SafeAreaView className="flex-1" edges={['top']}>
+            <SafeAreaView className="flex-1" edges={["top"]}>
                 {/* Edit name modal */}
                 <EditNameModal
                     showEditNameModal={showEditNameModal}
@@ -237,39 +321,19 @@ const Profile = () => {
 
                 {/* Modals */}
                 <UniversalModal visible={activeModal === "Logout"} onClose={closeModal}>
-                    <LogoutContent
-                        onCancel={closeModal}
-                        onConfirm={async () => {
-                            await logout();
-                            closeModal();
-                            Toast.show({
-                                type: "success",
-                                text1: "Logged Out",
-                                text2: "See you soon!",
-                            });
-                        }}
-                    />
+                    <LogoutContent onCancel={closeModal} onConfirm={handleLogout} />
                 </UniversalModal>
 
                 <UniversalModal visible={activeModal === "Privacy"} onClose={closeModal}>
                     <PrivacyPolicyContent onClose={closeModal} />
                 </UniversalModal>
 
-                <UniversalModal
-                    visible={activeModal === "Terms of Service"}
-                    onClose={closeModal}
-                >
+                <UniversalModal visible={activeModal === "Terms of Service"} onClose={closeModal}>
                     <TermsOfServiceContent onClose={closeModal} />
                 </UniversalModal>
 
-                <UniversalModal
-                    visible={activeModal === "Delete Account"}
-                    onClose={closeModal}
-                >
-                    <DeleteAccountContent
-                        onCancel={closeModal}
-                        onConfirm={handleDeleteAccount}
-                    />
+                <UniversalModal visible={activeModal === "Delete Account"} onClose={closeModal}>
+                    <DeleteAccountContent onCancel={closeModal} onConfirm={handleDeleteAccount} />
                 </UniversalModal>
 
                 {/* ✅ Single ScrollView with proper padding */}
@@ -292,9 +356,7 @@ const Profile = () => {
                                 className="size-32 items-center justify-center overflow-hidden rounded-full bg-brand-greenDark border-2 border-brand-green/80"
                             >
                                 <Image
-                                    source={
-                                        profilePhotoUri ? { uri: profilePhotoUri } : icons.user
-                                    }
+                                    source={profilePhotoUri ? { uri: profilePhotoUri } : icons.user}
                                     className="w-full h-full"
                                     style={{
                                         tintColor: profilePhotoUri ? undefined : "#0b7f4f",
@@ -310,14 +372,10 @@ const Profile = () => {
                                     className="px-3 py-1 rounded-full bg-brand-black/60 border border-brand-green/60"
                                     activeOpacity={0.85}
                                 >
-                                    <Text className="text-xs text-gray-300">
-                                        Remove profile photo
-                                    </Text>
+                                    <Text className="text-xs text-gray-300">Remove profile photo</Text>
                                 </TouchableOpacity>
                             ) : (
-                                <Text className="text-xs text-gray-400">
-                                    Tap the avatar to add a photo
-                                </Text>
+                                <Text className="text-xs text-gray-400">Tap the avatar to add a photo</Text>
                             )}
 
                             {/* Name */}
@@ -337,16 +395,11 @@ const Profile = () => {
                                     tintColor="#10b981"
                                     resizeMode="contain"
                                 />
-                                <Text className="text-gray-200 text-xs">
-                                    Edit display name
-                                </Text>
+                                <Text className="text-gray-200 text-xs">Edit display name</Text>
                             </TouchableOpacity>
 
                             {/* Email */}
-                            <Text
-                                className="text-gray-400 text-md text-center"
-                                numberOfLines={1}
-                            >
+                            <Text className="text-gray-400 text-md text-center" numberOfLines={1}>
                                 {user?.email || "aimsense@app.com"}
                             </Text>
 
@@ -366,31 +419,34 @@ const Profile = () => {
 
                     {/* ✅ Use map instead of FlatList - no nested scrolling */}
                     <View className="mx-6">
-                        {options.map((item, index) => {
-                            const [key, value] = item;
+                        {options.map(([key, value]) => {
                             const danger = key === "Delete Account";
+                            const needsConnection = requiresConnection(key);
+                            const isDisabled = needsConnection && !hasStableConnection;
 
                             return (
                                 <TouchableOpacity
-                                    key={index}
+                                    key={key}
                                     className={`flex-row h-14 items-center justify-between rounded-xl mb-3 px-4
-                                    bg-brand-black/70 border ${
-                                        danger
-                                            ? "border-red-500/70"
-                                            : "border-brand-green/70"
-                                    }`}
-                                    activeOpacity={0.85}
-                                    onPress={() => setActiveModal(key as typeof activeModal)}
+                  bg-brand-black/70 border ${
+                                        danger ? "border-red-500/70" : "border-brand-green/70"
+                                    } ${isDisabled ? "opacity-50" : ""}`}
+                                    activeOpacity={isDisabled ? 1 : 0.85}
+                                    onPress={() => handleOpenModal(key as ActiveModal)}
                                 >
-                                    <View className="flex-row items-center">
+                                    <View className="flex-row items-center flex-1">
                                         <Image
                                             source={value.icon}
                                             className="w-5 h-5"
                                             tintColor={danger ? "#f97373" : "#10b981"}
                                         />
-                                        <Text className="text-white text-lg ml-3">
-                                            {key}
-                                        </Text>
+                                        <Text className="text-white text-lg ml-3">{key}</Text>
+
+                                        {isDisabled && (
+                                            <View className="ml-2 px-2 py-0.5 rounded-full bg-amber-900/50">
+                                                <Text className="text-amber-200 text-[10px]">Requires internet</Text>
+                                            </View>
+                                        )}
                                     </View>
 
                                     <Image
@@ -404,14 +460,11 @@ const Profile = () => {
                         })}
                     </View>
 
+
                     {/* Contact Info */}
                     <View className="mx-6 mt-6 mb-4">
-                        <Text className="text-gray-500 text-sm text-center">
-                            Need help? Contact us at
-                        </Text>
-                        <Text className="text-gray-400 text-sm text-center mt-1">
-                            support@aimsense.app
-                        </Text>
+                        <Text className="text-gray-500 text-sm text-center">Need help? Contact us at</Text>
+                        <Text className="text-gray-400 text-sm text-center mt-1">support@aimsense.app</Text>
                     </View>
                 </ScrollView>
 
