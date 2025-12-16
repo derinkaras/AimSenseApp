@@ -13,7 +13,7 @@ import {
 } from "@/app/calibration/exports";
 import { useTiltLevel } from "@/app/hooks/useTiltLevel";
 import icons from "@/app/constants/icons";
-import {CommonActions, useNavigation} from "@react-navigation/native";
+import { CommonActions, useNavigation } from "@react-navigation/native";
 
 export default function Step2() {
   const [permission] = useCameraPermissions();
@@ -23,16 +23,20 @@ export default function Step2() {
   const wasLevel = useRef(false);
 
   const mountOrientation = useCalibrationStore(selectMountOrientation);
-  const captureLevelReading = useCalibrationStore((s) => s.captureLevelReading);
+  const captureBaseline = useCalibrationStore((s) => s.captureBaseline);
   const reset = useCalibrationStore((s) => s.resetCalibration);
 
-  const { levelDeg, isLevel } = useTiltLevel(mountOrientation, DEFAULT_TILT_CONFIG);
-  const isLandscapeMode = isLandscape(mountOrientation);
+  // Hook returns raw roll/pitch for baseline capture
+  const { levelDeg, isLevel, rollNow, pitchNow } = useTiltLevel(
+      mountOrientation,
+      DEFAULT_TILT_CONFIG
+  );
 
+  const isLandscapeMode = isLandscape(mountOrientation);
   const safe = Number.isFinite(levelDeg) ? levelDeg : 0;
   const navigation = useNavigation();
 
-  // Haptic feedback when level is achieved
+  // Haptic feedback when level is achieved (≤ 3° and stable)
   useEffect(() => {
     if (isLevel && !wasLevel.current) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -43,7 +47,8 @@ export default function Step2() {
   }, [isLevel]);
 
   const handleCapture = () => {
-    captureLevelReading(levelDeg);
+    // Store raw IMU roll and pitch as baseline reference
+    captureBaseline(rollNow, pitchNow);
     router.push("/(calibration)/step3");
   };
 
@@ -57,13 +62,12 @@ export default function Step2() {
     navigation.dispatch(
         CommonActions.reset({
           index: 0,
-          routes: [{ name: "(tabs)" }], // resets to tabs root (no calibration history)
+          routes: [{ name: "(tabs)" }],
         })
     );
-
   };
 
-  // Adjust sizing for landscape
+  // Layout tuning
   const angleFontSize = isLandscapeMode ? "text-5xl" : "text-6xl";
   const containerPadding = isLandscapeMode ? "p-4" : "p-6";
   const headerPadding = isLandscapeMode ? "p-3" : "p-5";
@@ -82,16 +86,24 @@ export default function Step2() {
 
         <SafeAreaView className="flex-1" edges={safeAreaEdges}>
           <View className={`flex-1 ${isLandscapeMode ? "px-4" : "px-6"} pt-4`}>
+
             {/* Header */}
             <View className={`rounded-3xl ${headerPadding} bg-brand-greenDark/70 border border-brand-green/60`}>
               <View className="flex-row items-center">
                 <View className="size-11 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-3">
-                  <Image source={icons.compass} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
+                  <Image
+                      source={icons.compass}
+                      className="w-6 h-6"
+                      resizeMode="contain"
+                      tintColor="#0b7f4f"
+                  />
                 </View>
                 <View className="flex-1">
-                  <Text className={`text-white ${titleSize} font-semibold`}>Step 2: Level</Text>
+                  <Text className={`text-white ${titleSize} font-semibold`}>
+                    Step 2: Set Baseline
+                  </Text>
                   <Text className={`text-white/80 ${subtitleMargin} ${subtitleSize}`}>
-                    Adjust the phone until the indicator shows level.
+                    Hold the rifle upright and pointing forward. Level it within ±3°, then hold steady.
                   </Text>
                 </View>
               </View>
@@ -112,14 +124,20 @@ export default function Step2() {
               >
                 <View className="flex-row items-center justify-between">
                   <View>
-                    <Text className="text-white/70 text-sm">Angle</Text>
-                    <Text className={`text-white font-bold ${angleFontSize} mt-2`}>{safe.toFixed(1)}°</Text>
+                    <Text className="text-white/70 text-sm">
+                      Level Offset
+                    </Text>
+                    <Text className={`text-white font-bold ${angleFontSize} mt-2`}>
+                      {safe.toFixed(1)}°
+                    </Text>
                   </View>
 
                   <View
                       className={[
                         "size-16 rounded-3xl items-center justify-center border",
-                        isLevel ? "bg-brand-greenLight/15 border-brand-greenLight" : "bg-brand-black/40 border-brand-green/35",
+                        isLevel
+                            ? "bg-brand-greenLight/15 border-brand-greenLight"
+                            : "bg-brand-black/40 border-brand-green/35",
                       ].join(" ")}
                   >
                     <Image
@@ -134,24 +152,45 @@ export default function Step2() {
                 <View
                     className={[
                       "mt-5 px-4 py-3 rounded-2xl border",
-                      isLevel ? "bg-brand-greenLight/10 border-brand-greenLight/70" : "bg-brand-black/30 border-brand-green/30",
+                      isLevel
+                          ? "bg-brand-greenLight/10 border-brand-greenLight/70"
+                          : "bg-brand-black/30 border-brand-green/30",
                     ].join(" ")}
                 >
                   <Text className={`text-white font-semibold ${isLandscapeMode ? "text-base" : "text-lg"}`}>
-                    {isLevel ? "Level — ready to finish" : "Keep adjusting…"}
+                    {isLevel ? "Baseline ready — tap Continue" : "Adjust until level…"}
                   </Text>
                   <Text className="text-white/70 mt-1 text-sm">
-                    Hold steady for a moment to confirm.
+                    {isLevel
+                        ? "We’ll save this as your baseline reference for pitch and cant."
+                        : "Small adjustments are enough. Once level, pause briefly to lock it in."}
                   </Text>
                 </View>
 
-                {isLevel && safe !== 0 && (
+                {/* Debug info */}
+                {isLevel && (
+                    <View className="mt-4 px-4 py-3 rounded-2xl bg-brand-black/30 border border-brand-green/20">
+                      <Text className="text-white/50 text-xs font-mono">
+                        Baseline to capture:
+                      </Text>
+                      <Text className="text-white/70 text-xs font-mono mt-1">
+                        roll0: {rollNow.toFixed(3)}°  |  pitch0: {pitchNow.toFixed(3)}°
+                      </Text>
+                    </View>
+                )}
+
+                {!isLevel && Math.abs(safe) <= 5 && (
                     <View className="mt-4 flex-row items-start">
                       <View className="size-10 rounded-2xl bg-brand-black/40 border border-brand-green/35 items-center justify-center mr-3">
-                        <Image source={icons.info} className="w-5 h-5" resizeMode="contain" tintColor="#9ca3af" />
+                        <Image
+                            source={icons.info}
+                            className="w-5 h-5"
+                            resizeMode="contain"
+                            tintColor="#9ca3af"
+                        />
                       </View>
                       <Text className="flex-1 text-white/65 text-sm">
-                        A reading of ±1° can still be acceptable once stabilized.
+                        Almost there — keep the rifle upright, make small adjustments, then hold steady.
                       </Text>
                     </View>
                 )}
@@ -172,7 +211,7 @@ export default function Step2() {
                   ].join(" ")}
               >
                 <Text className={`text-white font-semibold ${isLandscapeMode ? "text-lg" : "text-xl"}`}>
-                  {isLevel ? "Continue" : "Hold steady to continue"}
+                  {isLevel ? "Continue" : "Level the rifle to continue"}
                 </Text>
               </Pressable>
 
@@ -202,6 +241,7 @@ export default function Step2() {
                 </Pressable>
               </View>
             </View>
+
           </View>
         </SafeAreaView>
       </View>

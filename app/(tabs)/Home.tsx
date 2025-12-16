@@ -5,19 +5,16 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import * as ScreenOrientation from "expo-screen-orientation";
+
 import { CameraPermissionBanner } from "@/app/components/CameraPermissionBanner";
-import {
-    useCalibrationStore,
-    selectIsCalibrated,
-    selectSavedResult,
-    lockToPortrait,
-} from "@/app/calibration/exports";
+import { lockToPortrait } from "@/app/calibration/exports";
 import icons from "@/app/constants/icons";
-import {SlideToStartCalibration} from "@/app/components/SlideToStartCalibration";
+import { SlideToStartCalibration } from "@/app/components/SlideToStartCalibration";
 
 export default function Home() {
     const [permission] = useCameraPermissions();
     const cameraEnabled = !!permission?.granted;
+
     const insets = useSafeAreaInsets();
     const tabBarHeight = useBottomTabBarHeight();
     const bottomPadding = tabBarHeight + insets.bottom + 12;
@@ -25,37 +22,37 @@ export default function Home() {
     // Key to force slider reset when returning to this screen
     const [sliderKey, setSliderKey] = useState(0);
 
-    // Store
-    const isCalibrated = useCalibrationStore(selectIsCalibrated);
-    const savedResult = useCalibrationStore(selectSavedResult);
-    const clearSaved = useCalibrationStore((s) => s.clearSavedCalibration);
-
-    // Reset slider and re-hydrate whenever screen comes into focus
+    // Reset slider whenever screen comes into focus
     useFocusEffect(
         useCallback(() => {
             setSliderKey((prev) => prev + 1);
         }, [])
     );
-// Lock to portrait on mount
+
+    // Lock to portrait on mount
     useEffect(() => {
-        ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+        ScreenOrientation.lockAsync(
+            ScreenOrientation.OrientationLock.PORTRAIT_UP
+        );
     }, []);
 
     // Cleanup on unmount
     useEffect(() => {
-        return () => { lockToPortrait(); };
+        return () => {
+            lockToPortrait();
+        };
     }, []);
 
     const handleStart = () => router.push("/(calibration)/step1");
 
-    const handleRecalibrate = async () => {
-        await clearSaved();
-        router.push("/(calibration)/step1");
-    };
-
     return (
         <View className="flex-1 bg-brand-black">
-            {cameraEnabled && <CameraView style={StyleSheet.absoluteFill} facing="back" />}
+            {cameraEnabled && (
+                <CameraView
+                    style={StyleSheet.absoluteFill}
+                    facing="back"
+                />
+            )}
 
             <SafeAreaView className="flex-1" edges={["top"]}>
                 {!cameraEnabled ? (
@@ -64,92 +61,113 @@ export default function Home() {
                     </View>
                 ) : (
                     <View className="flex-1 pt-4 px-6">
-                        {/* Main Message */}
+                        {/* ===================== MAIN CARD ===================== */}
                         <View className="rounded-3xl bg-brand-greenDark/70 border border-brand-green/60 p-6">
                             <View className="flex-row items-center">
                                 <View className="size-14 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-4">
-                                    <Image source={icons.target} className="w-8 h-8" resizeMode="contain" tintColor="#0b7f4f" />
+                                    <Image
+                                        source={icons.target}
+                                        className="w-8 h-8"
+                                        resizeMode="contain"
+                                        tintColor="#0b7f4f"
+                                    />
                                 </View>
                                 <View className="flex-1">
                                     <Text className="text-white text-3xl font-bold">
-                                        {isCalibrated ? "Ready to Hunt" : "Ready to Hunt?"}
+                                        Start Hunt
                                     </Text>
                                     <Text className="text-white/80 mt-1 text-base">
-                                        {isCalibrated ? "Calibration complete" : "Quick setup to get you zeroed in"}
+                                        Before you begin, make sure the profile for the gun you want to use is ready.
                                     </Text>
                                 </View>
                             </View>
 
-                            {/* Calibration Steps or Status */}
-                            {isCalibrated && savedResult ? (
-                                <View className="mt-5 gap-2">
-                                    <View className="flex-row items-center">
-                                        <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3">
-                                            <Image source={icons.check} className="w-4 h-4" resizeMode="contain" tintColor="#0b7f4f" />
-                                        </View>
-                                        <Text className="text-white/90 text-base flex-1">
-                                            Orientation: {savedResult.mountOrientation}
+                            {/* ===================== PRE-HUNT STEPS ===================== */}
+                            <View className="mt-5 gap-4">
+
+                                {/* Step 1 */}
+                                <View className="flex-row items-center">
+                                    <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3 mt-0.5">
+                                        <Text className="text-brand-greenLight text-sm font-bold">
+                                            1
                                         </Text>
                                     </View>
+                                    <Text className="text-white/90 text-base flex-1">
+                                        Confirm you have a gun profile ready
+                                    </Text>
+                                </View>
+
+                                {/* Step 2 - Calibration */}
+                                <View>
                                     <View className="flex-row items-center">
-                                        <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3">
-                                            <Image source={icons.check} className="w-4 h-4" resizeMode="contain" tintColor="#0b7f4f" />
+                                        <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3 mt-0.5">
+                                            <Text className="text-brand-greenLight text-sm font-bold">
+                                                2
+                                            </Text>
                                         </View>
                                         <Text className="text-white/90 text-base flex-1">
-                                            Calibrated: {new Date(savedResult.calibratedAt).toLocaleString()}
+                                            Calibration
                                         </Text>
                                     </View>
-                                </View>
-                            ) : (
-                                <View className="mt-5 gap-2">
-                                    <View className="flex-row items-center">
-                                        <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3">
-                                            <Text className="text-brand-greenLight text-sm font-bold">1</Text>
-                                        </View>
-                                        <Text className="text-white/90 text-base flex-1">Phone orientation</Text>
-                                    </View>
 
-                                    <View className="flex-row items-center">
-                                        <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3">
-                                            <Text className="text-brand-greenLight text-sm font-bold">2</Text>
-                                        </View>
-                                        <Text className="text-white/90 text-base flex-1">Level calibration</Text>
-                                    </View>
-
-                                    <View className="flex-row items-center">
-                                        <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3">
-                                            <Text className="text-brand-greenLight text-sm font-bold">3</Text>
-                                        </View>
-                                        <Text className="text-white/90 text-base flex-1">Phone to scope reference</Text>
-                                    </View>
-
-                                    <View className="flex-row items-center">
-                                        <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3">
-                                            <Text className="text-brand-greenLight text-sm font-bold">4</Text>
-                                        </View>
-                                        <Text className="text-white/90 text-base flex-1">Confirm & begin</Text>
+                                    {/* Sub-steps */}
+                                    <View className="ml-11 mt-2 gap-2">
+                                        <DotStep text="Set phone orientation" />
+                                        <DotStep text="Level the mount on your scope as much as possible" />
+                                        <DotStep text="Phone to scope reference" />
                                     </View>
                                 </View>
-                            )}
 
+                                {/* Step 3 */}
+                                <View className="flex-row items-center">
+                                    <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3 mt-0.5">
+                                        <Text className="text-brand-greenLight text-sm font-bold">
+                                            3
+                                        </Text>
+                                    </View>
+                                    <Text className="text-white/90 text-base flex-1">
+                                        Choose a rifle profile & begin your hunt
+                                    </Text>
+                                </View>
+
+                            </View>
+
+                            {/* ===================== FOOTER NOTE ===================== */}
                             <View className="mt-4 rounded-2xl bg-brand-black/35 border border-brand-green/25 px-4 py-3">
                                 <Text className="text-white/70 text-sm text-center">
-                                    {isCalibrated ? "Tap below to recalibrate" : "Takes about 90 seconds • Guarantees Accuracy"}
+                                    Before you begin, ensure the phone is level against the mount’s clamp wall, and that the mount is firmly seated on the scope.
                                 </Text>
                             </View>
+
                         </View>
 
-                        {/* CTA - Full width slider */}
-                        <View style={{ paddingBottom: bottomPadding, width: '100%' }} className="mt-auto">
+                        {/* ===================== CTA ===================== */}
+                        <View
+                            style={{ paddingBottom: bottomPadding, width: "100%" }}
+                            className="mt-auto"
+                        >
                             <SlideToStartCalibration
                                 key={`slide-${sliderKey}`}
-                                onComplete={isCalibrated ? handleRecalibrate : handleStart}
-                                label={isCalibrated ? "Recalibrate" : "Calibrate"}
+                                onComplete={handleStart}
+                                label="Start Hunt"
                             />
                         </View>
                     </View>
                 )}
             </SafeAreaView>
+        </View>
+    );
+}
+
+/* ===================== DOT SUB-STEP ===================== */
+
+function DotStep({ text }: { text: string }) {
+    return (
+        <View className="flex-row items-center">
+            <View className="w-1.5 h-1.5 rounded-full bg-brand-greenLight/70 mr-3" />
+            <Text className="text-white/70 text-sm flex-1">
+                {text}
+            </Text>
         </View>
     );
 }

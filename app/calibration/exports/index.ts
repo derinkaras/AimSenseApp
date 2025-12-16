@@ -10,7 +10,8 @@ export type MountOrientation =
 
 export interface CalibrationResult {
     mountOrientation: MountOrientation;
-    levelZeroRollDeg: number;
+    roll0: number;      // raw IMU roll baseline
+    pitch0: number;     // raw IMU pitch baseline
     calibratedAt: number;
 }
 
@@ -25,8 +26,8 @@ export interface TiltLevelConfig {
 }
 
 export const DEFAULT_TILT_CONFIG: TiltLevelConfig = {
-    toleranceDeg: 0.5,
-    holdMs: 600,
+    toleranceDeg: 3.0,      // ≤ 3° gating condition for baseline capture
+    holdMs: 500,            // 0.4-0.6s stability requirement
     zeroEnterDeg: 0.12,
     zeroExitDeg: 0.6,
     smoothingAlpha: 0.18,
@@ -68,8 +69,6 @@ const ORIENTATION_LOCKS: Record<MountOrientation, ScreenOrientation.OrientationL
     portrait: ScreenOrientation.OrientationLock.PORTRAIT_UP,
     "landscape-left": ScreenOrientation.OrientationLock.LANDSCAPE_LEFT,
     "landscape-right": ScreenOrientation.OrientationLock.LANDSCAPE_RIGHT,
-    // If you want true upside-down support later, you can switch to other locks,
-    // but keeping portrait-up is usually safest.
     "portrait-upside-down": ScreenOrientation.OrientationLock.PORTRAIT_UP,
 };
 
@@ -93,14 +92,15 @@ export async function lockToPortrait(): Promise<void> {
 interface CalibrationState {
     mountOrientation: MountOrientation;
     pendingOrientation: MountOrientation;
-    levelZeroRollDeg: number;
+    roll0: number;          // raw IMU roll baseline
+    pitch0: number;         // raw IMU pitch baseline
     savedResult: CalibrationResult | null;
 }
 
 interface CalibrationActions {
     setPendingOrientation: (o: MountOrientation) => void;
     confirmOrientation: () => Promise<void>;
-    captureLevelReading: (levelDeg: number) => void;
+    captureBaseline: (roll0: number, pitch0: number) => void;
     finishCalibration: () => Promise<CalibrationResult>;
     resetCalibration: () => Promise<void>;
     clearSavedCalibration: () => Promise<void>;
@@ -112,7 +112,8 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
     // State (in-memory only -> resets on reload)
     mountOrientation: "portrait",
     pendingOrientation: "portrait",
-    levelZeroRollDeg: 0,
+    roll0: 0,
+    pitch0: 0,
     savedResult: null,
 
     // Actions
@@ -124,13 +125,15 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
         set({ mountOrientation: pendingOrientation });
     },
 
-    captureLevelReading: (levelDeg) => set({ levelZeroRollDeg: levelDeg }),
+    // Capture raw IMU roll and pitch as baseline reference
+    captureBaseline: (roll0, pitch0) => set({ roll0, pitch0 }),
 
     finishCalibration: async () => {
-        const { mountOrientation, levelZeroRollDeg } = get();
+        const { mountOrientation, roll0, pitch0 } = get();
         const result: CalibrationResult = {
             mountOrientation,
-            levelZeroRollDeg,
+            roll0,
+            pitch0,
             calibratedAt: Date.now(),
         };
 
@@ -142,7 +145,8 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             savedResult: result,
             pendingOrientation: "portrait",
             mountOrientation: "portrait",
-            levelZeroRollDeg: 0,
+            roll0: 0,
+            pitch0: 0,
         });
 
         return result;
@@ -153,7 +157,8 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
         set({
             mountOrientation: "portrait",
             pendingOrientation: "portrait",
-            levelZeroRollDeg: 0,
+            roll0: 0,
+            pitch0: 0,
         });
     },
 
@@ -162,8 +167,15 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
     },
 }));
 
-// Selectors
+// ==================== SELECTORS ====================
+// IMPORTANT: Do NOT return new objects from selectors - causes infinite loops!
+// Use primitive selectors and call them separately in components.
+
 export const selectIsCalibrated = (s: CalibrationStore) => s.savedResult !== null;
 export const selectSavedResult = (s: CalibrationStore) => s.savedResult;
 export const selectMountOrientation = (s: CalibrationStore) => s.mountOrientation;
 export const selectPendingOrientation = (s: CalibrationStore) => s.pendingOrientation;
+
+// Separate primitive selectors for roll0 and pitch0 (avoids creating new object)
+export const selectRoll0 = (s: CalibrationStore) => s.roll0;
+export const selectPitch0 = (s: CalibrationStore) => s.pitch0;

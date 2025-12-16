@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { DeviceMotion } from "expo-sensors";
-import { MountOrientation } from "@/app/calibration/types";
+import {MountOrientation} from "@/app/calibration/exports";
+
 
 function radToDeg(r: number) {
     return (r * 180) / Math.PI;
@@ -36,11 +37,28 @@ function remapGravityToPortrait(gx: number, gy: number, gz: number, o: MountOrie
     }
 }
 
+export interface TiltLevelResult {
+    /** Display-friendly level angle (integer degrees for UI bubble) */
+    levelDeg: number;
+    /** Whether the device is level and stable (gating condition met) */
+    isLevel: boolean;
+    /** Raw smoothed roll angle (degrees) - store this as roll0 */
+    rollNow: number;
+    /** Raw smoothed pitch angle (degrees) - store this as pitch0 */
+    pitchNow: number;
+}
+
 /**
  * Measure-like leveling (Expo approximation):
  * - Auto-selects FLAT vs UPRIGHT mode based on |gz| fraction (with hysteresis)
- * - Shows signed integer degrees (-2..-1..0..1..2)
+ * - Shows signed integer degrees (-2..-1..0..1..2) for UI
  * - isLevel is based on the true smoothed angle (not the integer)
+ * - Returns raw rollNow/pitchNow for baseline capture
+ *
+ * CALIBRATION RULE:
+ * - toleranceDeg defaults to 3° (≤ 3° gating condition)
+ * - holdMs defaults to 500ms (stability requirement)
+ * - When isLevel=true, rollNow and pitchNow are safe to capture as baseline
  */
 export function useTiltLevel(
     mountOrientation: MountOrientation,
@@ -55,9 +73,11 @@ export function useTiltLevel(
         flatEnterGz?: number;
         flatExitGz?: number;
     }
-) {
-    const toleranceDeg = opts?.toleranceDeg ?? 0.5;
-    const holdMs = opts?.holdMs ?? 600;
+): TiltLevelResult {
+    // ≤ 3° gating condition for baseline capture
+    const toleranceDeg = opts?.toleranceDeg ?? 3.0;
+    // 0.4-0.6s stability requirement
+    const holdMs = opts?.holdMs ?? 500;
 
     const zeroEnterDeg = opts?.zeroEnterDeg ?? 0.12;
     const zeroExitDeg = opts?.zeroExitDeg ?? 0.6;
@@ -68,11 +88,17 @@ export function useTiltLevel(
 
     const [levelDeg, setLevelDeg] = useState<number>(0);
     const [isLevel, setIsLevel] = useState(false);
+    const [rollNow, setRollNow] = useState<number>(0);
+    const [pitchNow, setPitchNow] = useState<number>(0);
 
     const stableSince = useRef<number | null>(null);
-    const logicalRef = useRef<number>(Infinity); // smoothed signed degrees
+    const logicalRef = useRef<number>(Infinity); // smoothed signed degrees for display
     const displayRef = useRef<number>(0);
     const modeRef = useRef<"FLAT" | "UPRIGHT">("UPRIGHT");
+
+    // Smoothed raw IMU values for baseline capture
+    const rollRef = useRef<number>(Infinity);
+    const pitchRef = useRef<number>(Infinity);
 
     useEffect(() => {
         DeviceMotion.setUpdateInterval(60);
@@ -85,7 +111,7 @@ export function useTiltLevel(
             const gy0 = g.y ?? 0;
             const gz0 = g.z ?? 0;
 
-            // ✅ Remap to portrait-like frame based on mount orientation
+            // Remap to portrait-like frame based on mount orientation
             const { x: gx, y: gy, z: gz } = remapGravityToPortrait(gx0, gy0, gz0, mountOrientation);
 
             const norm = Math.sqrt(gx * gx + gy * gy + gz * gz) || 1;
@@ -99,24 +125,35 @@ export function useTiltLevel(
             }
 
             // Roll/pitch from gravity (in remapped frame)
-            const roll = radToDeg(Math.atan2(gy, gz));
-            const pitch = radToDeg(Math.atan2(-gx, Math.sqrt(gy * gy + gz * gz)));
+            const rawRoll = radToDeg(Math.atan2(gy, gz));
+            const rawPitch = radToDeg(Math.atan2(-gx, Math.sqrt(gy * gy + gz * gz)));
 
+            // Smooth raw roll and pitch for baseline capture
+            rollRef.current = ema(rollRef.current, rawRoll, smoothingAlpha);
+            pitchRef.current = ema(pitchRef.current, rawPitch, smoothingAlpha);
+
+            const smoothedRoll = Number.isFinite(rollRef.current) ? rollRef.current : 0;
+            const smoothedPitch = Number.isFinite(pitchRef.current) ? pitchRef.current : 0;
+
+            setRollNow(smoothedRoll);
+            setPitchNow(smoothedPitch);
+
+            // Calculate display-friendly level angle
             let chosenSigned: number;
 
             if (modeRef.current === "FLAT") {
                 // Signed "slope" like Measure (wrap to [-90, 90] to avoid flips)
-                let r = ((roll + 180) % 360) - 180;
+                let r = ((rawRoll + 180) % 360) - 180;
                 if (r > 90) r -= 180;
                 if (r < -90) r += 180;
                 chosenSigned = r;
             } else {
                 // Upright: treat "no cant" as near 90°
-                const abs = Math.abs(roll);
-                chosenSigned = Math.sign(roll || 1) * (abs - 90);
+                const abs = Math.abs(rawRoll);
+                chosenSigned = Math.sign(rawRoll || 1) * (abs - 90);
             }
 
-            // Smooth signed logical angle
+            // Smooth signed logical angle for display
             logicalRef.current = ema(logicalRef.current, chosenSigned, smoothingAlpha);
             const logical = Number.isFinite(logicalRef.current) ? logicalRef.current : 0;
 
@@ -143,7 +180,8 @@ export function useTiltLevel(
                 setLevelDeg(next);
             }
 
-            // Logic gate uses the true smoothed angle (not integer)
+            // Gating condition: ≤ toleranceDeg (default 3°) AND stable
+            // Uses the true smoothed angle, not the display integer
             const within = Math.abs(logical) <= toleranceDeg;
             const now = Date.now();
 
@@ -168,5 +206,5 @@ export function useTiltLevel(
         flatExitGz,
     ]);
 
-    return { levelDeg, isLevel };
+    return { levelDeg, isLevel, rollNow, pitchNow };
 }

@@ -15,6 +15,8 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import {
   useCalibrationStore,
   selectMountOrientation,
+  selectRoll0,
+  selectPitch0,
   getOrientationLabel,
   isLandscape,
 } from "@/app/calibration/exports";
@@ -30,7 +32,9 @@ export default function Step3() {
   const { width } = useWindowDimensions();
 
   const mountOrientation = useCalibrationStore(selectMountOrientation);
-  const levelZeroRollDeg = useCalibrationStore((s) => s.levelZeroRollDeg);
+  // Use separate selectors to avoid infinite loop (don't create new objects in selectors!)
+  const roll0 = useCalibrationStore(selectRoll0);
+  const pitch0 = useCalibrationStore(selectPitch0);
   const finishCalibration = useCalibrationStore((s) => s.finishCalibration);
   const reset = useCalibrationStore((s) => s.resetCalibration);
 
@@ -69,6 +73,70 @@ export default function Step3() {
 
   const bottomPadding = Math.max(insets.bottom, 8);
 
+  // Summary card component for reuse
+  const SummaryCards = ({ compact = false }: { compact?: boolean }) => (
+      <View className={compact ? "gap-3" : "gap-4"}>
+        {/* Mount Orientation Card */}
+        <View className={`rounded-3xl bg-brand-greenDark/65 border border-brand-green/45 ${compact ? "p-4" : "p-5"}`}>
+          <View className="flex-row items-center">
+            <View className="size-12 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-4">
+              <Image source={icons.phonePortrait} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-white/70 text-sm">Mount Orientation</Text>
+              <Text className={`text-white ${compact ? "text-lg" : "text-xl"} font-semibold mt-1`}>
+                {getOrientationLabel(mountOrientation)}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* IMU Baseline Card */}
+        <View className={`rounded-3xl bg-brand-greenDark/65 border border-brand-green/45 ${compact ? "p-4" : "p-5"}`}>
+          <View className="flex-row items-center">
+            <View className="size-12 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-4">
+              <Image source={icons.level} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-white/70 text-sm">IMU Baseline Reference</Text>
+              <View className="flex-row mt-1 gap-6">
+                <View className="w-20 items-center">
+                  <Text className="text-white/50 text-xs text-center">Roll</Text>
+                  <Text className={`text-white ${compact ? "text-lg" : "text-xl"} font-semibold text-center`}>
+                    {roll0.toFixed(2)}°
+                  </Text>
+                </View>
+
+                <View className="w-20 items-center">
+                  <Text className="text-white/50 text-xs text-center">Pitch</Text>
+                  <Text className={`text-white ${compact ? "text-lg" : "text-xl"} font-semibold text-center`}>
+                    {pitch0.toFixed(2)}°
+                  </Text>
+                </View>
+              </View>
+
+
+            </View>
+          </View>
+        </View>
+
+        {/* Info Card */}
+        <View className="rounded-3xl bg-brand-black/40 border border-brand-green/25 px-4 py-4">
+          <View className="flex-row items-start">
+            <View className="size-10 rounded-2xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mr-3">
+              <Image source={icons.info} className="w-5 h-5" resizeMode="contain" tintColor="#9ca3af" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-white font-semibold text-sm">Ready to save</Text>
+              <Text className="text-white/70 mt-1 text-sm">
+                These baseline values will be used for cant and pitch calculations in Hunt Mode. You can recalibrate at any time.
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+  );
+
   return (
       <View className="flex-1 bg-brand-black">
         {cameraEnabled && <CameraView style={StyleSheet.absoluteFill} facing="back" />}
@@ -99,48 +167,8 @@ export default function Step3() {
                   </View>
 
                   {/* Summary */}
-                  <View className="mt-6 gap-4">
-                    <View className="rounded-3xl bg-brand-greenDark/65 border border-brand-green/45 p-5">
-                      <View className="flex-row items-center">
-                        <View className="size-12 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-4">
-                          <Image source={icons.phonePortrait} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
-                        </View>
-                        <View className="flex-1">
-                          <Text className="text-white/70 text-sm">Mount Orientation</Text>
-                          <Text className="text-white text-xl font-semibold mt-1">
-                            {getOrientationLabel(mountOrientation)}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-
-                    <View className="rounded-3xl bg-brand-greenDark/65 border border-brand-green/45 p-5">
-                      <View className="flex-row items-center">
-                        <View className="size-12 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-4">
-                          <Image source={icons.level} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
-                        </View>
-                        <View className="flex-1">
-                          <Text className="text-white/70 text-sm">Level Zero Offset</Text>
-                          <Text className="text-white text-xl font-semibold mt-1">
-                            {levelZeroRollDeg.toFixed(2)}°
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-
-                    <View className="rounded-3xl bg-brand-black/40 border border-brand-green/25 px-4 py-4">
-                      <View className="flex-row items-start">
-                        <View className="size-10 rounded-2xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mr-3">
-                          <Image source={icons.info} className="w-5 h-5" resizeMode="contain" tintColor="#9ca3af" />
-                        </View>
-                        <View className="flex-1">
-                          <Text className="text-white font-semibold text-sm">Ready to save</Text>
-                          <Text className="text-white/70 mt-1 text-sm">
-                            These settings will be saved and used for future sessions. You can recalibrate at any time.
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
+                  <View className="mt-6">
+                    <SummaryCards />
                   </View>
                 </ScrollView>
 
@@ -203,48 +231,8 @@ export default function Step3() {
                   </View>
 
                   {/* Summary */}
-                  <View className="mt-4 gap-3">
-                    <View className="rounded-3xl bg-brand-greenDark/65 border border-brand-green/45 p-4">
-                      <View className="flex-row items-center">
-                        <View className="size-12 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-4">
-                          <Image source={icons.phonePortrait} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
-                        </View>
-                        <View className="flex-1">
-                          <Text className="text-white/70 text-sm">Mount Orientation</Text>
-                          <Text className="text-white text-lg font-semibold mt-1">
-                            {getOrientationLabel(mountOrientation)}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-
-                    <View className="rounded-3xl bg-brand-greenDark/65 border border-brand-green/45 p-4">
-                      <View className="flex-row items-center">
-                        <View className="size-12 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-4">
-                          <Image source={icons.level} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
-                        </View>
-                        <View className="flex-1">
-                          <Text className="text-white/70 text-sm">Level Zero Offset</Text>
-                          <Text className="text-white text-lg font-semibold mt-1">
-                            {levelZeroRollDeg.toFixed(2)}°
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-
-                    <View className="rounded-3xl bg-brand-black/40 border border-brand-green/25 px-4 py-4">
-                      <View className="flex-row items-start">
-                        <View className="size-10 rounded-2xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mr-3">
-                          <Image source={icons.info} className="w-5 h-5" resizeMode="contain" tintColor="#9ca3af" />
-                        </View>
-                        <View className="flex-1">
-                          <Text className="text-white font-semibold text-sm">Ready to save</Text>
-                          <Text className="text-white/70 mt-1 text-sm">
-                            These settings will be saved and used for future sessions. You can recalibrate at any time.
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
+                  <View className="mt-4">
+                    <SummaryCards compact />
                   </View>
                 </ScrollView>
 
@@ -287,7 +275,6 @@ export default function Step3() {
                       </Text>
                     </View>
                   </View>
-
                 </View>
               </View>
           )}
