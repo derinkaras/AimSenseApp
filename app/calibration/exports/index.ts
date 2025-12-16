@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ScreenOrientation from "expo-screen-orientation";
 
 // ==================== TYPES ====================
@@ -61,29 +60,7 @@ export function rotationFor(orientation: MountOrientation): string {
 }
 
 export function smooth(prev: number, next: number, alpha = 0.2): number {
-    return prev === Infinity || Number.isNaN(prev)
-        ? next
-        : prev * (1 - alpha) + next * alpha;
-}
-
-// ==================== PERSISTENCE ====================
-const STORAGE_KEY = "aimsense:calibration:v2";
-
-export async function loadCalibration(): Promise<CalibrationResult | null> {
-    try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        return raw ? JSON.parse(raw) : null;
-    } catch {
-        return null;
-    }
-}
-
-export async function saveCalibration(result: CalibrationResult): Promise<void> {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(result));
-}
-
-export async function clearCalibration(): Promise<void> {
-    await AsyncStorage.removeItem(STORAGE_KEY);
+    return prev === Infinity || Number.isNaN(prev) ? next : prev * (1 - alpha) + next * alpha;
 }
 
 // ==================== ORIENTATION SERVICES ====================
@@ -91,6 +68,8 @@ const ORIENTATION_LOCKS: Record<MountOrientation, ScreenOrientation.OrientationL
     portrait: ScreenOrientation.OrientationLock.PORTRAIT_UP,
     "landscape-left": ScreenOrientation.OrientationLock.LANDSCAPE_LEFT,
     "landscape-right": ScreenOrientation.OrientationLock.LANDSCAPE_RIGHT,
+    // If you want true upside-down support later, you can switch to other locks,
+    // but keeping portrait-up is usually safest.
     "portrait-upside-down": ScreenOrientation.OrientationLock.PORTRAIT_UP,
 };
 
@@ -110,13 +89,12 @@ export async function lockToPortrait(): Promise<void> {
     }
 }
 
-// ==================== STORE ====================
+// ==================== STORE (SESSION-ONLY) ====================
 interface CalibrationState {
     mountOrientation: MountOrientation;
     pendingOrientation: MountOrientation;
     levelZeroRollDeg: number;
     savedResult: CalibrationResult | null;
-    isHydrated: boolean;
 }
 
 interface CalibrationActions {
@@ -126,20 +104,16 @@ interface CalibrationActions {
     finishCalibration: () => Promise<CalibrationResult>;
     resetCalibration: () => Promise<void>;
     clearSavedCalibration: () => Promise<void>;
-    hydrate: () => Promise<void>;
 }
-
-
 
 type CalibrationStore = CalibrationState & CalibrationActions;
 
 export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
-    // State
+    // State (in-memory only -> resets on reload)
     mountOrientation: "portrait",
     pendingOrientation: "portrait",
     levelZeroRollDeg: 0,
     savedResult: null,
-    isHydrated: false,
 
     // Actions
     setPendingOrientation: (o) => set({ pendingOrientation: o }),
@@ -159,14 +133,18 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             levelZeroRollDeg,
             calibratedAt: Date.now(),
         };
-        await saveCalibration(result);
+
+        // Return to portrait after finishing
         await lockToPortrait();
+
+        // Keep savedResult in memory for the rest of the app session
         set({
             savedResult: result,
             pendingOrientation: "portrait",
             mountOrientation: "portrait",
             levelZeroRollDeg: 0,
         });
+
         return result;
     },
 
@@ -180,13 +158,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
     },
 
     clearSavedCalibration: async () => {
-        await clearCalibration();
         set({ savedResult: null });
-    },
-
-    hydrate: async () => {
-        const saved = await loadCalibration();
-        set({ savedResult: saved, isHydrated: true });
     },
 }));
 

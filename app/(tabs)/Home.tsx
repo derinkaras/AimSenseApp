@@ -28,19 +28,15 @@ export default function Home() {
     // Store
     const isCalibrated = useCalibrationStore(selectIsCalibrated);
     const savedResult = useCalibrationStore(selectSavedResult);
-    const hydrate = useCalibrationStore((s) => s.hydrate);
-    const isHydrated = useCalibrationStore((s) => s.isHydrated);
     const clearSaved = useCalibrationStore((s) => s.clearSavedCalibration);
 
     // Reset slider and re-hydrate whenever screen comes into focus
     useFocusEffect(
         useCallback(() => {
-            setSliderKey(prev => prev + 1);
-            hydrate();
-        }, [hydrate])
+            setSliderKey((prev) => prev + 1);
+        }, [])
     );
-
-    // Lock to portrait on mount
+// Lock to portrait on mount
     useEffect(() => {
         ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
     }, []);
@@ -65,10 +61,6 @@ export default function Home() {
                 {!cameraEnabled ? (
                     <View className="flex-1 justify-center items-center px-6 pb-24">
                         <CameraPermissionBanner />
-                    </View>
-                ) : !isHydrated ? (
-                    <View className="flex-1 justify-center items-center pb-24">
-                        <Text className="text-white text-lg">Loading...</Text>
                     </View>
                 ) : (
                     <View className="flex-1 pt-4 px-6">
