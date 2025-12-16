@@ -4,6 +4,7 @@ import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useIsFocused } from "@react-navigation/native";
 import * as ScreenOrientation from "expo-screen-orientation";
 
 import { CameraPermissionBanner } from "@/app/components/CameraPermissionBanner";
@@ -14,6 +15,11 @@ import { SlideToStartCalibration } from "@/app/components/SlideToStartCalibratio
 export default function Home() {
     const [permission] = useCameraPermissions();
     const cameraEnabled = !!permission?.granted;
+
+    // ============================================================
+    // KEY OPTIMIZATION: Track if this screen is focused
+    // ============================================================
+    const isFocused = useIsFocused();
 
     const insets = useSafeAreaInsets();
     const tabBarHeight = useBottomTabBarHeight();
@@ -47,10 +53,19 @@ export default function Home() {
 
     return (
         <View className="flex-1 bg-brand-black">
+            {/* ============================================================
+          KEY OPTIMIZATION: Only render AND activate camera when:
+          1. Permission granted
+          2. Screen is focused (user is viewing this tab)
+
+          The isActive prop pauses camera hardware without unmounting,
+          saving significant battery when user switches tabs.
+          ============================================================ */}
             {cameraEnabled && (
                 <CameraView
                     style={StyleSheet.absoluteFill}
                     facing="back"
+                    active={isFocused}  // ← PAUSES when tab switches!
                 />
             )}
 
@@ -81,7 +96,6 @@ export default function Home() {
 
                             {/* ===================== PRE-HUNT STEPS ===================== */}
                             <View className="mt-5 gap-4">
-
                                 {/* Step 1 */}
                                 <View className="flex-row items-center">
                                     <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3 mt-0.5">
@@ -126,16 +140,14 @@ export default function Home() {
                                         Choose a rifle profile & begin your hunt
                                     </Text>
                                 </View>
-
                             </View>
 
                             {/* ===================== FOOTER NOTE ===================== */}
                             <View className="mt-4 rounded-2xl bg-brand-black/35 border border-brand-green/25 px-4 py-3">
                                 <Text className="text-white/70 text-sm text-center">
-                                    Before you begin, ensure the phone is level against the mount’s clamp wall, and that the mount is firmly seated on the scope.
+                                    Before you begin, ensure the phone is level against the mount's clamp wall, and that the mount is firmly seated on the scope.
                                 </Text>
                             </View>
-
                         </View>
 
                         {/* ===================== CTA ===================== */}
@@ -162,9 +174,7 @@ function DotStep({ text }: { text: string }) {
     return (
         <View className="flex-row items-center">
             <View className="w-1.5 h-1.5 rounded-full bg-brand-greenLight/70 mr-3" />
-            <Text className="text-white/70 text-sm flex-1">
-                {text}
-            </Text>
+            <Text className="text-white/70 text-sm flex-1">{text}</Text>
         </View>
     );
 }

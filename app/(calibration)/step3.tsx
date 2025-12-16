@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   ScrollView,
   useWindowDimensions,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -22,17 +22,34 @@ import {
 } from "@/app/calibration/exports";
 import icons from "@/app/constants/icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
+import { useCameraContext } from "./_layout";
+
+const SCREEN_ID = "step3";
 
 export default function Step3() {
   const [permission] = useCameraPermissions();
   const cameraEnabled = !!permission?.granted;
+
+  // ============================================================
+  // KEY: Get context and register this screen when focused
+  // ============================================================
+  const { activeScreen, setActiveScreen } = useCameraContext();
+
+  useFocusEffect(
+      useCallback(() => {
+        setActiveScreen(SCREEN_ID);
+        return () => {};
+      }, [setActiveScreen])
+  );
+
+  // Only render camera if this is the active screen
+  const shouldRenderCamera = cameraEnabled && activeScreen === SCREEN_ID;
 
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { width } = useWindowDimensions();
 
   const mountOrientation = useCalibrationStore(selectMountOrientation);
-  // Use separate selectors to avoid infinite loop (don't create new objects in selectors!)
   const roll0 = useCalibrationStore(selectRoll0);
   const pitch0 = useCalibrationStore(selectPitch0);
   const finishCalibration = useCalibrationStore((s) => s.finishCalibration);
@@ -66,14 +83,12 @@ export default function Step3() {
   const safeAreaEdges: ("top" | "bottom" | "left" | "right")[] = ["top", "bottom"];
   if (isLandscapeMode) safeAreaEdges.push("left", "right");
 
-  // Right column width (clamped)
   const sideCtaWidth = isLandscapeMode
       ? Math.min(320, Math.max(240, Math.floor(width * 0.34)))
       : 0;
 
   const bottomPadding = Math.max(insets.bottom, 8);
 
-  // Summary card component for reuse
   const SummaryCards = ({ compact = false }: { compact?: boolean }) => (
       <View className={compact ? "gap-3" : "gap-4"}>
         {/* Mount Orientation Card */}
@@ -106,7 +121,6 @@ export default function Step3() {
                     {roll0.toFixed(2)}°
                   </Text>
                 </View>
-
                 <View className="w-20 items-center">
                   <Text className="text-white/50 text-xs text-center">Pitch</Text>
                   <Text className={`text-white ${compact ? "text-lg" : "text-xl"} font-semibold text-center`}>
@@ -114,8 +128,6 @@ export default function Step3() {
                   </Text>
                 </View>
               </View>
-
-
             </View>
           </View>
         </View>
@@ -139,10 +151,12 @@ export default function Step3() {
 
   return (
       <View className="flex-1 bg-brand-black">
-        {cameraEnabled && <CameraView style={StyleSheet.absoluteFill} facing="back" />}
+        {/* Only renders when this is the active screen */}
+        {shouldRenderCamera && (
+            <CameraView style={StyleSheet.absoluteFill} facing="back" />
+        )}
 
         <SafeAreaView className="flex-1" edges={safeAreaEdges}>
-          {/* Portrait: original single column */}
           {!isLandscapeMode ? (
               <View className="flex-1 px-6 pt-4">
                 <ScrollView
@@ -151,7 +165,6 @@ export default function Step3() {
                     showsVerticalScrollIndicator={false}
                     bounces={false}
                 >
-                  {/* Header */}
                   <View className={`rounded-3xl ${headerPadding} bg-brand-greenDark/70 border border-brand-green/60`}>
                     <View className="flex-row items-center">
                       <View className="size-11 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-3">
@@ -166,13 +179,11 @@ export default function Step3() {
                     </View>
                   </View>
 
-                  {/* Summary */}
                   <View className="mt-6">
                     <SummaryCards />
                   </View>
                 </ScrollView>
 
-                {/* Portrait pinned footer */}
                 <View style={{ paddingBottom: bottomPadding }} className="absolute bottom-0 left-0 right-0 px-6">
                   <View className="bg-brand-black/55 border border-brand-green/20 rounded-3xl p-3">
                     <Pressable
@@ -201,9 +212,7 @@ export default function Step3() {
                 </View>
               </View>
           ) : (
-              /* Landscape: two columns (left scroll, right CTAs) */
               <View className="flex-1 flex-row pt-3">
-                {/* Left content */}
                 <ScrollView
                     className="flex-1"
                     contentContainerStyle={{
@@ -215,7 +224,6 @@ export default function Step3() {
                     showsVerticalScrollIndicator={false}
                     bounces={false}
                 >
-                  {/* Header */}
                   <View className={`rounded-3xl ${headerPadding} bg-brand-greenDark/70 border border-brand-green/60`}>
                     <View className="flex-row items-center">
                       <View className="size-11 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-3">
@@ -230,13 +238,11 @@ export default function Step3() {
                     </View>
                   </View>
 
-                  {/* Summary */}
                   <View className="mt-4">
                     <SummaryCards compact />
                   </View>
                 </ScrollView>
 
-                {/* Right CTAs */}
                 <View
                     style={{
                       width: sideCtaWidth,

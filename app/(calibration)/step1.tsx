@@ -1,17 +1,26 @@
-import React from "react";
+// ============================================================
+// step1.tsx - ALTERNATIVE APPROACH
+// ============================================================
+// Each screen registers itself when focused, and only renders
+// its camera when it's the active screen. This guarantees only
+// ONE camera instance is rendering at any time.
+
+import React, { useCallback } from "react";
 import { View, Text, Pressable, ScrollView, Image, StyleSheet } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   useCalibrationStore,
   selectPendingOrientation,
-  getOrientationLabel,
   MountOrientation,
 } from "@/app/calibration/exports";
 import icons from "@/app/constants/icons";
-import {CommonActions, useNavigation} from "@react-navigation/native";
+import { CommonActions, useNavigation } from "@react-navigation/native";
+import { useCameraContext } from "./_layout";
+
+const SCREEN_ID = "step1";
 
 const ORIENTATION_OPTIONS: { key: MountOrientation; label: string; sub: string; icon: any }[] = [
   { key: "portrait", label: "Portrait", sub: "Normal upright", icon: icons.phonePortrait },
@@ -22,6 +31,23 @@ const ORIENTATION_OPTIONS: { key: MountOrientation; label: string; sub: string; 
 export default function Step1() {
   const [permission] = useCameraPermissions();
   const cameraEnabled = !!permission?.granted;
+
+  // ============================================================
+  // KEY: Get context and register this screen when focused
+  // ============================================================
+  const { activeScreen, setActiveScreen } = useCameraContext();
+
+  useFocusEffect(
+      useCallback(() => {
+        setActiveScreen(SCREEN_ID);
+        return () => {
+        };
+      }, [setActiveScreen])
+  );
+
+  // Only render camera if this is the active screen
+  const shouldRenderCamera = cameraEnabled && activeScreen === SCREEN_ID;
+
   const insets = useSafeAreaInsets();
   const bottomPadding = Math.max(insets.bottom, 8);
 
@@ -41,14 +67,17 @@ export default function Step1() {
     navigation.dispatch(
         CommonActions.reset({
           index: 0,
-          routes: [{ name: "(tabs)" }], // resets to tabs root (no calibration history)
+          routes: [{ name: "(tabs)" }],
         })
     );
   };
 
   return (
       <View className="flex-1 bg-brand-black">
-        {cameraEnabled && <CameraView style={StyleSheet.absoluteFill} facing="back" />}
+        {/* Only renders when this is the active screen */}
+        {shouldRenderCamera && (
+            <CameraView style={StyleSheet.absoluteFill} facing="back" />
+        )}
 
         <SafeAreaView className="flex-1" edges={["top", "bottom"]}>
           <View className="flex-1 px-6 pt-4">

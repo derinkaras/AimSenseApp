@@ -14,15 +14,33 @@ import {
 import { useTiltLevel } from "@/app/hooks/useTiltLevel";
 import icons from "@/app/constants/icons";
 import { CommonActions, useIsFocused, useNavigation } from "@react-navigation/native";
+import { useCameraContext } from "./_layout";
+
+const SCREEN_ID = "step2";
 
 export default function Step2() {
   const [permission] = useCameraPermissions();
   const cameraEnabled = !!permission?.granted;
+
+  // ============================================================
+  // KEY: Get context and register this screen when focused
+  // ============================================================
+  const { activeScreen, setActiveScreen } = useCameraContext();
+  const isFocused = useIsFocused();
+
+  useFocusEffect(
+      useCallback(() => {
+        setActiveScreen(SCREEN_ID);
+        return () => {};
+      }, [setActiveScreen])
+  );
+
+  // Only render camera if this is the active screen
+  const shouldRenderCamera = cameraEnabled && activeScreen === SCREEN_ID;
+
   const insets = useSafeAreaInsets();
   const bottomPadding = Math.max(insets.bottom, 8);
   const wasLevel = useRef(false);
-
-  const isFocused = useIsFocused();
 
   const timeouts = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const clearHapticsTimers = useCallback(() => {
@@ -34,7 +52,7 @@ export default function Step2() {
   const captureBaseline = useCalibrationStore((s) => s.captureBaseline);
   const reset = useCalibrationStore((s) => s.resetCalibration);
 
-  // ✅ Sensor subscription stops when Step2 is not focused
+  // Sensor subscription stops when Step2 is not focused
   const { levelDeg, isLevel, rollNow, pitchNow } = useTiltLevel(
       mountOrientation,
       DEFAULT_TILT_CONFIG,
@@ -49,7 +67,6 @@ export default function Step2() {
   useFocusEffect(
       useCallback(() => {
         wasLevel.current = false;
-
         return () => {
           wasLevel.current = false;
           clearHapticsTimers();
@@ -57,15 +74,13 @@ export default function Step2() {
       }, [clearHapticsTimers])
   );
 
-  // Haptic feedback when level is achieved (≤ 3° and stable)
+  // Haptic feedback when level is achieved
   useEffect(() => {
-    if (!isFocused) return; // extra safety (also prevents any queued effects)
-
+    if (!isFocused) return;
     clearHapticsTimers();
 
     if (isLevel && !wasLevel.current) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-
       timeouts.current.push(
           setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 100)
       );
@@ -73,7 +88,6 @@ export default function Step2() {
           setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 200)
       );
     }
-
     wasLevel.current = isLevel;
   }, [isLevel, isFocused, clearHapticsTimers]);
 
@@ -112,7 +126,10 @@ export default function Step2() {
 
   return (
       <View className="flex-1 bg-brand-black">
-        {cameraEnabled && <CameraView style={StyleSheet.absoluteFill} facing="back" />}
+        {/* Only renders when this is the active screen */}
+        {shouldRenderCamera && (
+            <CameraView style={StyleSheet.absoluteFill} facing="back" />
+        )}
 
         <SafeAreaView className="flex-1" edges={safeAreaEdges}>
           <View className={`flex-1 ${isLandscapeMode ? "px-4" : "px-6"} pt-4`}>
@@ -120,12 +137,7 @@ export default function Step2() {
             <View className={`rounded-3xl ${headerPadding} bg-brand-greenDark/70 border border-brand-green/60`}>
               <View className="flex-row items-center">
                 <View className="size-11 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-3">
-                  <Image
-                      source={icons.compass}
-                      className="w-6 h-6"
-                      resizeMode="contain"
-                      tintColor="#0b7f4f"
-                  />
+                  <Image source={icons.compass} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
                 </View>
                 <View className="flex-1">
                   <Text className={`text-white ${titleSize} font-semibold`}>Step 2: Set Baseline</Text>
@@ -185,7 +197,7 @@ export default function Step2() {
                   </Text>
                   <Text className="text-white/70 mt-1 text-sm">
                     {isLevel
-                        ? "We’ll save this as your baseline reference for pitch and cant."
+                        ? "We'll save this as your baseline reference for pitch and cant."
                         : "Small adjustments are enough. Once level, pause briefly to lock it in."}
                   </Text>
                 </View>
@@ -203,12 +215,7 @@ export default function Step2() {
                 {!isLevel && Math.abs(safe) <= 5 && (
                     <View className="mt-4 flex-row items-start">
                       <View className="size-10 rounded-2xl bg-brand-black/40 border border-brand-green/35 items-center justify-center mr-3">
-                        <Image
-                            source={icons.info}
-                            className="w-5 h-5"
-                            resizeMode="contain"
-                            tintColor="#9ca3af"
-                        />
+                        <Image source={icons.info} className="w-5 h-5" resizeMode="contain" tintColor="#9ca3af" />
                       </View>
                       <Text className="flex-1 text-white/65 text-sm">
                         Almost there — keep the rifle upright, make small adjustments, then hold steady.
