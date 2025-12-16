@@ -76,9 +76,6 @@ export default function Home() {
                                     <Text className="text-white text-3xl font-bold">
                                         Start Hunt
                                     </Text>
-                                    <Text className="text-white/80 mt-1 text-base">
-                                        Before you begin, make sure the profile for the gun you want to use is ready.
-                                    </Text>
                                 </View>
                             </View>
 
@@ -93,7 +90,7 @@ export default function Home() {
                                         </Text>
                                     </View>
                                     <Text className="text-white/90 text-base flex-1">
-                                        Confirm you have a gun profile ready
+                                        Make sure the profile for the gun you want to use is ready.
                                     </Text>
                                 </View>
 

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { DeviceMotion } from "expo-sensors";
-import {MountOrientation} from "@/app/calibration/exports";
-
+import { MountOrientation } from "@/app/calibration/exports";
 
 function radToDeg(r: number) {
     return (r * 180) / Math.PI;
@@ -48,6 +47,13 @@ export interface TiltLevelResult {
     pitchNow: number;
 }
 
+export interface TiltLevelControls {
+    /** When false, stops DeviceMotion subscription (recommended for production). */
+    enabled?: boolean;
+    /** DeviceMotion update interval in ms (defaults to 60). */
+    updateIntervalMs?: number;
+}
+
 /**
  * Measure-like leveling (Expo approximation):
  * - Auto-selects FLAT vs UPRIGHT mode based on |gz| fraction (with hysteresis)
@@ -72,7 +78,8 @@ export function useTiltLevel(
 
         flatEnterGz?: number;
         flatExitGz?: number;
-    }
+    },
+    controls?: TiltLevelControls
 ): TiltLevelResult {
     // ≤ 3° gating condition for baseline capture
     const toleranceDeg = opts?.toleranceDeg ?? 3.0;
@@ -85,6 +92,9 @@ export function useTiltLevel(
 
     const flatEnterGz = opts?.flatEnterGz ?? 0.85;
     const flatExitGz = opts?.flatExitGz ?? 0.75;
+
+    const enabled = controls?.enabled ?? true;
+    const updateIntervalMs = controls?.updateIntervalMs ?? 60;
 
     const [levelDeg, setLevelDeg] = useState<number>(0);
     const [isLevel, setIsLevel] = useState(false);
@@ -101,7 +111,23 @@ export function useTiltLevel(
     const pitchRef = useRef<number>(Infinity);
 
     useEffect(() => {
-        DeviceMotion.setUpdateInterval(60);
+        // When disabled: stop IMU work and reset "ready" state.
+        // (Leaving last levelDeg on screen is fine; but baseline-ready must be false.)
+        if (!enabled) {
+            stableSince.current = null;
+            setIsLevel(false);
+            return;
+        }
+
+        // Fresh start when re-enabled (prevents weird smoothing carry-over)
+        stableSince.current = null;
+        logicalRef.current = Infinity;
+        displayRef.current = 0;
+        modeRef.current = "UPRIGHT";
+        rollRef.current = Infinity;
+        pitchRef.current = Infinity;
+
+        DeviceMotion.setUpdateInterval(updateIntervalMs);
 
         const sub = DeviceMotion.addListener((data) => {
             const g = data.accelerationIncludingGravity;
@@ -173,12 +199,8 @@ export function useTiltLevel(
                         : Math.sign(logical) * Math.ceil(Math.abs(logical));
             }
 
-            if (next !== current) {
-                displayRef.current = next;
-                setLevelDeg(next);
-            } else {
-                setLevelDeg(next);
-            }
+            displayRef.current = next;
+            setLevelDeg(next);
 
             // Gating condition: ≤ toleranceDeg (default 3°) AND stable
             // Uses the true smoothed angle, not the display integer
@@ -196,6 +218,8 @@ export function useTiltLevel(
 
         return () => sub.remove();
     }, [
+        enabled,
+        updateIntervalMs,
         mountOrientation,
         toleranceDeg,
         holdMs,

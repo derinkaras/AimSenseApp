@@ -148,7 +148,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             roll0: 0,
             pitch0: 0,
         });
-
+        console.log("This is the calibration info: ", result);
         return result;
     },
 

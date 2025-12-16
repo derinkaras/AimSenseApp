@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { View, Text, Pressable, ScrollView, Image, StyleSheet } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
@@ -13,7 +13,7 @@ import {
 } from "@/app/calibration/exports";
 import { useTiltLevel } from "@/app/hooks/useTiltLevel";
 import icons from "@/app/constants/icons";
-import { CommonActions, useNavigation } from "@react-navigation/native";
+import { CommonActions, useIsFocused, useNavigation } from "@react-navigation/native";
 
 export default function Step2() {
   const [permission] = useCameraPermissions();
@@ -22,32 +22,62 @@ export default function Step2() {
   const bottomPadding = Math.max(insets.bottom, 8);
   const wasLevel = useRef(false);
 
+  const isFocused = useIsFocused();
+
+  const timeouts = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const clearHapticsTimers = useCallback(() => {
+    timeouts.current.forEach((id) => clearTimeout(id));
+    timeouts.current = [];
+  }, []);
+
   const mountOrientation = useCalibrationStore(selectMountOrientation);
   const captureBaseline = useCalibrationStore((s) => s.captureBaseline);
   const reset = useCalibrationStore((s) => s.resetCalibration);
 
-  // Hook returns raw roll/pitch for baseline capture
+  // ✅ Sensor subscription stops when Step2 is not focused
   const { levelDeg, isLevel, rollNow, pitchNow } = useTiltLevel(
       mountOrientation,
-      DEFAULT_TILT_CONFIG
+      DEFAULT_TILT_CONFIG,
+      { enabled: isFocused, updateIntervalMs: 60 }
   );
 
   const isLandscapeMode = isLandscape(mountOrientation);
   const safe = Number.isFinite(levelDeg) ? levelDeg : 0;
   const navigation = useNavigation();
 
+  // Ensure haptics never fire after leaving Step2
+  useFocusEffect(
+      useCallback(() => {
+        wasLevel.current = false;
+
+        return () => {
+          wasLevel.current = false;
+          clearHapticsTimers();
+        };
+      }, [clearHapticsTimers])
+  );
+
   // Haptic feedback when level is achieved (≤ 3° and stable)
   useEffect(() => {
+    if (!isFocused) return; // extra safety (also prevents any queued effects)
+
+    clearHapticsTimers();
+
     if (isLevel && !wasLevel.current) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 100);
-      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 200);
+
+      timeouts.current.push(
+          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 100)
+      );
+      timeouts.current.push(
+          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 200)
+      );
     }
+
     wasLevel.current = isLevel;
-  }, [isLevel]);
+  }, [isLevel, isFocused, clearHapticsTimers]);
 
   const handleCapture = () => {
-    // Store raw IMU roll and pitch as baseline reference
     captureBaseline(rollNow, pitchNow);
     router.push("/(calibration)/step3");
   };
@@ -86,7 +116,6 @@ export default function Step2() {
 
         <SafeAreaView className="flex-1" edges={safeAreaEdges}>
           <View className={`flex-1 ${isLandscapeMode ? "px-4" : "px-6"} pt-4`}>
-
             {/* Header */}
             <View className={`rounded-3xl ${headerPadding} bg-brand-greenDark/70 border border-brand-green/60`}>
               <View className="flex-row items-center">
@@ -99,9 +128,7 @@ export default function Step2() {
                   />
                 </View>
                 <View className="flex-1">
-                  <Text className={`text-white ${titleSize} font-semibold`}>
-                    Step 2: Set Baseline
-                  </Text>
+                  <Text className={`text-white ${titleSize} font-semibold`}>Step 2: Set Baseline</Text>
                   <Text className={`text-white/80 ${subtitleMargin} ${subtitleSize}`}>
                     Hold the rifle upright and pointing forward. Level it within ±3°, then hold steady.
                   </Text>
@@ -124,12 +151,8 @@ export default function Step2() {
               >
                 <View className="flex-row items-center justify-between">
                   <View>
-                    <Text className="text-white/70 text-sm">
-                      Level Offset
-                    </Text>
-                    <Text className={`text-white font-bold ${angleFontSize} mt-2`}>
-                      {safe.toFixed(1)}°
-                    </Text>
+                    <Text className="text-white/70 text-sm">Level Offset</Text>
+                    <Text className={`text-white font-bold ${angleFontSize} mt-2`}>{safe.toFixed(1)}°</Text>
                   </View>
 
                   <View
@@ -170,11 +193,9 @@ export default function Step2() {
                 {/* Debug info */}
                 {isLevel && (
                     <View className="mt-4 px-4 py-3 rounded-2xl bg-brand-black/30 border border-brand-green/20">
-                      <Text className="text-white/50 text-xs font-mono">
-                        Baseline to capture:
-                      </Text>
+                      <Text className="text-white/50 text-xs font-mono">Baseline to capture:</Text>
                       <Text className="text-white/70 text-xs font-mono mt-1">
-                        roll0: {rollNow.toFixed(3)}°  |  pitch0: {pitchNow.toFixed(3)}°
+                        roll0: {rollNow.toFixed(3)}° | pitch0: {pitchNow.toFixed(3)}°
                       </Text>
                     </View>
                 )}
@@ -241,7 +262,6 @@ export default function Step2() {
                 </Pressable>
               </View>
             </View>
-
           </View>
         </SafeAreaView>
       </View>
