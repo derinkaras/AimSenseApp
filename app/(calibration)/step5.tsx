@@ -1,8 +1,8 @@
 // ============================================================
-// step5.tsx - Windage Dial Calibration
+// step5.tsx - Elevation Dial Calibration
 // ============================================================
 // Two phases:
-// 1. Instruct user to dial windage RIGHT by X clicks
+// 1. Instruct user to dial elevation UP by X clicks
 // 2. User confirms new crosshair position
 
 import React, { useCallback, useState } from "react";
@@ -52,6 +52,7 @@ export default function Step5() {
         }, [setActiveScreen])
     );
 
+
     const shouldRenderCamera = cameraEnabled && activeScreen === SCREEN_ID;
 
     const insets = useSafeAreaInsets();
@@ -60,9 +61,10 @@ export default function Step5() {
     const mountOrientation = useCalibrationStore(selectMountOrientation);
     const clickSize = useCalibrationStore(selectClickSize);
     const scopeUnit = useCalibrationStore(selectScopeUnit);
-    const setWindageEndPx = useCalibrationStore((s) => s.setWindageEndPx);
-    const setWindageInverted = useCalibrationStore((s) => s.setWindageInverted);
-    const calculateWindageScale = useCalibrationStore((s) => s.calculateWindageScale);
+    const setElevationEndPx = useCalibrationStore((s) => s.setElevationEndPx);
+    const setElevationInverted = useCalibrationStore((s) => s.setElevationInverted);
+    const calculateElevationScale = useCalibrationStore((s) => s.calculateElevationScale);
+    const setWindageStartPx = useCalibrationStore((s) => s.setWindageStartPx);
     const reset = useCalibrationStore((s) => s.resetCalibration);
 
     const isLandscapeMode = isLandscape(mountOrientation);
@@ -135,8 +137,10 @@ export default function Step5() {
 
     const handleConfirmPosition = () => {
         if (centerPoint) {
-            setWindageEndPx(centerPoint);
-            calculateWindageScale();
+            setElevationEndPx(centerPoint);
+            // Also set as windage start position
+            setWindageStartPx(centerPoint);
+            calculateElevationScale();
             router.push("/(calibration)/step6");
         }
     };
@@ -147,9 +151,9 @@ export default function Step5() {
     };
 
     const handleUnexpectedDirection = (direction: Direction) => {
-        // If user says crosshair moved LEFT when they dialed RIGHT, it's inverted
-        if (direction === "left") {
-            setWindageInverted(true);
+        // If user says crosshair moved DOWN when they dialed UP, it's inverted
+        if (direction === "down") {
+            setElevationInverted(true);
         }
         setShowUnexpectedModal(false);
     };
@@ -189,19 +193,19 @@ export default function Step5() {
                         <View className="rounded-3xl bg-brand-greenDark/85 border border-brand-green/60 p-6">
                             <View className="items-center mb-4">
                                 <View className="size-16 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mb-3">
-                                    <Image source={icons.arrowRight} className="w-8 h-8" resizeMode="contain" tintColor="#22c55e" />
+                                    <Image source={icons.arrowUp} className="w-8 h-8" resizeMode="contain" tintColor="#22c55e" />
                                 </View>
                                 <Text className="text-white text-2xl font-bold text-center">
-                                    Windage Calibration
+                                    Elevation Calibration
                                 </Text>
                             </View>
 
                             <View className="bg-brand-black/40 rounded-2xl p-4 mb-4">
                                 <Text className="text-white/80 text-center text-base mb-2">
-                                    Turn the <Text className="text-white font-bold">WINDAGE</Text> turret
+                                    Turn the <Text className="text-white font-bold">ELEVATION</Text> turret
                                 </Text>
                                 <Text className="text-brand-greenLight text-center text-4xl font-bold mb-2">
-                                    RIGHT
+                                    UP
                                 </Text>
                                 <Text className="text-white text-center text-3xl font-bold">
                                     {CALIBRATION_CLICK_COUNT} clicks
@@ -213,7 +217,7 @@ export default function Step5() {
 
                             <View className="bg-brand-black/30 rounded-xl px-4 py-3 mb-4">
                                 <Text className="text-white/70 text-sm text-center">
-                                    Windage is usually on the side of the scope.{"\n"}
+                                    Elevation is usually on top of the scope.{"\n"}
                                     Follow the arrow marked on your turret.
                                 </Text>
                             </View>
@@ -271,7 +275,7 @@ export default function Step5() {
                             </Text>
 
                             <View className="gap-3">
-                                {(["left", "right"] as Direction[]).map((dir) => (
+                                {(["up", "down"] as Direction[]).map((dir) => (
                                     <Pressable
                                         key={dir}
                                         onPress={() => handleUnexpectedDirection(dir)}
