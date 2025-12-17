@@ -202,15 +202,15 @@ export default function Step2() {
                   </Text>
                 </View>
 
-                {/* Debug info */}
-                {isLevel && (
-                    <View className="mt-4 px-4 py-3 rounded-2xl bg-brand-black/30 border border-brand-green/20">
-                      <Text className="text-white/50 text-xs font-mono">Baseline to capture:</Text>
-                      <Text className="text-white/70 text-xs font-mono mt-1">
-                        roll0: {rollNow.toFixed(3)}° | pitch0: {pitchNow.toFixed(3)}°
-                      </Text>
-                    </View>
-                )}
+                {/*/!* Debug info *!/*/}
+                {/*{isLevel && (*/}
+                {/*    <View className="mt-4 px-4 py-3 rounded-2xl bg-brand-black/30 border border-brand-green/20">*/}
+                {/*      <Text className="text-white/50 text-xs font-mono">Baseline to capture:</Text>*/}
+                {/*      <Text className="text-white/70 text-xs font-mono mt-1">*/}
+                {/*        roll0: {rollNow.toFixed(3)}° | pitch0: {pitchNow.toFixed(3)}°*/}
+                {/*      </Text>*/}
+                {/*    </View>*/}
+                {/*)}*/}
 
                 {!isLevel && Math.abs(safe) <= 5 && (
                     <View className="mt-4 flex-row items-start">

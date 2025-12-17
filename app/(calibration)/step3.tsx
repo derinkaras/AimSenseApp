@@ -50,8 +50,12 @@ export default function Step3() {
   const { width } = useWindowDimensions();
 
   const mountOrientation = useCalibrationStore(selectMountOrientation);
+
+  // still selected so step-2 capture is validated by “existing in store”
+  // (not shown to user)
   const roll0 = useCalibrationStore(selectRoll0);
   const pitch0 = useCalibrationStore(selectPitch0);
+
   const finishCalibration = useCalibrationStore((s) => s.finishCalibration);
   const reset = useCalibrationStore((s) => s.resetCalibration);
 
@@ -89,6 +93,10 @@ export default function Step3() {
 
   const bottomPadding = Math.max(insets.bottom, 8);
 
+  const hasBaseline =
+      Number.isFinite(roll0) &&
+      Number.isFinite(pitch0);
+
   const SummaryCards = ({ compact = false }: { compact?: boolean }) => (
       <View className={compact ? "gap-3" : "gap-4"}>
         {/* Mount Orientation Card */}
@@ -106,28 +114,21 @@ export default function Step3() {
           </View>
         </View>
 
-        {/* IMU Baseline Card */}
+        {/* Reference Captured Card (replaces baseline numbers) */}
         <View className={`rounded-3xl bg-brand-greenDark/65 border border-brand-green/45 ${compact ? "p-4" : "p-5"}`}>
           <View className="flex-row items-center">
             <View className="size-12 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-4">
-              <Image source={icons.level} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
+              <Image source={icons.check} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
             </View>
+
             <View className="flex-1">
-              <Text className="text-white/70 text-sm">IMU Baseline Reference</Text>
-              <View className="flex-row mt-1 gap-6">
-                <View className="w-20 items-center">
-                  <Text className="text-white/50 text-xs text-center">Roll</Text>
-                  <Text className={`text-white ${compact ? "text-lg" : "text-xl"} font-semibold text-center`}>
-                    {roll0.toFixed(2)}°
-                  </Text>
-                </View>
-                <View className="w-20 items-center">
-                  <Text className="text-white/50 text-xs text-center">Pitch</Text>
-                  <Text className={`text-white ${compact ? "text-lg" : "text-xl"} font-semibold text-center`}>
-                    {pitch0.toFixed(2)}°
-                  </Text>
-                </View>
-              </View>
+              <Text className="text-white/70 text-sm">Reference</Text>
+              <Text className={`text-white ${compact ? "text-lg" : "text-xl"} font-semibold mt-1`}>
+                {hasBaseline ? "Captured" : "Not captured"}
+              </Text>
+              <Text className="text-white/65 text-sm mt-1">
+                AimSense will track live adjustments from this point.
+              </Text>
             </View>
           </View>
         </View>
@@ -141,7 +142,7 @@ export default function Step3() {
             <View className="flex-1">
               <Text className="text-white font-semibold text-sm">Ready to save</Text>
               <Text className="text-white/70 mt-1 text-sm">
-                These baseline values will be used for cant and pitch calculations in Hunt Mode. You can recalibrate at any time.
+                All set. AimSense is ready when you are.
               </Text>
             </View>
           </View>
@@ -151,10 +152,7 @@ export default function Step3() {
 
   return (
       <View className="flex-1 bg-brand-black">
-        {/* Only renders when this is the active screen */}
-        {shouldRenderCamera && (
-            <CameraView style={StyleSheet.absoluteFill} facing="back" />
-        )}
+        {shouldRenderCamera && <CameraView style={StyleSheet.absoluteFill} facing="back" />}
 
         <SafeAreaView className="flex-1" edges={safeAreaEdges}>
           {!isLandscapeMode ? (
@@ -215,12 +213,7 @@ export default function Step3() {
               <View className="flex-1 flex-row pt-3">
                 <ScrollView
                     className="flex-1"
-                    contentContainerStyle={{
-                      paddingLeft: 16,
-                      paddingRight: 12,
-                      paddingTop: 8,
-                      paddingBottom: 16,
-                    }}
+                    contentContainerStyle={{ paddingLeft: 16, paddingRight: 12, paddingTop: 8, paddingBottom: 16 }}
                     showsVerticalScrollIndicator={false}
                     bounces={false}
                 >
@@ -250,7 +243,6 @@ export default function Step3() {
                       paddingLeft: 8,
                       paddingBottom: bottomPadding,
                     }}
-                    className="justify-between"
                 >
                   <View className="bg-brand-black/55 border border-brand-green/20 rounded-3xl p-3">
                     <Text className="text-white/70 text-xs mb-2">Actions</Text>
@@ -275,10 +267,9 @@ export default function Step3() {
                     >
                       <Text className="text-red-400 font-semibold text-sm">Cancel</Text>
                     </Pressable>
-                    <View className="justify-center items-center">
-                      <Text className="text-white/50 text-xs mt-3">
-                        Tip: You can recalibrate anytime from settings.
-                      </Text>
+
+                    <View className="items-center">
+                      <Text className="text-white/50 text-xs mt-3">Tip: You can recalibrate anytime from settings.</Text>
                     </View>
                   </View>
                 </View>
