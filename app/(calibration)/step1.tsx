@@ -34,6 +34,7 @@ export default function Step1() {
 
   useFocusEffect(
       useCallback(() => {
+        console.log(SCREEN_ID)
         setActiveScreen(SCREEN_ID);
         return () => {};
       }, [setActiveScreen])

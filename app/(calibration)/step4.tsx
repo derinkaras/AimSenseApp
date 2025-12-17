@@ -1,9 +1,12 @@
 // ============================================================
 // step4.tsx - Align Scope Center (Tap + Micro Adjust)
 // ============================================================
-// User taps to place scope center, then fine-tunes with controls.
+// UI rules:
+// - PORTRAIT: keep your original UI (bottom panel) unchanged
+// - LANDSCAPE: Step4-style (camera left + flush right panel)
+// - Magnifier: responsive size + clamped inside visible camera + pushed from left
 
-import React, { useCallback, useState, useRef } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -28,8 +31,10 @@ import { CommonActions, useNavigation } from "@react-navigation/native";
 import { useCameraContext } from "./_layout";
 
 const SCREEN_ID = "step4";
-
 type StepSize = 1 | 5 | 10;
+
+const clamp = (v: number, min: number, max: number) =>
+    Math.max(min, Math.min(max, v));
 
 export default function Step4() {
   const [permission] = useCameraPermissions();
@@ -39,6 +44,8 @@ export default function Step4() {
 
   useFocusEffect(
       useCallback(() => {
+        console.log(SCREEN_ID)
+
         setActiveScreen(SCREEN_ID);
         return () => {};
       }, [setActiveScreen])
@@ -64,16 +71,75 @@ export default function Step4() {
 
   // Track camera view bounds
   const cameraViewRef = useRef<View>(null);
-  const [cameraLayout, setCameraLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [cameraLayout, setCameraLayout] = useState({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+  });
 
   const safeAreaEdges: ("top" | "bottom" | "left" | "right")[] = ["top", "bottom"];
   if (isLandscapeMode) safeAreaEdges.push("left", "right");
 
   const bottomPadding = Math.max(insets.bottom, 8);
 
-  // Magnifier settings
-  const MAGNIFIER_SIZE = 120;
-  const MAGNIFIER_ZOOM = 3;
+  // ---------------------------
+  // Responsive sizing (landscape)
+  // ---------------------------
+  const SIDE_PANEL_W = useMemo(() => {
+    const w = Math.round(width * 0.34);
+    return clamp(w, 220, 280);
+  }, [width]);
+
+  const MAGNIFIER_SIZE = useMemo(() => {
+    const base = isLandscapeMode ? width * 0.12 : width * 0.22;
+    return clamp(Math.round(base), isLandscapeMode ? 84 : 100, isLandscapeMode ? 120 : 140);
+  }, [width, isLandscapeMode]);
+
+  const bottomPanelHeight = 240;
+
+  const cameraInsets = useMemo(() => {
+    if (isLandscapeMode) {
+      return { padRight: SIDE_PANEL_W, padBottom: 0 };
+    }
+    return { padRight: 0, padBottom: bottomPanelHeight + bottomPadding };
+  }, [isLandscapeMode, SIDE_PANEL_W, bottomPanelHeight, bottomPadding]);
+
+  // Magnifier clamped to visible camera area.
+  // Also "push farther from left" to avoid edge hugs and small-phone clipping.
+  const magnifierPos = useMemo(() => {
+    const margin = 10;
+
+    // stronger push from left (scales with device; clamps)
+    const LEFT_SAFE_PAD = clamp(Math.round(width * 0.06), 24, 44);
+
+    const fallbackW = Math.max(0, width - cameraInsets.padRight);
+    const fallbackH = Math.max(0, height - cameraInsets.padBottom);
+
+    // Prefer measured camera layout, fallback to effective screen region.
+    const containerW = cameraLayout.width > 0 ? cameraLayout.width : fallbackW;
+    const containerH = cameraLayout.height > 0 ? cameraLayout.height : fallbackH;
+
+    const leftMin = LEFT_SAFE_PAD;
+    const leftMax = Math.max(leftMin, containerW - MAGNIFIER_SIZE - margin);
+
+    const topMin = insets.top + margin;
+    const topMax = Math.max(topMin, containerH - MAGNIFIER_SIZE - margin);
+
+    return {
+      left: clamp(LEFT_SAFE_PAD, leftMin, leftMax),
+      top: clamp(insets.top + margin, topMin, topMax),
+    };
+  }, [
+    width,
+    height,
+    insets.top,
+    cameraInsets.padRight,
+    cameraInsets.padBottom,
+    cameraLayout.width,
+    cameraLayout.height,
+    MAGNIFIER_SIZE,
+  ]);
 
   const handleCameraLayout = (event: any) => {
     const { x, y, width, height } = event.nativeEvent.layout;
@@ -112,23 +178,17 @@ export default function Step4() {
   };
 
   const handleReset = () => {
-    if (lastTapPoint) {
-      setCenterPoint(lastTapPoint);
-    }
+    if (lastTapPoint) setCenterPoint(lastTapPoint);
   };
 
   const handleNext = () => {
-    if (centerPoint) {
-      setScopeCenterPx(centerPoint);
-      // Also set as elevation start position
-      setElevationStartPx(centerPoint);
-      router.push("/(calibration)/step5");
-    }
+    if (!centerPoint) return;
+    setScopeCenterPx(centerPoint);
+    setElevationStartPx(centerPoint);
+    router.push("/(calibration)/step5");
   };
 
-  const handleBack = () => {
-    router.back();
-  };
+  const handleBack = () => router.back();
 
   const handleCancel = async () => {
     await reset();
@@ -140,8 +200,253 @@ export default function Step4() {
     );
   };
 
-  // Control panel dimensions based on orientation
-  const controlPanelHeight = isLandscapeMode ? 160 : 240;
+  // Compact sizing for landscape D-pad
+  const dpBtn = isLandscapeMode ? "size-9" : "size-10";
+  const dpIcon = isLandscapeMode ? "w-4 h-4" : "w-5 h-5";
+
+  // ============================================================
+  // LANDSCAPE: Step4-style (camera left + flush right panel)
+  // ============================================================
+  if (isLandscapeMode) {
+    return (
+        <View className="flex-1 bg-brand-black">
+          {/* Camera Feed (left region) */}
+          <View
+              ref={cameraViewRef}
+              onLayout={handleCameraLayout}
+              style={[
+                StyleSheet.absoluteFill,
+                { right: cameraInsets.padRight, bottom: cameraInsets.padBottom },
+              ]}
+          >
+            {shouldRenderCamera && (
+                <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
+                  <CameraView style={StyleSheet.absoluteFill} facing="back" />
+
+                  {centerPoint && (
+                      <View
+                          style={[
+                            styles.crosshairContainer,
+                            { left: centerPoint.x - 30, top: centerPoint.y - 30 },
+                          ]}
+                          pointerEvents="none"
+                      >
+                        <View style={styles.crosshairVertical} />
+                        <View style={styles.crosshairHorizontal} />
+                        <View style={styles.crosshairCenter} />
+                      </View>
+                  )}
+
+                  {!centerPoint && (
+                      <View style={styles.guideOverlay} pointerEvents="none">
+                        <View style={styles.guideBox}>
+                          <Text style={styles.guideText}>Tap on the crosshair center</Text>
+                        </View>
+                      </View>
+                  )}
+                </Pressable>
+            )}
+
+            {/* Magnifier (clamped + pushed from left) */}
+            {centerPoint && (
+                <View
+                    style={[
+                      styles.magnifier,
+                      {
+                        width: MAGNIFIER_SIZE,
+                        height: MAGNIFIER_SIZE,
+                        left: magnifierPos.left,
+                        top: magnifierPos.top,
+                      },
+                    ]}
+                    pointerEvents="none"
+                >
+                  <View style={styles.magnifierInner}>
+                    <Text style={styles.magnifierLabel}>
+                      {centerPoint.x}, {centerPoint.y}
+                    </Text>
+                    <View style={styles.magnifierCrosshair}>
+                      <View style={styles.magnifierCrosshairV} />
+                      <View style={styles.magnifierCrosshairH} />
+                      <View style={styles.magnifierCrosshairDot} />
+                    </View>
+                  </View>
+                </View>
+            )}
+          </View>
+
+          {/* Right panel (flush right) */}
+          <SafeAreaView
+              className="absolute top-0 bottom-0 right-0"
+              edges={["top", "bottom", "right"]}
+              style={{ width: SIDE_PANEL_W }}
+          >
+            <View className="flex-1 bg-brand-black/95 border-l border-brand-green/30">
+              {/* Header */}
+              <View className="px-3 pt-3 pb-2">
+                <View className="flex-row items-start">
+                  <View className="size-8 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
+                    <Image
+                        source={icons.target}
+                        className="w-4 h-4"
+                        resizeMode="contain"
+                        tintColor="#0b7f4f"
+                    />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-white font-semibold text-sm">
+                      Align Scope Center
+                    </Text>
+                    <Text className="text-white/60 text-[11px]">
+                      Tap, then fine-tune.
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View className="flex-1 px-3">
+                {!centerPoint ? (
+                    <View className="mt-2 p-3 rounded-2xl bg-brand-black/40 border border-brand-green/25">
+                      <Text className="text-white/70 text-[12px] leading-4">
+                        Take your time — this sets your overlay reference.
+                      </Text>
+                    </View>
+                ) : (
+                    <>
+                      <View className="mt-1">
+                        <Text className="text-white/50 text-[11px] mb-1">Step</Text>
+                        <View className="flex-row gap-1">
+                          {([1, 5, 10] as StepSize[]).map((size) => (
+                              <Pressable
+                                  key={size}
+                                  onPress={() => setStepSize(size)}
+                                  className={[
+                                    "flex-1 py-2 rounded-xl border items-center",
+                                    stepSize === size
+                                        ? "bg-brand-greenLight/20 border-brand-greenLight"
+                                        : "bg-brand-black/40 border-brand-green/30",
+                                  ].join(" ")}
+                              >
+                                <Text
+                                    className={[
+                                      "text-[12px] font-semibold",
+                                      stepSize === size ? "text-white" : "text-white/60",
+                                    ].join(" ")}
+                                >
+                                  {size}px
+                                </Text>
+                              </Pressable>
+                          ))}
+                        </View>
+                      </View>
+
+                      <View className="mt-3 items-center">
+                        <Pressable
+                            onPress={() => handleMicroAdjust("up")}
+                            className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mb-1`}
+                        >
+                          <Image
+                              source={icons.chevronUp}
+                              className={dpIcon}
+                              resizeMode="contain"
+                              tintColor="#0b7f4f"
+                          />
+                        </Pressable>
+
+                        <View className="flex-row items-center gap-1">
+                          <Pressable
+                              onPress={() => handleMicroAdjust("left")}
+                              className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center`}
+                          >
+                            <Image
+                                source={icons.chevronLeft}
+                                className={dpIcon}
+                                resizeMode="contain"
+                                tintColor="#0b7f4f"
+                            />
+                          </Pressable>
+
+                          <View className={`${dpBtn} rounded-xl bg-brand-black/50 border border-brand-green/20 items-center justify-center`}>
+                            <Text className="text-white/50 text-[11px] font-mono">
+                              {stepSize}px
+                            </Text>
+                          </View>
+
+                          <Pressable
+                              onPress={() => handleMicroAdjust("right")}
+                              className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center`}
+                          >
+                            <Image
+                                source={icons.chevronRight}
+                                className={dpIcon}
+                                resizeMode="contain"
+                                tintColor="#0b7f4f"
+                            />
+                          </Pressable>
+                        </View>
+
+                        <Pressable
+                            onPress={() => handleMicroAdjust("down")}
+                            className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mt-1`}
+                        >
+                          <Image
+                              source={icons.chevronDown}
+                              className={dpIcon}
+                              resizeMode="contain"
+                              tintColor="#0b7f4f"
+                          />
+                        </Pressable>
+                      </View>
+
+                      <Pressable
+                          onPress={handleReset}
+                          className="mt-3 py-2 rounded-xl bg-brand-black/40 border border-brand-green/30 items-center"
+                      >
+                        <Text className="text-white/75 text-[12px] font-semibold">
+                          Reset to tap
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                          onPress={handleNext}
+                          className="mt-3 w-full py-3 rounded-2xl bg-brand-greenLight border border-brand-green/60 items-center"
+                      >
+                        <Text className="text-white font-semibold text-sm">Save Center</Text>
+                      </Pressable>
+                    </>
+                )}
+              </View>
+
+              {/* Back / Cancel */}
+              <View className="px-3 pb-3">
+                <View className="flex-row mt-2 gap-2">
+                  <Pressable
+                      onPress={handleBack}
+                      className="flex-1 py-2 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
+                  >
+                    <Text className="text-white/90 font-semibold text-[12px]">Back</Text>
+                  </Pressable>
+
+                  <Pressable
+                      onPress={handleCancel}
+                      className="flex-1 py-2 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
+                  >
+                    <Text className="text-white/90 font-semibold text-[12px]">Cancel</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </SafeAreaView>
+        </View>
+    );
+  }
+
+  // ============================================================
+  // PORTRAIT: keep your original UI unchanged
+  // ============================================================
+
+  // Control panel dimensions based on orientation (portrait uses original bottom panel)
+  const controlPanelHeight = 240;
 
   return (
       <View className="flex-1 bg-brand-black">
@@ -149,10 +454,7 @@ export default function Step4() {
         <View
             ref={cameraViewRef}
             onLayout={handleCameraLayout}
-            style={[
-              StyleSheet.absoluteFill,
-              { bottom: controlPanelHeight + bottomPadding },
-            ]}
+            style={[StyleSheet.absoluteFill, { bottom: controlPanelHeight + bottomPadding }]}
         >
           {shouldRenderCamera && (
               <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
@@ -163,18 +465,12 @@ export default function Step4() {
                     <View
                         style={[
                           styles.crosshairContainer,
-                          {
-                            left: centerPoint.x - 30,
-                            top: centerPoint.y - 30,
-                          },
+                          { left: centerPoint.x - 30, top: centerPoint.y - 30 },
                         ]}
                         pointerEvents="none"
                     >
-                      {/* Vertical line */}
                       <View style={styles.crosshairVertical} />
-                      {/* Horizontal line */}
                       <View style={styles.crosshairHorizontal} />
-                      {/* Center dot */}
                       <View style={styles.crosshairCenter} />
                     </View>
                 )}
@@ -183,26 +479,19 @@ export default function Step4() {
                 {!centerPoint && (
                     <View style={styles.guideOverlay}>
                       <View style={styles.guideBox}>
-                        <Text style={styles.guideText}>
-                          Tap on the crosshair center
-                        </Text>
+                        <Text style={styles.guideText}>Tap on the crosshair center</Text>
                       </View>
                     </View>
                 )}
               </Pressable>
           )}
 
-          {/* Magnifier (shows zoomed view around center point) */}
+          {/* Magnifier (portrait original: top-right) */}
           {centerPoint && (
               <View
                   style={[
                     styles.magnifier,
-                    {
-                      width: MAGNIFIER_SIZE,
-                      height: MAGNIFIER_SIZE,
-                      top: insets.top + 10,
-                      right: 10,
-                    },
+                    { width: 120, height: 120, top: insets.top + 10, right: 10 },
                   ]}
                   pointerEvents="none"
               >
@@ -210,7 +499,6 @@ export default function Step4() {
                   <Text style={styles.magnifierLabel}>
                     {centerPoint.x}, {centerPoint.y}
                   </Text>
-                  {/* Magnifier crosshair */}
                   <View style={styles.magnifierCrosshair}>
                     <View style={styles.magnifierCrosshairV} />
                     <View style={styles.magnifierCrosshairH} />
@@ -221,11 +509,8 @@ export default function Step4() {
           )}
         </View>
 
-        {/* Control Panel */}
-        <SafeAreaView
-            className="absolute bottom-0 left-0 right-0"
-            edges={["bottom"]}
-        >
+        {/* Control Panel (portrait original) */}
+        <SafeAreaView className="absolute bottom-0 left-0 right-0" edges={["bottom"]}>
           <View
               style={{ paddingBottom: bottomPadding }}
               className="bg-brand-black/95 border-t border-brand-green/30 px-4 pt-4"
@@ -233,7 +518,12 @@ export default function Step4() {
             {/* Header */}
             <View className="flex-row items-center mb-3">
               <View className="size-9 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
-                <Image source={icons.target} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
+                <Image
+                    source={icons.target}
+                    className="w-5 h-5"
+                    resizeMode="contain"
+                    tintColor="#0b7f4f"
+                />
               </View>
               <View className="flex-1">
                 <Text className="text-white font-semibold text-base">Align Scope Center</Text>
@@ -244,7 +534,7 @@ export default function Step4() {
             {centerPoint ? (
                 <>
                   {/* Micro Adjust Controls */}
-                  <View className={`flex-row ${isLandscapeMode ? "gap-4" : "gap-3"}`}>
+                  <View className="flex-row gap-3">
                     {/* D-Pad */}
                     <View className="flex-1 items-center">
                       <View className="items-center">
@@ -253,7 +543,12 @@ export default function Step4() {
                             onPress={() => handleMicroAdjust("up")}
                             className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mb-1"
                         >
-                          <Image source={icons.chevronUp} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
+                          <Image
+                              source={icons.chevronUp}
+                              className="w-5 h-5"
+                              resizeMode="contain"
+                              tintColor="#0b7f4f"
+                          />
                         </Pressable>
 
                         {/* Left / Center / Right */}
@@ -262,7 +557,12 @@ export default function Step4() {
                               onPress={() => handleMicroAdjust("left")}
                               className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center"
                           >
-                            <Image source={icons.chevronLeft} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
+                            <Image
+                                source={icons.chevronLeft}
+                                className="w-5 h-5"
+                                resizeMode="contain"
+                                tintColor="#0b7f4f"
+                            />
                           </Pressable>
 
                           <View className="size-10 rounded-xl bg-brand-black/50 border border-brand-green/20 items-center justify-center">
@@ -273,7 +573,12 @@ export default function Step4() {
                               onPress={() => handleMicroAdjust("right")}
                               className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center"
                           >
-                            <Image source={icons.chevronRight} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
+                            <Image
+                                source={icons.chevronRight}
+                                className="w-5 h-5"
+                                resizeMode="contain"
+                                tintColor="#0b7f4f"
+                            />
                           </Pressable>
                         </View>
 
@@ -282,7 +587,12 @@ export default function Step4() {
                             onPress={() => handleMicroAdjust("down")}
                             className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mt-1"
                         >
-                          <Image source={icons.chevronDown} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
+                          <Image
+                              source={icons.chevronDown}
+                              className="w-5 h-5"
+                              resizeMode="contain"
+                              tintColor="#0b7f4f"
+                          />
                         </Pressable>
                       </View>
                     </View>

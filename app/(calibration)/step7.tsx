@@ -318,7 +318,7 @@ export default function Step7() {
                                     onPress={handleBack}
                                     className="mt-3 rounded-2xl items-center border bg-brand-black/50 border-brand-green/35 py-3"
                                 >
-                                    <Text className="text-white/90 font-semibold text-sm">Redo</Text>
+                                    <Text className="text-white/90 font-semibold text-sm">Back</Text>
                                 </Pressable>
 
                                 <Pressable

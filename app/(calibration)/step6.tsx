@@ -4,8 +4,14 @@
 // Two phases:
 // 1. Instruct user to dial windage RIGHT by X clicks
 // 2. User confirms new crosshair position
+//
+// UI rules:
+// - PORTRAIT: keep your existing UI unchanged (instruction + confirm)
+// - LANDSCAPE: instruction should match Step5 landscape (compact two-column card)
+//   and confirm phase becomes Step4-style:
+//   camera left + flush right control panel, responsive magnifier clamped + pushed from left
 
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
     View,
     Text,
@@ -14,6 +20,7 @@ import {
     StyleSheet,
     Modal,
     GestureResponderEvent,
+    useWindowDimensions,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -39,6 +46,9 @@ type Phase = "instruction" | "confirm";
 type StepSize = 1 | 5 | 10;
 type Direction = "up" | "down" | "left" | "right";
 
+const clamp = (v: number, min: number, max: number) =>
+    Math.max(min, Math.min(max, v));
+
 export default function Step6() {
     const [permission] = useCameraPermissions();
     const cameraEnabled = !!permission?.granted;
@@ -47,6 +57,7 @@ export default function Step6() {
 
     useFocusEffect(
         useCallback(() => {
+            console.log(SCREEN_ID);
             setActiveScreen(SCREEN_ID);
             return () => {};
         }, [setActiveScreen])
@@ -56,6 +67,7 @@ export default function Step6() {
 
     const insets = useSafeAreaInsets();
     const navigation = useNavigation();
+    const { width, height } = useWindowDimensions();
 
     const mountOrientation = useCalibrationStore(selectMountOrientation);
     const clickSize = useCalibrationStore(selectClickSize);
@@ -78,8 +90,13 @@ export default function Step6() {
     // Unexpected behavior modal
     const [showUnexpectedModal, setShowUnexpectedModal] = useState(false);
 
-    // Camera layout
-    const [cameraLayout, setCameraLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
+    // Camera layout (used for micro adjust clamping + magnifier clamping)
+    const [cameraLayout, setCameraLayout] = useState({
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+    });
 
     const safeAreaEdges: ("top" | "bottom" | "left" | "right")[] = ["top", "bottom"];
     if (isLandscapeMode) safeAreaEdges.push("left", "right");
@@ -123,34 +140,25 @@ export default function Step6() {
     };
 
     const handleResetPosition = () => {
-        if (lastTapPoint) {
-            setCenterPoint(lastTapPoint);
-        }
+        if (lastTapPoint) setCenterPoint(lastTapPoint);
     };
 
     // Phase transitions
-    const handleDialed = () => {
-        setPhase("confirm");
-    };
+    const handleDialed = () => setPhase("confirm");
 
     const handleConfirmPosition = () => {
-        if (centerPoint) {
-            setWindageEndPx(centerPoint);
-            calculateWindageScale();
-            router.push("/(calibration)/step7");
-        }
+        if (!centerPoint) return;
+        setWindageEndPx(centerPoint);
+        calculateWindageScale();
+        router.push("/(calibration)/step7");
     };
 
     // Unexpected behavior handling
-    const handleUnexpectedBehavior = () => {
-        setShowUnexpectedModal(true);
-    };
+    const handleUnexpectedBehavior = () => setShowUnexpectedModal(true);
 
     const handleUnexpectedDirection = (direction: Direction) => {
         // If user says crosshair moved LEFT when they dialed RIGHT, it's inverted
-        if (direction === "left") {
-            setWindageInverted(true);
-        }
+        if (direction === "left") setWindageInverted(true);
         setShowUnexpectedModal(false);
     };
 
@@ -173,88 +181,235 @@ export default function Step6() {
         );
     };
 
-    const controlPanelHeight = isLandscapeMode ? 160 : 240;
+    // --------- Landscape confirm UI sizing (Step4-style) ----------
+    const SIDE_PANEL_W = useMemo(() => {
+        const w = Math.round(width * 0.34);
+        return clamp(w, 220, 280);
+    }, [width]);
 
+    const MAGNIFIER_SIZE = useMemo(() => {
+        const base = width * 0.12;
+        return clamp(Math.round(base), 84, 120);
+    }, [width]);
+
+    const cameraInsets = useMemo(() => {
+        return { padRight: SIDE_PANEL_W, padBottom: 0 };
+    }, [SIDE_PANEL_W]);
+
+    const magnifierPos = useMemo(() => {
+        const margin = 10;
+        const LEFT_SAFE_PAD = clamp(Math.round(width * 0.06), 24, 44);
+
+        const fallbackW = Math.max(0, width - cameraInsets.padRight);
+        const fallbackH = Math.max(0, height);
+
+        const containerW = cameraLayout.width > 0 ? cameraLayout.width : fallbackW;
+        const containerH = cameraLayout.height > 0 ? cameraLayout.height : fallbackH;
+
+        const leftMin = LEFT_SAFE_PAD;
+        const leftMax = Math.max(leftMin, containerW - MAGNIFIER_SIZE - margin);
+
+        const topMin = insets.top + margin;
+        const topMax = Math.max(topMin, containerH - MAGNIFIER_SIZE - margin);
+
+        return {
+            left: clamp(LEFT_SAFE_PAD, leftMin, leftMax),
+            top: clamp(insets.top + margin, topMin, topMax),
+        };
+    }, [
+        width,
+        height,
+        insets.top,
+        cameraInsets.padRight,
+        cameraLayout.width,
+        cameraLayout.height,
+        MAGNIFIER_SIZE,
+    ]);
+
+    const dpBtn = isLandscapeMode ? "size-9" : "size-10";
+    const dpIcon = isLandscapeMode ? "w-4 h-4" : "w-5 h-5";
+
+    // ============================================================
     // Instruction Phase
+    // - PORTRAIT: unchanged
+    // - LANDSCAPE: match Step5 landscape compact two-column UI
+    // ============================================================
     if (phase === "instruction") {
         return (
             <View className="flex-1 bg-brand-black">
-                {shouldRenderCamera && (
-                    <CameraView style={StyleSheet.absoluteFill} facing="back" />
-                )}
+                {shouldRenderCamera && <CameraView style={StyleSheet.absoluteFill} facing="back" />}
 
                 <SafeAreaView className="flex-1" edges={safeAreaEdges}>
                     <View className={`flex-1 ${isLandscapeMode ? "px-4" : "px-6"} pt-4 justify-center`}>
-                        {/* Main Instruction Card */}
-                        <View className="rounded-3xl bg-brand-greenDark/85 border border-brand-green/60 p-6">
-                            <View className="items-center mb-4">
-                                <View className="size-16 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mb-3">
-                                    <Image source={icons.arrowRight} className="w-8 h-8" resizeMode="contain" tintColor="#22c55e" />
+                        <View
+                            className={[
+                                "rounded-3xl bg-brand-greenDark/85 border border-brand-green/60",
+                                isLandscapeMode ? "p-4" : "p-6",
+                            ].join(" ")}
+                        >
+                            {/* --- PORTRAIT HEADER (UNCHANGED) --- */}
+                            {!isLandscapeMode && (
+                                <View className="items-center mb-4">
+                                    <View className="size-16 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mb-3">
+                                        <Image
+                                            source={icons.arrowRight}
+                                            className="w-8 h-8"
+                                            resizeMode="contain"
+                                            tintColor="#22c55e"
+                                        />
+                                    </View>
+                                    <Text className="text-white text-2xl font-bold text-center">
+                                        Windage Calibration
+                                    </Text>
                                 </View>
-                                <Text className="text-white text-2xl font-bold text-center">
-                                    Windage Calibration
-                                </Text>
-                            </View>
+                            )}
 
-                            <View className="bg-brand-black/40 rounded-2xl p-4 mb-4">
-                                <Text className="text-white/80 text-center text-base mb-2">
-                                    Turn the <Text className="text-white font-bold">WINDAGE</Text> turret
-                                </Text>
-                                <Text className="text-brand-greenLight text-center text-4xl font-bold mb-2">
-                                    RIGHT
-                                </Text>
-                                <Text className="text-white text-center text-3xl font-bold">
-                                    {CALIBRATION_CLICK_COUNT} clicks
-                                </Text>
-                                <Text className="text-white/50 text-center text-sm mt-2">
-                                    ({getClickSizeLabel(scopeUnit, clickSize)} per click)
-                                </Text>
-                            </View>
+                            {/* --- LANDSCAPE: Step5-style TWO-COLUMN, COMPACT --- */}
+                            {isLandscapeMode ? (
+                                <View className="flex-row gap-3">
+                                    {/* Left: instruction content */}
+                                    <View className="flex-1">
+                                        <View className="flex-row items-center mb-2">
+                                            <View className="size-10 rounded-xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-2">
+                                                <Image
+                                                    source={icons.arrowRight}
+                                                    className="w-5 h-5"
+                                                    resizeMode="contain"
+                                                    tintColor="#22c55e"
+                                                />
+                                            </View>
+                                            <Text className="text-white text-lg font-bold">
+                                                Windage Calibration
+                                            </Text>
+                                        </View>
 
-                            <View className="bg-brand-black/30 rounded-xl px-4 py-3 mb-4">
-                                <Text className="text-white/70 text-sm text-center">
-                                    Windage is usually on the side of the scope.{"\n"}
-                                    Follow the arrow marked on your turret.
-                                </Text>
-                            </View>
+                                        <View className="bg-brand-black/40 rounded-2xl px-3 py-2 mb-2">
+                                            <Text className="text-white/80 text-center text-xs mb-1">
+                                                Turn the <Text className="text-white font-bold">WINDAGE</Text> turret
+                                            </Text>
 
-                            <Pressable
-                                onPress={handleDialed}
-                                className="rounded-2xl py-5 items-center bg-brand-greenLight border border-brand-green/60"
-                            >
-                                <Text className="text-white text-xl font-semibold">I've dialed it</Text>
-                            </Pressable>
+                                            <View className="flex-row items-end justify-center">
+                                                <Text className="text-brand-greenLight text-2xl font-extrabold mr-2">
+                                                    RIGHT
+                                                </Text>
+                                                <Text className="text-white text-2xl font-extrabold">
+                                                    {CALIBRATION_CLICK_COUNT}
+                                                </Text>
+                                                <Text className="text-white/70 text-sm font-semibold ml-1">
+                                                    clicks
+                                                </Text>
+                                            </View>
 
-                            <Pressable
-                                onPress={handleUnexpectedBehavior}
-                                className="mt-3 py-3 items-center"
-                            >
-                                <Text className="text-white/50 text-sm underline">
-                                    Unexpected behavior?
-                                </Text>
-                            </Pressable>
+                                            <Text className="text-white/50 text-center text-[10px] mt-1">
+                                                ({getClickSizeLabel(scopeUnit, clickSize)} per click)
+                                            </Text>
+                                        </View>
+
+                                        <View className="bg-brand-black/30 rounded-xl px-3 py-2">
+                                            <Text className="text-white/70 text-[11px] text-center leading-4">
+                                                Windage is usually on the side of the scope.{"\n"}
+                                                Follow the arrow marked on your turret.
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    {/* Right: primary action + links + nav */}
+                                    <View className="w-44 justify-between">
+                                        <View>
+                                            <Pressable
+                                                onPress={handleDialed}
+                                                className="rounded-2xl py-3 items-center bg-brand-greenLight border border-brand-green/60"
+                                            >
+                                                <Text className="text-white text-base font-semibold">
+                                                    I've dialed it
+                                                </Text>
+                                            </Pressable>
+
+                                            <Pressable onPress={handleUnexpectedBehavior} className="mt-2 py-2 items-center">
+                                                <Text className="text-white/50 text-xs underline">
+                                                    Unexpected behavior?
+                                                </Text>
+                                            </Pressable>
+                                        </View>
+
+                                        <View className="gap-2 mt-2">
+                                            <Pressable
+                                                onPress={handleBack}
+                                                className="py-3 rounded-2xl items-center bg-brand-black/50 border border-brand-green/35"
+                                            >
+                                                <Text className="text-white/90 font-semibold text-sm">Back</Text>
+                                            </Pressable>
+
+                                            <Pressable
+                                                onPress={handleCancel}
+                                                className="py-3 rounded-2xl items-center bg-brand-black/50 border border-brand-green/35"
+                                            >
+                                                <Text className="text-white/90 font-semibold text-sm">Cancel</Text>
+                                            </Pressable>
+                                        </View>
+                                    </View>
+                                </View>
+                            ) : (
+                                <>
+                                    {/* Portrait body (UNCHANGED) */}
+                                    <View className="bg-brand-black/40 rounded-2xl p-4 mb-4">
+                                        <Text className="text-white/80 text-center text-base mb-2">
+                                            Turn the <Text className="text-white font-bold">WINDAGE</Text> turret
+                                        </Text>
+                                        <Text className="text-brand-greenLight text-center text-4xl font-bold mb-2">
+                                            RIGHT
+                                        </Text>
+                                        <Text className="text-white text-center text-3xl font-bold">
+                                            {CALIBRATION_CLICK_COUNT} clicks
+                                        </Text>
+                                        <Text className="text-white/50 text-center text-sm mt-2">
+                                            ({getClickSizeLabel(scopeUnit, clickSize)} per click)
+                                        </Text>
+                                    </View>
+
+                                    <View className="bg-brand-black/30 rounded-xl px-4 py-3 mb-4">
+                                        <Text className="text-white/70 text-sm text-center">
+                                            Windage is usually on the side of the scope.{"\n"}
+                                            Follow the arrow marked on your turret.
+                                        </Text>
+                                    </View>
+
+                                    <Pressable
+                                        onPress={handleDialed}
+                                        className="rounded-2xl py-5 items-center bg-brand-greenLight border border-brand-green/60"
+                                    >
+                                        <Text className="text-white text-xl font-semibold">I've dialed it</Text>
+                                    </Pressable>
+
+                                    <Pressable onPress={handleUnexpectedBehavior} className="mt-3 py-3 items-center">
+                                        <Text className="text-white/50 text-sm underline">Unexpected behavior?</Text>
+                                    </Pressable>
+                                </>
+                            )}
                         </View>
 
-                        {/* Back / Cancel */}
-                        <View className="flex-row mt-4 gap-3">
-                            <Pressable
-                                onPress={handleBack}
-                                className="flex-1 py-4 rounded-2xl items-center bg-brand-black/50 border border-brand-green/35"
-                            >
-                                <Text className="text-white/90 font-semibold text-base">Back</Text>
-                            </Pressable>
+                        {/* Back / Cancel (PORTRAIT ONLY, landscape handled in-card) */}
+                        {!isLandscapeMode && (
+                            <View className="flex-row mt-4 gap-3">
+                                <Pressable
+                                    onPress={handleBack}
+                                    className="flex-1 py-4 rounded-2xl items-center bg-brand-black/50 border border-brand-green/35"
+                                >
+                                    <Text className="text-white/90 font-semibold text-base">Back</Text>
+                                </Pressable>
 
-                            <Pressable
-                                onPress={handleCancel}
-                                className="flex-1 py-4 rounded-2xl items-center bg-brand-black/50 border border-brand-green/35"
-                            >
-                                <Text className="text-white/90 font-semibold text-base">Cancel</Text>
-                            </Pressable>
-                        </View>
+                                <Pressable
+                                    onPress={handleCancel}
+                                    className="flex-1 py-4 rounded-2xl items-center bg-brand-black/50 border border-brand-green/35"
+                                >
+                                    <Text className="text-white/90 font-semibold text-base">Cancel</Text>
+                                </Pressable>
+                            </View>
+                        )}
                     </View>
                 </SafeAreaView>
 
-                {/* Unexpected Behavior Modal */}
+                {/* Unexpected Behavior Modal (UNCHANGED) */}
                 <Modal
                     visible={showUnexpectedModal}
                     transparent
@@ -277,9 +432,7 @@ export default function Step6() {
                                         onPress={() => handleUnexpectedDirection(dir)}
                                         className="py-4 rounded-2xl items-center bg-brand-greenDark/60 border border-brand-green/40"
                                     >
-                                        <Text className="text-white text-lg font-semibold capitalize">
-                                            {dir}
-                                        </Text>
+                                        <Text className="text-white text-lg font-semibold capitalize">{dir}</Text>
                                     </Pressable>
                                 ))}
                             </View>
@@ -297,7 +450,258 @@ export default function Step6() {
         );
     }
 
-    // Confirm Phase (center picker)
+    // ============================================================
+    // Confirm Phase
+    // - PORTRAIT: keep existing UI unchanged
+    // - LANDSCAPE: Step4-style (camera left + flush right panel)
+    // ============================================================
+
+    if (isLandscapeMode) {
+        return (
+            <View className="flex-1 bg-brand-black">
+                {/* Camera region (left) */}
+                <View
+                    onLayout={handleCameraLayout}
+                    style={[
+                        StyleSheet.absoluteFill,
+                        { right: cameraInsets.padRight, bottom: cameraInsets.padBottom },
+                    ]}
+                >
+                    {shouldRenderCamera && (
+                        <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
+                            <CameraView style={StyleSheet.absoluteFill} facing="back" />
+
+                            {centerPoint && (
+                                <View
+                                    style={[
+                                        styles.crosshairContainer,
+                                        { left: centerPoint.x - 30, top: centerPoint.y - 30 },
+                                    ]}
+                                    pointerEvents="none"
+                                >
+                                    <View style={styles.crosshairVertical} />
+                                    <View style={styles.crosshairHorizontal} />
+                                    <View style={styles.crosshairCenter} />
+                                </View>
+                            )}
+
+                            {!centerPoint && (
+                                <View style={styles.guideOverlay} pointerEvents="none">
+                                    <View style={styles.guideBox}>
+                                        <Text style={styles.guideText}>Tap the crosshair center</Text>
+                                    </View>
+                                </View>
+                            )}
+                        </Pressable>
+                    )}
+
+                    {centerPoint && (
+                        <View
+                            style={[
+                                styles.magnifier,
+                                {
+                                    width: MAGNIFIER_SIZE,
+                                    height: MAGNIFIER_SIZE,
+                                    left: magnifierPos.left,
+                                    top: magnifierPos.top,
+                                },
+                            ]}
+                            pointerEvents="none"
+                        >
+                            <View style={styles.magnifierInner}>
+                                <Text style={styles.magnifierLabel}>
+                                    {centerPoint.x}, {centerPoint.y}
+                                </Text>
+                                <View style={styles.magnifierCrosshair}>
+                                    <View style={styles.magnifierCrosshairV} />
+                                    <View style={styles.magnifierCrosshairH} />
+                                    <View style={styles.magnifierCrosshairDot} />
+                                </View>
+                            </View>
+                        </View>
+                    )}
+                </View>
+
+                {/* Right panel (flush right) */}
+                <SafeAreaView
+                    className="absolute top-0 bottom-0 right-0"
+                    edges={["top", "bottom", "right"]}
+                    style={{ width: SIDE_PANEL_W }}
+                >
+                    <View className="flex-1 bg-brand-black/95 border-l border-brand-green/30">
+                        {/* Header */}
+                        <View className="px-3 pt-3 pb-2">
+                            <View className="flex-row items-start">
+                                <View className="size-8 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
+                                    <Image
+                                        source={icons.target}
+                                        className="w-4 h-4"
+                                        resizeMode="contain"
+                                        tintColor="#0b7f4f"
+                                    />
+                                </View>
+                                <View className="flex-1">
+                                    <Text className="text-white font-semibold text-sm">
+                                        Confirm New Crosshair
+                                    </Text>
+                                    <Text className="text-white/60 text-[11px]">
+                                        Tap, then fine-tune.
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+
+                        <View className="flex-1 px-3">
+                            {!centerPoint ? (
+                                <View className="mt-2 p-3 rounded-2xl bg-brand-black/40 border border-brand-green/25">
+                                    <Text className="text-white/70 text-[12px] leading-4">
+                                        Tap where the crosshair moved to after dialing.
+                                    </Text>
+                                </View>
+                            ) : (
+                                <>
+                                    <View className="mt-1">
+                                        <Text className="text-white/50 text-[11px] mb-1">Step</Text>
+                                        <View className="flex-row gap-1">
+                                            {([1, 5, 10] as StepSize[]).map((size) => (
+                                                <Pressable
+                                                    key={size}
+                                                    onPress={() => setStepSize(size)}
+                                                    className={[
+                                                        "flex-1 py-2 rounded-xl border items-center",
+                                                        stepSize === size
+                                                            ? "bg-brand-greenLight/20 border-brand-greenLight"
+                                                            : "bg-brand-black/40 border-brand-green/30",
+                                                    ].join(" ")}
+                                                >
+                                                    <Text
+                                                        className={[
+                                                            "text-[12px] font-semibold",
+                                                            stepSize === size ? "text-white" : "text-white/60",
+                                                        ].join(" ")}
+                                                    >
+                                                        {size}px
+                                                    </Text>
+                                                </Pressable>
+                                            ))}
+                                        </View>
+                                    </View>
+
+                                    {/* D-pad */}
+                                    <View className="mt-3 items-center">
+                                        <Pressable
+                                            onPress={() => handleMicroAdjust("up")}
+                                            className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mb-1`}
+                                        >
+                                            <Image
+                                                source={icons.chevronUp}
+                                                className={dpIcon}
+                                                resizeMode="contain"
+                                                tintColor="#0b7f4f"
+                                            />
+                                        </Pressable>
+
+                                        <View className="flex-row items-center gap-1">
+                                            <Pressable
+                                                onPress={() => handleMicroAdjust("left")}
+                                                className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center`}
+                                            >
+                                                <Image
+                                                    source={icons.chevronLeft}
+                                                    className={dpIcon}
+                                                    resizeMode="contain"
+                                                    tintColor="#0b7f4f"
+                                                />
+                                            </Pressable>
+
+                                            <View
+                                                className={`${dpBtn} rounded-xl bg-brand-black/50 border border-brand-green/20 items-center justify-center`}
+                                            >
+                                                <Text className="text-white/50 text-[11px] font-mono">
+                                                    {stepSize}px
+                                                </Text>
+                                            </View>
+
+                                            <Pressable
+                                                onPress={() => handleMicroAdjust("right")}
+                                                className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center`}
+                                            >
+                                                <Image
+                                                    source={icons.chevronRight}
+                                                    className={dpIcon}
+                                                    resizeMode="contain"
+                                                    tintColor="#0b7f4f"
+                                                />
+                                            </Pressable>
+                                        </View>
+
+                                        <Pressable
+                                            onPress={() => handleMicroAdjust("down")}
+                                            className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mt-1`}
+                                        >
+                                            <Image
+                                                source={icons.chevronDown}
+                                                className={dpIcon}
+                                                resizeMode="contain"
+                                                tintColor="#0b7f4f"
+                                            />
+                                        </Pressable>
+                                    </View>
+
+                                    <Pressable
+                                        onPress={handleResetPosition}
+                                        className="mt-3 py-2 rounded-xl bg-brand-black/40 border border-brand-green/30 items-center"
+                                    >
+                                        <Text className="text-white/75 text-[12px] font-semibold">
+                                            Reset to tap
+                                        </Text>
+                                    </Pressable>
+
+                                    <Pressable
+                                        onPress={handleConfirmPosition}
+                                        className="mt-3 w-full py-3 rounded-2xl bg-brand-greenLight border border-brand-green/60 items-center"
+                                    >
+                                        <Text className="text-white font-semibold text-sm">
+                                            Confirm Position
+                                        </Text>
+                                    </Pressable>
+                                </>
+                            )}
+                        </View>
+
+                        {/* Back / Cancel */}
+                        <View className="px-3 pb-3">
+                            <View className="flex-row mt-2 gap-2">
+                                <Pressable
+                                    onPress={handleBack}
+                                    className="flex-1 py-2 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
+                                >
+                                    <Text className="text-white/90 font-semibold text-[12px]">
+                                        Back
+                                    </Text>
+                                </Pressable>
+
+                                <Pressable
+                                    onPress={handleCancel}
+                                    className="flex-1 py-2 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
+                                >
+                                    <Text className="text-white/90 font-semibold text-[12px]">
+                                        Cancel
+                                    </Text>
+                                </Pressable>
+                            </View>
+                        </View>
+                    </View>
+                </SafeAreaView>
+            </View>
+        );
+    }
+
+    // ---------------------------
+    // PORTRAIT confirm (UNCHANGED)
+    // ---------------------------
+    const controlPanelHeight = 240;
+
     return (
         <View className="flex-1 bg-brand-black">
             {/* Camera Feed (tappable area) */}
@@ -312,15 +716,11 @@ export default function Step6() {
                     <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
                         <CameraView style={StyleSheet.absoluteFill} facing="back" />
 
-                        {/* Crosshair overlay */}
                         {centerPoint && (
                             <View
                                 style={[
                                     styles.crosshairContainer,
-                                    {
-                                        left: centerPoint.x - 30,
-                                        top: centerPoint.y - 30,
-                                    },
+                                    { left: centerPoint.x - 30, top: centerPoint.y - 30 },
                                 ]}
                                 pointerEvents="none"
                             >
@@ -330,28 +730,21 @@ export default function Step6() {
                             </View>
                         )}
 
-                        {/* Guide text when no point set */}
                         {!centerPoint && (
                             <View style={styles.guideOverlay}>
                                 <View style={styles.guideBox}>
-                                    <Text style={styles.guideText}>
-                                        Tap the crosshair center
-                                    </Text>
+                                    <Text style={styles.guideText}>Tap the crosshair center</Text>
                                 </View>
                             </View>
                         )}
                     </Pressable>
                 )}
 
-                {/* Magnifier */}
                 {centerPoint && (
                     <View
                         style={[
                             styles.magnifier,
-                            {
-                                top: insets.top + 10,
-                                right: 10,
-                            },
+                            { top: insets.top + 10, right: 10, width: 120, height: 120 },
                         ]}
                         pointerEvents="none"
                     >
@@ -369,11 +762,8 @@ export default function Step6() {
                 )}
             </View>
 
-            {/* Control Panel */}
-            <SafeAreaView
-                className="absolute bottom-0 left-0 right-0"
-                edges={["bottom"]}
-            >
+            {/* Control Panel (portrait unchanged) */}
+            <SafeAreaView className="absolute bottom-0 left-0 right-0" edges={["bottom"]}>
                 <View
                     style={{ paddingBottom: bottomPadding }}
                     className="bg-brand-black/95 border-t border-brand-green/30 px-4 pt-4"
@@ -381,11 +771,20 @@ export default function Step6() {
                     {/* Header */}
                     <View className="flex-row items-center mb-3">
                         <View className="size-9 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
-                            <Image source={icons.target} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
+                            <Image
+                                source={icons.target}
+                                className="w-5 h-5"
+                                resizeMode="contain"
+                                tintColor="#0b7f4f"
+                            />
                         </View>
                         <View className="flex-1">
-                            <Text className="text-white font-semibold text-base">Confirm New Crosshair Position</Text>
-                            <Text className="text-white/60 text-xs">Tap the crosshair center again, then fine-tune.</Text>
+                            <Text className="text-white font-semibold text-base">
+                                Confirm New Crosshair Position
+                            </Text>
+                            <Text className="text-white/60 text-xs">
+                                Tap the crosshair center again, then fine-tune.
+                            </Text>
                         </View>
                     </View>
 
@@ -398,7 +797,12 @@ export default function Step6() {
                                         onPress={() => handleMicroAdjust("up")}
                                         className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mb-1"
                                     >
-                                        <Image source={icons.chevronUp} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
+                                        <Image
+                                            source={icons.chevronUp}
+                                            className="w-5 h-5"
+                                            resizeMode="contain"
+                                            tintColor="#0b7f4f"
+                                        />
                                     </Pressable>
 
                                     <View className="flex-row items-center gap-1">
@@ -406,7 +810,12 @@ export default function Step6() {
                                             onPress={() => handleMicroAdjust("left")}
                                             className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center"
                                         >
-                                            <Image source={icons.chevronLeft} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
+                                            <Image
+                                                source={icons.chevronLeft}
+                                                className="w-5 h-5"
+                                                resizeMode="contain"
+                                                tintColor="#0b7f4f"
+                                            />
                                         </Pressable>
 
                                         <View className="size-10 rounded-xl bg-brand-black/50 border border-brand-green/20 items-center justify-center">
@@ -417,7 +826,12 @@ export default function Step6() {
                                             onPress={() => handleMicroAdjust("right")}
                                             className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center"
                                         >
-                                            <Image source={icons.chevronRight} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
+                                            <Image
+                                                source={icons.chevronRight}
+                                                className="w-5 h-5"
+                                                resizeMode="contain"
+                                                tintColor="#0b7f4f"
+                                            />
                                         </Pressable>
                                     </View>
 
@@ -425,7 +839,12 @@ export default function Step6() {
                                         onPress={() => handleMicroAdjust("down")}
                                         className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mt-1"
                                     >
-                                        <Image source={icons.chevronDown} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
+                                        <Image
+                                            source={icons.chevronDown}
+                                            className="w-5 h-5"
+                                            resizeMode="contain"
+                                            tintColor="#0b7f4f"
+                                        />
                                     </Pressable>
                                 </View>
                             </View>
@@ -555,8 +974,6 @@ const styles = StyleSheet.create({
     },
     magnifier: {
         position: "absolute",
-        width: 120,
-        height: 120,
         borderRadius: 12,
         borderWidth: 2,
         borderColor: "#0b7f4f",
