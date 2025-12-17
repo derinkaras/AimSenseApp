@@ -230,6 +230,56 @@ export default function Step6() {
     const dpIcon = isLandscapeMode ? "w-4 h-4" : "w-5 h-5";
 
     // ============================================================
+    // Unexpected Behavior Modal (shared by all phases)
+    // ============================================================
+    const renderUnexpectedModal = () => (
+        <Modal
+            visible={showUnexpectedModal}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowUnexpectedModal(false)}
+            supportedOrientations={["portrait", "landscape"]}
+        >
+            <Pressable
+                style={styles.modalOverlay}
+                onPress={() => setShowUnexpectedModal(false)}
+            >
+                <Pressable
+                    style={[
+                        styles.modalContent,
+                        isLandscapeMode && styles.modalContentLandscape,
+                    ]}
+                    onPress={(e) => e.stopPropagation()}
+                >
+                    <Text style={styles.modalTitle}>Unexpected behavior</Text>
+                    <Text style={styles.modalSubtitle}>
+                        When you made that adjustment, the crosshair moved:
+                    </Text>
+
+                    <View style={styles.modalButtonContainer}>
+                        {(["left", "right"] as Direction[]).map((dir) => (
+                            <Pressable
+                                key={dir}
+                                onPress={() => handleUnexpectedDirection(dir)}
+                                style={styles.modalOptionButton}
+                            >
+                                <Text style={styles.modalOptionText}>{dir.toUpperCase()}</Text>
+                            </Pressable>
+                        ))}
+                    </View>
+
+                    <Pressable
+                        onPress={() => setShowUnexpectedModal(false)}
+                        style={styles.modalCancelButton}
+                    >
+                        <Text style={styles.modalCancelText}>Cancel</Text>
+                    </Pressable>
+                </Pressable>
+            </Pressable>
+        </Modal>
+    );
+
+    // ============================================================
     // Instruction Phase
     // - PORTRAIT: unchanged
     // - LANDSCAPE: match Step5 landscape compact two-column UI
@@ -409,43 +459,7 @@ export default function Step6() {
                     </View>
                 </SafeAreaView>
 
-                {/* Unexpected Behavior Modal (UNCHANGED) */}
-                <Modal
-                    visible={showUnexpectedModal}
-                    transparent
-                    animationType="fade"
-                    onRequestClose={() => setShowUnexpectedModal(false)}
-                >
-                    <View className="flex-1 bg-black/80 justify-center items-center px-6">
-                        <View className="bg-brand-black rounded-3xl border border-brand-green/40 p-6 w-full max-w-sm">
-                            <Text className="text-white text-xl font-bold text-center mb-2">
-                                Unexpected behavior
-                            </Text>
-                            <Text className="text-white/70 text-center mb-6">
-                                When you made that adjustment, the crosshair moved:
-                            </Text>
-
-                            <View className="gap-3">
-                                {(["left", "right"] as Direction[]).map((dir) => (
-                                    <Pressable
-                                        key={dir}
-                                        onPress={() => handleUnexpectedDirection(dir)}
-                                        className="py-4 rounded-2xl items-center bg-brand-greenDark/60 border border-brand-green/40"
-                                    >
-                                        <Text className="text-white text-lg font-semibold capitalize">{dir}</Text>
-                                    </Pressable>
-                                ))}
-                            </View>
-
-                            <Pressable
-                                onPress={() => setShowUnexpectedModal(false)}
-                                className="mt-4 py-3 items-center"
-                            >
-                                <Text className="text-white/50 text-sm">Cancel</Text>
-                            </Pressable>
-                        </View>
-                    </View>
-                </Modal>
+                {renderUnexpectedModal()}
             </View>
         );
     }
@@ -652,18 +666,14 @@ export default function Step6() {
                                         onPress={handleResetPosition}
                                         className="mt-3 py-2 rounded-xl bg-brand-black/40 border border-brand-green/30 items-center"
                                     >
-                                        <Text className="text-white/75 text-[12px] font-semibold">
-                                            Reset to tap
-                                        </Text>
+                                        <Text className="text-white/75 text-[12px] font-semibold">Reset to tap</Text>
                                     </Pressable>
 
                                     <Pressable
                                         onPress={handleConfirmPosition}
                                         className="mt-3 w-full py-3 rounded-2xl bg-brand-greenLight border border-brand-green/60 items-center"
                                     >
-                                        <Text className="text-white font-semibold text-sm">
-                                            Confirm Position
-                                        </Text>
+                                        <Text className="text-white font-semibold text-sm">Confirm Position</Text>
                                     </Pressable>
                                 </>
                             )}
@@ -676,18 +686,14 @@ export default function Step6() {
                                     onPress={handleBack}
                                     className="flex-1 py-2 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
                                 >
-                                    <Text className="text-white/90 font-semibold text-[12px]">
-                                        Back
-                                    </Text>
+                                    <Text className="text-white/90 font-semibold text-[12px]">Back</Text>
                                 </Pressable>
 
                                 <Pressable
                                     onPress={handleCancel}
                                     className="flex-1 py-2 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
                                 >
-                                    <Text className="text-white/90 font-semibold text-[12px]">
-                                        Cancel
-                                    </Text>
+                                    <Text className="text-white/90 font-semibold text-[12px]">Cancel</Text>
                                 </Pressable>
                             </View>
                         </View>
@@ -698,7 +704,7 @@ export default function Step6() {
     }
 
     // ---------------------------
-    // PORTRAIT confirm (UNCHANGED)
+    // PORTRAIT confirm (unchanged)
     // ---------------------------
     const controlPanelHeight = 240;
 
@@ -707,10 +713,7 @@ export default function Step6() {
             {/* Camera Feed (tappable area) */}
             <View
                 onLayout={handleCameraLayout}
-                style={[
-                    StyleSheet.absoluteFill,
-                    { bottom: controlPanelHeight + bottomPadding },
-                ]}
+                style={[StyleSheet.absoluteFill, { bottom: controlPanelHeight + bottomPadding }]}
             >
                 {shouldRenderCamera && (
                     <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
@@ -789,7 +792,7 @@ export default function Step6() {
                     </View>
 
                     {centerPoint ? (
-                        <View className={`flex-row ${isLandscapeMode ? "gap-4" : "gap-3"}`}>
+                        <View className="flex-row gap-3">
                             {/* D-Pad */}
                             <View className="flex-1 items-center">
                                 <View className="items-center">
@@ -1016,5 +1019,65 @@ const styles = StyleSheet.create({
         height: 6,
         borderRadius: 3,
         backgroundColor: "#22c55e",
+    },
+    // Modal styles (landscape-safe)
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0, 0, 0, 0.85)",
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 24,
+    },
+    modalContent: {
+        backgroundColor: "#0a0a0a",
+        borderRadius: 24,
+        borderWidth: 1,
+        borderColor: "rgba(11, 127, 79, 0.4)",
+        padding: 24,
+        width: "100%",
+        maxWidth: 340,
+    },
+    modalContentLandscape: {
+        maxWidth: 400,
+        paddingVertical: 20,
+        paddingHorizontal: 28,
+    },
+    modalTitle: {
+        color: "white",
+        fontSize: 20,
+        fontWeight: "bold",
+        textAlign: "center",
+        marginBottom: 8,
+    },
+    modalSubtitle: {
+        color: "rgba(255, 255, 255, 0.7)",
+        fontSize: 14,
+        textAlign: "center",
+        marginBottom: 20,
+    },
+    modalButtonContainer: {
+        gap: 12,
+    },
+    modalOptionButton: {
+        paddingVertical: 16,
+        borderRadius: 16,
+        alignItems: "center",
+        backgroundColor: "rgba(11, 127, 79, 0.3)",
+        borderWidth: 1,
+        borderColor: "rgba(11, 127, 79, 0.4)",
+    },
+    modalOptionText: {
+        color: "white",
+        fontSize: 18,
+        fontWeight: "600",
+    },
+    modalCancelButton: {
+        marginTop: 16,
+        paddingVertical: 12,
+        alignItems: "center",
+    },
+    modalCancelText: {
+        color: "rgba(255, 255, 255, 0.5)",
+        fontSize: 14,
     },
 });

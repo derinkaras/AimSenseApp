@@ -143,7 +143,7 @@ export default function Step2() {
                             <View className="flex-1">
                                 <Text className={`text-white ${titleSize} font-semibold`}>Set Reference</Text>
                                 <Text className={`text-white/80 ${subtitleMargin} ${subtitleSize}`}>
-                                    Get it close, then hold steady.
+                                    Make your phone is upright and pointing forward with the gun
                                 </Text>
                             </View>
                         </View>
@@ -194,14 +194,16 @@ export default function Step2() {
                                 ].join(" ")}
                             >
                                 <Text className={`text-white font-semibold ${isLandscapeMode ? "text-base" : "text-lg"}`}>
-                                    {isLevel ? "Reference ready — tap Continue" : "Adjust until level…"}
+                                    {isLevel ? "Reference locked — tap Continue" : "Align to set reference"}
                                 </Text>
+
                                 <Text className="text-white/70 mt-1 text-sm">
                                     {isLevel
-                                        ? "Hold the rifle upright and pointing forward."
-                                        : "Small adjustments are enough. Once level, pause briefly."}
+                                        ? "This sets the baseline for accurate cant and pitch tracking during the hunt."
+                                        : "This position becomes the zero reference. Make small adjustments and hold steady once level."}
                                 </Text>
                             </View>
+
 
                             {!isLevel && Math.abs(safe) <= 5 && (
                                 <View className="mt-4 flex-row items-start">

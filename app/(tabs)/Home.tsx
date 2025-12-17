@@ -145,8 +145,9 @@ export default function Home() {
                             {/* ===================== FOOTER NOTE ===================== */}
                             <View className="mt-4 rounded-2xl bg-brand-black/35 border border-brand-green/25 px-4 py-3">
                                 <Text className="text-white/70 text-sm text-center">
-                                    Before you begin, ensure the phone is level against the phone mount's clamp wall,
-                                    and that the scope clamp is firmly seated on the scope adapters divots.
+                                    Before you begin, make sure the phone is level and flush against the mount’s clamp
+                                    wall. Verify that the scope clamp is fully seated in the adapter’s divots and
+                                    securely tightened to the scope using the split-collar clamp.
                                 </Text>
                             </View>
                         </View>

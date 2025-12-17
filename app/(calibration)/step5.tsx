@@ -237,7 +237,57 @@ export default function Step5() {
     const dpIcon = isLandscapeMode ? "w-4 h-4" : "w-5 h-5";
 
     // ============================================================
-    // Instruction Phase (KEEP as you have it)
+    // Unexpected Behavior Modal (shared by all phases)
+    // ============================================================
+    const renderUnexpectedModal = () => (
+        <Modal
+            visible={showUnexpectedModal}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowUnexpectedModal(false)}
+            supportedOrientations={["portrait", "landscape"]}
+        >
+            <Pressable
+                style={styles.modalOverlay}
+                onPress={() => setShowUnexpectedModal(false)}
+            >
+                <Pressable
+                    style={[
+                        styles.modalContent,
+                        isLandscapeMode && styles.modalContentLandscape,
+                    ]}
+                    onPress={(e) => e.stopPropagation()}
+                >
+                    <Text style={styles.modalTitle}>Unexpected behavior</Text>
+                    <Text style={styles.modalSubtitle}>
+                        When you made that adjustment, the crosshair moved:
+                    </Text>
+
+                    <View style={styles.modalButtonContainer}>
+                        {(["up", "down"] as Direction[]).map((dir) => (
+                            <Pressable
+                                key={dir}
+                                onPress={() => handleUnexpectedDirection(dir)}
+                                style={styles.modalOptionButton}
+                            >
+                                <Text style={styles.modalOptionText}>{dir.toUpperCase()}</Text>
+                            </Pressable>
+                        ))}
+                    </View>
+
+                    <Pressable
+                        onPress={() => setShowUnexpectedModal(false)}
+                        style={styles.modalCancelButton}
+                    >
+                        <Text style={styles.modalCancelText}>Cancel</Text>
+                    </Pressable>
+                </Pressable>
+            </Pressable>
+        </Modal>
+    );
+
+    // ============================================================
+    // Instruction Phase
     // ============================================================
     if (phase === "instruction") {
         return (
@@ -332,8 +382,8 @@ export default function Step5() {
                                     </View>
                                 </View>
                             ) : (
+                                /* --- PORTRAIT BODY --- */
                                 <>
-                                    {/* Portrait body (unchanged) */}
                                     <View className="bg-brand-black/40 rounded-2xl p-4 mb-4">
                                         <Text className="text-white/80 text-center text-base mb-2">
                                             Turn the <Text className="text-white font-bold">ELEVATION</Text> turret
@@ -389,38 +439,7 @@ export default function Step5() {
                     </View>
                 </SafeAreaView>
 
-                {/* Unexpected Behavior Modal */}
-                <Modal
-                    visible={showUnexpectedModal}
-                    transparent
-                    animationType="fade"
-                    onRequestClose={() => setShowUnexpectedModal(false)}
-                >
-                    <View className="flex-1 bg-black/80 justify-center items-center px-6">
-                        <View className="bg-brand-black rounded-3xl border border-brand-green/40 p-6 w-full max-w-sm">
-                            <Text className="text-white text-xl font-bold text-center mb-2">Unexpected behavior</Text>
-                            <Text className="text-white/70 text-center mb-6">
-                                When you made that adjustment, the crosshair moved:
-                            </Text>
-
-                            <View className="gap-3">
-                                {(["up", "down"] as Direction[]).map((dir) => (
-                                    <Pressable
-                                        key={dir}
-                                        onPress={() => handleUnexpectedDirection(dir)}
-                                        className="py-4 rounded-2xl items-center bg-brand-greenDark/60 border border-brand-green/40"
-                                    >
-                                        <Text className="text-white text-lg font-semibold capitalize">{dir}</Text>
-                                    </Pressable>
-                                ))}
-                            </View>
-
-                            <Pressable onPress={() => setShowUnexpectedModal(false)} className="mt-4 py-3 items-center">
-                                <Text className="text-white/50 text-sm">Cancel</Text>
-                            </Pressable>
-                        </View>
-                    </View>
-                </Modal>
+                {renderUnexpectedModal()}
             </View>
         );
     }
@@ -897,5 +916,65 @@ const styles = StyleSheet.create({
         height: 6,
         borderRadius: 3,
         backgroundColor: "#22c55e",
+    },
+    // Modal styles (landscape-safe)
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0, 0, 0, 0.85)",
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 24,
+    },
+    modalContent: {
+        backgroundColor: "#0a0a0a",
+        borderRadius: 24,
+        borderWidth: 1,
+        borderColor: "rgba(11, 127, 79, 0.4)",
+        padding: 24,
+        width: "100%",
+        maxWidth: 340,
+    },
+    modalContentLandscape: {
+        maxWidth: 400,
+        paddingVertical: 20,
+        paddingHorizontal: 28,
+    },
+    modalTitle: {
+        color: "white",
+        fontSize: 20,
+        fontWeight: "bold",
+        textAlign: "center",
+        marginBottom: 8,
+    },
+    modalSubtitle: {
+        color: "rgba(255, 255, 255, 0.7)",
+        fontSize: 14,
+        textAlign: "center",
+        marginBottom: 20,
+    },
+    modalButtonContainer: {
+        gap: 12,
+    },
+    modalOptionButton: {
+        paddingVertical: 16,
+        borderRadius: 16,
+        alignItems: "center",
+        backgroundColor: "rgba(11, 127, 79, 0.3)",
+        borderWidth: 1,
+        borderColor: "rgba(11, 127, 79, 0.4)",
+    },
+    modalOptionText: {
+        color: "white",
+        fontSize: 18,
+        fontWeight: "600",
+    },
+    modalCancelButton: {
+        marginTop: 16,
+        paddingVertical: 12,
+        alignItems: "center",
+    },
+    modalCancelText: {
+        color: "rgba(255, 255, 255, 0.5)",
+        fontSize: 14,
     },
 });
