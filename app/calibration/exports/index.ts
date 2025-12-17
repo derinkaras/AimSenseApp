@@ -8,10 +8,42 @@ export type MountOrientation =
     | "landscape-right"
     | "portrait-upside-down";
 
+export type ScopeUnit = "MOA" | "MIL";
+
+export type ClickSizeOption = {
+    label: string;
+    value: number;
+};
+
+export const MOA_CLICK_OPTIONS: ClickSizeOption[] = [
+    { label: "¼ MOA", value: 0.25 },
+    { label: "½ MOA", value: 0.5 },
+    { label: "⅛ MOA", value: 0.125 },
+];
+
+export const MIL_CLICK_OPTIONS: ClickSizeOption[] = [
+    { label: "0.1 mil", value: 0.1 },
+    { label: "0.2 mil", value: 0.2 },
+    { label: "0.05 mil", value: 0.05 },
+];
+
+// Default calibration click count (how many clicks we ask user to dial)
+export const CALIBRATION_CLICK_COUNT = 20;
+
+export interface ScopeCenterPx {
+    x: number;
+    y: number;
+}
+
 export interface CalibrationResult {
     mountOrientation: MountOrientation;
-    roll0: number;      // raw IMU roll baseline
-    pitch0: number;     // raw IMU pitch baseline
+    roll0: number;
+    pitch0: number;
+    scopeUnit: ScopeUnit;
+    clickSize: number;
+    scopeCenterPx: ScopeCenterPx;
+    pxPerUnitX: number;
+    pxPerUnitY: number;
     calibratedAt: number;
 }
 
@@ -26,8 +58,8 @@ export interface TiltLevelConfig {
 }
 
 export const DEFAULT_TILT_CONFIG: TiltLevelConfig = {
-    toleranceDeg: 3.0,      // ≤ 3° gating condition for baseline capture
-    holdMs: 500,            // 0.4-0.6s stability requirement
+    toleranceDeg: 3.0,
+    holdMs: 500,
     zeroEnterDeg: 0.12,
     zeroExitDeg: 0.6,
     smoothingAlpha: 0.18,
@@ -64,6 +96,32 @@ export function smooth(prev: number, next: number, alpha = 0.2): number {
     return prev === Infinity || Number.isNaN(prev) ? next : prev * (1 - alpha) + next * alpha;
 }
 
+export function getUnitLabel(unit: ScopeUnit): string {
+    return unit === "MOA" ? "MOA" : "MIL";
+}
+
+export function getClickSizeLabel(unit: ScopeUnit, clickSize: number): string {
+    const options = unit === "MOA" ? MOA_CLICK_OPTIONS : MIL_CLICK_OPTIONS;
+    const option = options.find((o) => o.value === clickSize);
+    return option?.label ?? `${clickSize} ${unit.toLowerCase()}`;
+}
+
+// Calculate angular movement in units from click count
+export function clicksToUnits(clicks: number, clickSize: number): number {
+    return clicks * clickSize;
+}
+
+// Calculate pixels per unit from movement
+export function calculatePxPerUnit(
+    deltaPx: number,
+    clicks: number,
+    clickSize: number
+): number {
+    const units = clicksToUnits(clicks, clickSize);
+    if (units === 0) return 0;
+    return Math.abs(deltaPx) / units;
+}
+
 // ==================== ORIENTATION SERVICES ====================
 const ORIENTATION_LOCKS: Record<MountOrientation, ScreenOrientation.OrientationLock> = {
     portrait: ScreenOrientation.OrientationLock.PORTRAIT_UP,
@@ -90,17 +148,67 @@ export async function lockToPortrait(): Promise<void> {
 
 // ==================== STORE (SESSION-ONLY) ====================
 interface CalibrationState {
+    // Step 1: Phone orientation
     mountOrientation: MountOrientation;
     pendingOrientation: MountOrientation;
-    roll0: number;          // raw IMU roll baseline
-    pitch0: number;         // raw IMU pitch baseline
+
+    // Step 2: Scope setup
+    scopeUnit: ScopeUnit;
+    clickSize: number;
+
+    // Step 3: Scope center alignment
+    scopeCenterPx: ScopeCenterPx | null;
+
+    // Step 4: Elevation calibration
+    elevationStartPx: ScopeCenterPx | null;
+    elevationEndPx: ScopeCenterPx | null;
+    elevationInverted: boolean; // true if "up" moves reticle down on screen
+
+    // Step 5: Windage calibration
+    windageStartPx: ScopeCenterPx | null;
+    windageEndPx: ScopeCenterPx | null;
+    windageInverted: boolean; // true if "right" moves reticle left on screen
+
+    // Computed pixel scales
+    pxPerUnitX: number;
+    pxPerUnitY: number;
+
+    // Step 6: Reference (baseline IMU)
+    roll0: number;
+    pitch0: number;
+
+    // Saved result
     savedResult: CalibrationResult | null;
 }
 
 interface CalibrationActions {
+    // Step 1: Phone orientation
     setPendingOrientation: (o: MountOrientation) => void;
     confirmOrientation: () => Promise<void>;
+
+    // Step 2: Scope setup
+    setScopeUnit: (unit: ScopeUnit) => void;
+    setClickSize: (size: number) => void;
+
+    // Step 3: Scope center
+    setScopeCenterPx: (center: ScopeCenterPx) => void;
+
+    // Step 4: Elevation calibration
+    setElevationStartPx: (pos: ScopeCenterPx) => void;
+    setElevationEndPx: (pos: ScopeCenterPx) => void;
+    setElevationInverted: (inverted: boolean) => void;
+    calculateElevationScale: () => void;
+
+    // Step 5: Windage calibration
+    setWindageStartPx: (pos: ScopeCenterPx) => void;
+    setWindageEndPx: (pos: ScopeCenterPx) => void;
+    setWindageInverted: (inverted: boolean) => void;
+    calculateWindageScale: () => void;
+
+    // Step 6: Reference capture
     captureBaseline: (roll0: number, pitch0: number) => void;
+
+    // Finish & reset
     finishCalibration: () => Promise<CalibrationResult>;
     resetCalibration: () => Promise<void>;
     clearSavedCalibration: () => Promise<void>;
@@ -109,14 +217,25 @@ interface CalibrationActions {
 type CalibrationStore = CalibrationState & CalibrationActions;
 
 export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
-    // State (in-memory only -> resets on reload)
+    // Initial state
     mountOrientation: "portrait",
     pendingOrientation: "portrait",
+    scopeUnit: "MOA",
+    clickSize: 0.25, // Default ¼ MOA
+    scopeCenterPx: null,
+    elevationStartPx: null,
+    elevationEndPx: null,
+    elevationInverted: false,
+    windageStartPx: null,
+    windageEndPx: null,
+    windageInverted: false,
+    pxPerUnitX: 0,
+    pxPerUnitY: 0,
     roll0: 0,
     pitch0: 0,
     savedResult: null,
 
-    // Actions
+    // Step 1: Phone orientation
     setPendingOrientation: (o) => set({ pendingOrientation: o }),
 
     confirmOrientation: async () => {
@@ -125,30 +244,114 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
         set({ mountOrientation: pendingOrientation });
     },
 
-    // Capture raw IMU roll and pitch as baseline reference
+    // Step 2: Scope setup
+    setScopeUnit: (unit) => {
+        // Reset click size to default when unit changes
+        const defaultClickSize = unit === "MOA" ? 0.25 : 0.1;
+        set({ scopeUnit: unit, clickSize: defaultClickSize });
+    },
+
+    setClickSize: (size) => set({ clickSize: size }),
+
+    // Step 3: Scope center
+    setScopeCenterPx: (center) => set({ scopeCenterPx: center }),
+
+    // Step 4: Elevation calibration
+    setElevationStartPx: (pos) => set({ elevationStartPx: pos }),
+
+    setElevationEndPx: (pos) => set({ elevationEndPx: pos }),
+
+    setElevationInverted: (inverted) => set({ elevationInverted: inverted }),
+
+    calculateElevationScale: () => {
+        const { elevationStartPx, elevationEndPx, clickSize, elevationInverted } = get();
+        if (!elevationStartPx || !elevationEndPx) return;
+
+        // Calculate vertical pixel movement
+        let deltaPxY = elevationEndPx.y - elevationStartPx.y;
+
+        // If inverted, flip the sign for correct scale calculation
+        if (elevationInverted) {
+            deltaPxY = -deltaPxY;
+        }
+
+        const pxPerUnitY = calculatePxPerUnit(deltaPxY, CALIBRATION_CLICK_COUNT, clickSize);
+        set({ pxPerUnitY });
+    },
+
+    // Step 5: Windage calibration
+    setWindageStartPx: (pos) => set({ windageStartPx: pos }),
+
+    setWindageEndPx: (pos) => set({ windageEndPx: pos }),
+
+    setWindageInverted: (inverted) => set({ windageInverted: inverted }),
+
+    calculateWindageScale: () => {
+        const { windageStartPx, windageEndPx, clickSize, windageInverted } = get();
+        if (!windageStartPx || !windageEndPx) return;
+
+        // Calculate horizontal pixel movement
+        let deltaPxX = windageEndPx.x - windageStartPx.x;
+
+        // If inverted, flip the sign for correct scale calculation
+        if (windageInverted) {
+            deltaPxX = -deltaPxX;
+        }
+
+        const pxPerUnitX = calculatePxPerUnit(deltaPxX, CALIBRATION_CLICK_COUNT, clickSize);
+        set({ pxPerUnitX });
+    },
+
+    // Step 6: Reference capture
     captureBaseline: (roll0, pitch0) => set({ roll0, pitch0 }),
 
+    // Finish calibration
     finishCalibration: async () => {
-        const { mountOrientation, roll0, pitch0 } = get();
+        const {
+            mountOrientation,
+            roll0,
+            pitch0,
+            scopeUnit,
+            clickSize,
+            scopeCenterPx,
+            pxPerUnitX,
+            pxPerUnitY,
+        } = get();
+
+        if (!scopeCenterPx) {
+            throw new Error("Scope center not calibrated");
+        }
+
         const result: CalibrationResult = {
             mountOrientation,
             roll0,
             pitch0,
+            scopeUnit,
+            clickSize,
+            scopeCenterPx,
+            pxPerUnitX,
+            pxPerUnitY,
             calibratedAt: Date.now(),
         };
 
-        // Return to portrait after finishing
         await lockToPortrait();
 
-        // Keep savedResult in memory for the rest of the app session
         set({
             savedResult: result,
             pendingOrientation: "portrait",
             mountOrientation: "portrait",
+            scopeCenterPx: null,
+            elevationStartPx: null,
+            elevationEndPx: null,
+            windageStartPx: null,
+            windageEndPx: null,
+            pxPerUnitX: 0,
+            pxPerUnitY: 0,
             roll0: 0,
             pitch0: 0,
         });
-        console.log("This is the calibration info: ", result);
+
+        console.log("Calibration saved:", result);
         return result;
     },
 
@@ -157,6 +360,17 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
         set({
             mountOrientation: "portrait",
             pendingOrientation: "portrait",
+            scopeUnit: "MOA",
+            clickSize: 0.25,
+            scopeCenterPx: null,
+            elevationStartPx: null,
+            elevationEndPx: null,
+            elevationInverted: false,
+            windageStartPx: null,
+            windageEndPx: null,
+            windageInverted: false,
+            pxPerUnitX: 0,
+            pxPerUnitY: 0,
             roll0: 0,
             pitch0: 0,
         });
@@ -168,14 +382,16 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
 }));
 
 // ==================== SELECTORS ====================
-// IMPORTANT: Do NOT return new objects from selectors - causes infinite loops!
-// Use primitive selectors and call them separately in components.
-
 export const selectIsCalibrated = (s: CalibrationStore) => s.savedResult !== null;
 export const selectSavedResult = (s: CalibrationStore) => s.savedResult;
 export const selectMountOrientation = (s: CalibrationStore) => s.mountOrientation;
 export const selectPendingOrientation = (s: CalibrationStore) => s.pendingOrientation;
-
-// Separate primitive selectors for roll0 and pitch0 (avoids creating new object)
+export const selectScopeUnit = (s: CalibrationStore) => s.scopeUnit;
+export const selectClickSize = (s: CalibrationStore) => s.clickSize;
+export const selectScopeCenterPx = (s: CalibrationStore) => s.scopeCenterPx;
+export const selectPxPerUnitX = (s: CalibrationStore) => s.pxPerUnitX;
+export const selectPxPerUnitY = (s: CalibrationStore) => s.pxPerUnitY;
 export const selectRoll0 = (s: CalibrationStore) => s.roll0;
 export const selectPitch0 = (s: CalibrationStore) => s.pitch0;
+export const selectElevationInverted = (s: CalibrationStore) => s.elevationInverted;
+export const selectWindageInverted = (s: CalibrationStore) => s.windageInverted;

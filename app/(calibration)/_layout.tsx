@@ -1,10 +1,10 @@
 // ============================================================
-// _layout.tsx - ALTERNATIVE APPROACH
+// _layout.tsx - Calibration Flow Layout
 // ============================================================
-// Instead of trying to make Stack transparent, we track which
-// screen is active and only that screen renders its camera.
+// Manages camera context so only one screen renders camera at a time.
+// Supports 7-step calibration flow.
 
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, { createContext, useContext, useState } from "react";
 import { Stack } from "expo-router";
 
 type CameraContextType = {

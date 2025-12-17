@@ -27,6 +27,12 @@ import check from "../assets/icons/check-solid-full.png"
 import level from "../assets/icons/level.png"
 import tilt from "../assets/icons/tilt.png"
 import arrowRight from "../assets/icons/arrow-right.png"
+import chevronLeft from "../assets/icons/chevronLeft.png"
+import chevronUp from "../assets/icons/chevronUp.png"
+import chevronDown from "../assets/icons/chevronDown.png"
+import arrowUp from "../assets/icons/arrowUp.png"
+import scope from "../assets/icons/scope.png"
+
 const icons = {
     leftArrow,
     mail,
@@ -56,6 +62,11 @@ const icons = {
     check,
     level,
     tilt,
-    arrowRight
+    arrowRight,
+    chevronLeft,
+    chevronUp,
+    chevronDown,
+    arrowUp,
+    scope
 }
 export default icons

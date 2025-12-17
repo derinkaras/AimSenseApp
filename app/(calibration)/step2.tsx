@@ -1,276 +1,267 @@
-import React, { useCallback, useEffect, useRef } from "react";
+// ============================================================
+// step2.tsx - Scope Setup (Units + Click Size)
+// ============================================================
+// User selects their scope's unit system (MOA/MIL) and click size.
+
+import React, { useCallback } from "react";
 import { View, Text, Pressable, ScrollView, Image, StyleSheet } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import * as Haptics from "expo-haptics";
 
 import {
-  useCalibrationStore,
-  selectMountOrientation,
-  isLandscape,
-  DEFAULT_TILT_CONFIG,
+    useCalibrationStore,
+    selectScopeUnit,
+    selectClickSize,
+    selectMountOrientation,
+    isLandscape,
+    ScopeUnit,
+    MOA_CLICK_OPTIONS,
+    MIL_CLICK_OPTIONS,
 } from "@/app/calibration/exports";
-import { useTiltLevel } from "@/app/hooks/useTiltLevel";
 import icons from "@/app/constants/icons";
-import { CommonActions, useIsFocused, useNavigation } from "@react-navigation/native";
+import { CommonActions, useNavigation } from "@react-navigation/native";
 import { useCameraContext } from "./_layout";
 
 const SCREEN_ID = "step2";
 
 export default function Step2() {
-  const [permission] = useCameraPermissions();
-  const cameraEnabled = !!permission?.granted;
+    const [permission] = useCameraPermissions();
+    const cameraEnabled = !!permission?.granted;
 
-  // ============================================================
-  // KEY: Get context and register this screen when focused
-  // ============================================================
-  const { activeScreen, setActiveScreen } = useCameraContext();
-  const isFocused = useIsFocused();
+    const { activeScreen, setActiveScreen } = useCameraContext();
 
-  useFocusEffect(
-      useCallback(() => {
-        setActiveScreen(SCREEN_ID);
-        return () => {};
-      }, [setActiveScreen])
-  );
-
-  // Only render camera if this is the active screen
-  const shouldRenderCamera = cameraEnabled && activeScreen === SCREEN_ID;
-
-  const insets = useSafeAreaInsets();
-  const bottomPadding = Math.max(insets.bottom, 8);
-  const wasLevel = useRef(false);
-
-  const timeouts = useRef<Array<ReturnType<typeof setTimeout>>>([]);
-  const clearHapticsTimers = useCallback(() => {
-    timeouts.current.forEach((id) => clearTimeout(id));
-    timeouts.current = [];
-  }, []);
-
-  const mountOrientation = useCalibrationStore(selectMountOrientation);
-  const captureBaseline = useCalibrationStore((s) => s.captureBaseline);
-  const reset = useCalibrationStore((s) => s.resetCalibration);
-
-  // Sensor subscription stops when Step2 is not focused
-  const { levelDeg, isLevel, rollNow, pitchNow } = useTiltLevel(
-      mountOrientation,
-      DEFAULT_TILT_CONFIG,
-      { enabled: isFocused, updateIntervalMs: 60 }
-  );
-
-  const isLandscapeMode = isLandscape(mountOrientation);
-  const safe = Number.isFinite(levelDeg) ? levelDeg : 0;
-  const navigation = useNavigation();
-
-  // Ensure haptics never fire after leaving Step2
-  useFocusEffect(
-      useCallback(() => {
-        wasLevel.current = false;
-        return () => {
-          wasLevel.current = false;
-          clearHapticsTimers();
-        };
-      }, [clearHapticsTimers])
-  );
-
-  // Haptic feedback when level is achieved
-  useEffect(() => {
-    if (!isFocused) return;
-    clearHapticsTimers();
-
-    if (isLevel && !wasLevel.current) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      timeouts.current.push(
-          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 100)
-      );
-      timeouts.current.push(
-          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 200)
-      );
-    }
-    wasLevel.current = isLevel;
-  }, [isLevel, isFocused, clearHapticsTimers]);
-
-  const handleCapture = () => {
-    captureBaseline(rollNow, pitchNow);
-    router.push("/(calibration)/step3");
-  };
-
-  const handleBack = async () => {
-    await reset();
-    router.back();
-  };
-
-  const handleCancel = async () => {
-    await reset();
-    navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{ name: "(tabs)" }],
-        })
+    useFocusEffect(
+        useCallback(() => {
+            setActiveScreen(SCREEN_ID);
+            return () => {};
+        }, [setActiveScreen])
     );
-  };
 
-  // Layout tuning
-  const angleFontSize = isLandscapeMode ? "text-5xl" : "text-6xl";
-  const containerPadding = isLandscapeMode ? "p-4" : "p-6";
-  const headerPadding = isLandscapeMode ? "p-3" : "p-5";
-  const headerMargin = isLandscapeMode ? "mt-3" : "mt-6";
-  const scrollPadding = isLandscapeMode ? 140 : 240;
-  const titleSize = isLandscapeMode ? "text-xl" : "text-2xl";
-  const subtitleSize = isLandscapeMode ? "text-sm" : "text-base";
-  const subtitleMargin = isLandscapeMode ? "mt-1" : "mt-2";
+    const shouldRenderCamera = cameraEnabled && activeScreen === SCREEN_ID;
 
-  const safeAreaEdges: ("top" | "bottom" | "left" | "right")[] = ["top", "bottom"];
-  if (isLandscapeMode) safeAreaEdges.push("left", "right");
+    const insets = useSafeAreaInsets();
+    const bottomPadding = Math.max(insets.bottom, 8);
+    const navigation = useNavigation();
 
-  return (
-      <View className="flex-1 bg-brand-black">
-        {/* Only renders when this is the active screen */}
-        {shouldRenderCamera && (
-            <CameraView style={StyleSheet.absoluteFill} facing="back" />
-        )}
+    const mountOrientation = useCalibrationStore(selectMountOrientation);
+    const scopeUnit = useCalibrationStore(selectScopeUnit);
+    const clickSize = useCalibrationStore(selectClickSize);
+    const setScopeUnit = useCalibrationStore((s) => s.setScopeUnit);
+    const setClickSize = useCalibrationStore((s) => s.setClickSize);
+    const reset = useCalibrationStore((s) => s.resetCalibration);
 
-        <SafeAreaView className="flex-1" edges={safeAreaEdges}>
-          <View className={`flex-1 ${isLandscapeMode ? "px-4" : "px-6"} pt-4`}>
-            {/* Header */}
-            <View className={`rounded-3xl ${headerPadding} bg-brand-greenDark/70 border border-brand-green/60`}>
-              <View className="flex-row items-center">
-                <View className="size-11 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-3">
-                  <Image source={icons.compass} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
-                </View>
-                <View className="flex-1">
-                  <Text className={`text-white ${titleSize} font-semibold`}>Step 2: Set Baseline</Text>
-                  <Text className={`text-white/80 ${subtitleMargin} ${subtitleSize}`}>
-                    Hold the rifle upright and pointing forward. Level it within ±3°, then hold steady.
-                  </Text>
-                </View>
-              </View>
-            </View>
+    const isLandscapeMode = isLandscape(mountOrientation);
+    const clickOptions = scopeUnit === "MOA" ? MOA_CLICK_OPTIONS : MIL_CLICK_OPTIONS;
 
-            {/* Level Display */}
-            <ScrollView
-                className={headerMargin}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ flexGrow: 1, paddingBottom: scrollPadding }}
-            >
-              <View
-                  className={[
-                    "rounded-3xl border bg-brand-greenDark/65",
-                    isLevel ? "border-brand-greenLight" : "border-brand-green/45",
-                    containerPadding,
-                  ].join(" ")}
-              >
-                <View className="flex-row items-center justify-between">
-                  <View>
-                    <Text className="text-white/70 text-sm">Level Offset</Text>
-                    <Text className={`text-white font-bold ${angleFontSize} mt-2`}>{safe.toFixed(1)}°</Text>
-                  </View>
+    const safeAreaEdges: ("top" | "bottom" | "left" | "right")[] = ["top", "bottom"];
+    if (isLandscapeMode) safeAreaEdges.push("left", "right");
 
-                  <View
-                      className={[
-                        "size-16 rounded-3xl items-center justify-center border",
-                        isLevel
-                            ? "bg-brand-greenLight/15 border-brand-greenLight"
-                            : "bg-brand-black/40 border-brand-green/35",
-                      ].join(" ")}
-                  >
-                    <Image
-                        source={isLevel ? icons.level : icons.tilt}
-                        className="w-8 h-8"
-                        resizeMode="contain"
-                        tintColor={isLevel ? "#0b7f4f" : "#9ca3af"}
-                    />
-                  </View>
-                </View>
+    // Layout tuning
+    const headerPadding = isLandscapeMode ? "p-3" : "p-5";
+    const titleSize = isLandscapeMode ? "text-xl" : "text-2xl";
+    const subtitleSize = isLandscapeMode ? "text-sm" : "text-base";
+    const subtitleMargin = isLandscapeMode ? "mt-1" : "mt-2";
 
-                <View
-                    className={[
-                      "mt-5 px-4 py-3 rounded-2xl border",
-                      isLevel
-                          ? "bg-brand-greenLight/10 border-brand-greenLight/70"
-                          : "bg-brand-black/30 border-brand-green/30",
-                    ].join(" ")}
-                >
-                  <Text className={`text-white font-semibold ${isLandscapeMode ? "text-base" : "text-lg"}`}>
-                    {isLevel ? "Baseline ready — tap Continue" : "Adjust until level…"}
-                  </Text>
-                  <Text className="text-white/70 mt-1 text-sm">
-                    {isLevel
-                        ? "We'll save this as your baseline reference for pitch and cant."
-                        : "Small adjustments are enough. Once level, pause briefly to lock it in."}
-                  </Text>
-                </View>
+    const handleNext = () => {
+        router.push("/(calibration)/step3");
+    };
 
-                {/*/!* Debug info *!/*/}
-                {/*{isLevel && (*/}
-                {/*    <View className="mt-4 px-4 py-3 rounded-2xl bg-brand-black/30 border border-brand-green/20">*/}
-                {/*      <Text className="text-white/50 text-xs font-mono">Baseline to capture:</Text>*/}
-                {/*      <Text className="text-white/70 text-xs font-mono mt-1">*/}
-                {/*        roll0: {rollNow.toFixed(3)}° | pitch0: {pitchNow.toFixed(3)}°*/}
-                {/*      </Text>*/}
-                {/*    </View>*/}
-                {/*)}*/}
+    const handleBack = () => {
+        router.back();
+    };
 
-                {!isLevel && Math.abs(safe) <= 5 && (
-                    <View className="mt-4 flex-row items-start">
-                      <View className="size-10 rounded-2xl bg-brand-black/40 border border-brand-green/35 items-center justify-center mr-3">
-                        <Image source={icons.info} className="w-5 h-5" resizeMode="contain" tintColor="#9ca3af" />
-                      </View>
-                      <Text className="flex-1 text-white/65 text-sm">
-                        Almost there — keep the rifle upright, make small adjustments, then hold steady.
-                      </Text>
+    const handleCancel = async () => {
+        await reset();
+        navigation.dispatch(
+            CommonActions.reset({
+                index: 0,
+                routes: [{ name: "(tabs)" }],
+            })
+        );
+    };
+
+    const handleUnitSelect = (unit: ScopeUnit) => {
+        setScopeUnit(unit);
+    };
+
+    return (
+        <View className="flex-1 bg-brand-black">
+            {shouldRenderCamera && (
+                <CameraView style={StyleSheet.absoluteFill} facing="back" />
+            )}
+
+            <SafeAreaView className="flex-1" edges={safeAreaEdges}>
+                <View className={`flex-1 ${isLandscapeMode ? "px-4" : "px-6"} pt-4`}>
+                    {/* Header */}
+                    <View className={`rounded-3xl ${headerPadding} bg-brand-greenDark/70 border border-brand-green/60`}>
+                        <View className="flex-row items-center">
+                            <View className="size-11 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-3">
+                                <Image source={icons.scope} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
+                            </View>
+                            <View className="flex-1">
+                                <Text className={`text-white ${titleSize} font-semibold`}>Scope Setup</Text>
+                                <Text className={`text-white/80 ${subtitleMargin} ${subtitleSize}`}>
+                                    AimSense will guide your scope adjustments.
+                                </Text>
+                            </View>
+                        </View>
                     </View>
-                )}
-              </View>
-            </ScrollView>
 
-            {/* CTAs */}
-            <View style={{ paddingBottom: bottomPadding }} className="mt-auto">
-              <Pressable
-                  onPress={handleCapture}
-                  disabled={!isLevel}
-                  className={[
-                    "rounded-2xl items-center border",
-                    isLandscapeMode ? "py-4" : "py-5",
-                    isLevel
-                        ? "bg-brand-greenLight border-brand-green/60"
-                        : "bg-brand-black/50 border-brand-green/30",
-                  ].join(" ")}
-              >
-                <Text className={`text-white font-semibold ${isLandscapeMode ? "text-lg" : "text-xl"}`}>
-                  {isLevel ? "Continue" : "Level the rifle to continue"}
-                </Text>
-              </Pressable>
+                    {/* Content */}
+                    <ScrollView
+                        className="mt-5"
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={{ gap: 16, paddingBottom: 200 }}
+                    >
+                        {/* Unit Selection */}
+                        <View className="rounded-3xl bg-brand-greenDark/50 border border-brand-green/40 p-4">
+                            <Text className="text-white font-semibold text-lg mb-3">Unit System</Text>
 
-              <View className="flex-row mt-3 gap-3">
-                <Pressable
-                    onPress={handleBack}
-                    className={[
-                      "flex-1 rounded-2xl items-center border bg-brand-black/50 border-brand-green/35",
-                      isLandscapeMode ? "py-3" : "py-4",
-                    ].join(" ")}
-                >
-                  <Text className={`text-white/90 font-semibold ${isLandscapeMode ? "text-sm" : "text-base"}`}>
-                    Back
-                  </Text>
-                </Pressable>
+                            <View className="flex-row gap-3">
+                                {(["MOA", "MIL"] as ScopeUnit[]).map((unit) => {
+                                    const selected = scopeUnit === unit;
+                                    return (
+                                        <Pressable
+                                            key={unit}
+                                            onPress={() => handleUnitSelect(unit)}
+                                            className={[
+                                                "flex-1 rounded-2xl py-4 items-center border",
+                                                selected
+                                                    ? "bg-brand-greenLight/20 border-brand-greenLight"
+                                                    : "bg-brand-black/40 border-brand-green/30",
+                                            ].join(" ")}
+                                        >
+                                            <Text
+                                                className={[
+                                                    "text-lg font-semibold",
+                                                    selected ? "text-white" : "text-white/70",
+                                                ].join(" ")}
+                                            >
+                                                {unit === "MOA" ? "MOA" : "MIL / MRAD"}
+                                            </Text>
+                                        </Pressable>
+                                    );
+                                })}
+                            </View>
+                        </View>
 
-                <Pressable
-                    onPress={handleCancel}
-                    className={[
-                      "flex-1 rounded-2xl items-center border bg-brand-black/50 border-brand-green/35",
-                      isLandscapeMode ? "py-3" : "py-4",
-                    ].join(" ")}
-                >
-                  <Text className={`text-white/90 font-semibold ${isLandscapeMode ? "text-sm" : "text-base"}`}>
-                    Cancel
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-        </SafeAreaView>
-      </View>
-  );
+                        {/* Click Size Selection */}
+                        <View className="rounded-3xl bg-brand-greenDark/50 border border-brand-green/40 p-4">
+                            <Text className="text-white font-semibold text-lg mb-1">Click Size</Text>
+                            <Text className="text-white/60 text-sm mb-4">
+                                Check your turret markings or manual.
+                            </Text>
+
+                            <View className="gap-3">
+                                {clickOptions.map((option) => {
+                                    const selected = clickSize === option.value;
+                                    return (
+                                        <Pressable
+                                            key={option.value}
+                                            onPress={() => setClickSize(option.value)}
+                                            className={[
+                                                "rounded-2xl px-4 py-4 flex-row items-center border",
+                                                selected
+                                                    ? "bg-brand-greenLight/15 border-brand-greenLight"
+                                                    : "bg-brand-black/40 border-brand-green/30",
+                                            ].join(" ")}
+                                        >
+                                            <View className="flex-1">
+                                                <Text
+                                                    className={[
+                                                        "text-lg font-semibold",
+                                                        selected ? "text-white" : "text-white/70",
+                                                    ].join(" ")}
+                                                >
+                                                    {option.label}
+                                                </Text>
+                                                <Text className="text-white/50 text-sm mt-0.5">
+                                                    {option.value} {scopeUnit.toLowerCase()} per click
+                                                </Text>
+                                            </View>
+
+                                            <View
+                                                className={[
+                                                    "size-6 rounded-full border items-center justify-center",
+                                                    selected
+                                                        ? "border-brand-greenLight bg-brand-greenLight/15"
+                                                        : "border-brand-green/40 bg-transparent",
+                                                ].join(" ")}
+                                            >
+                                                {selected && (
+                                                    <Image
+                                                        source={icons.check}
+                                                        className="w-4 h-4"
+                                                        resizeMode="contain"
+                                                        tintColor="#0b7f4f"
+                                                    />
+                                                )}
+                                            </View>
+                                        </Pressable>
+                                    );
+                                })}
+                            </View>
+                        </View>
+
+                        {/* Helper Tip */}
+                        <View className="rounded-3xl bg-brand-black/40 border border-brand-green/25 px-4 py-4">
+                            <View className="flex-row items-start">
+                                <View className="size-10 rounded-2xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mr-3">
+                                    <Image source={icons.info} className="w-5 h-5" resizeMode="contain" tintColor="#9ca3af" />
+                                </View>
+                                <View className="flex-1">
+                                    <Text className="text-white font-semibold text-sm">AimSense handles the math</Text>
+                                    <Text className="text-white/70 mt-1 text-sm">
+                                        Just follow the steps — we'll tell you exactly how many clicks to dial.
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+                    </ScrollView>
+
+                    {/* CTAs */}
+                    <View style={{ paddingBottom: bottomPadding }} className="mt-auto">
+                        <Pressable
+                            onPress={handleNext}
+                            className={[
+                                "rounded-2xl items-center border bg-brand-greenLight border-brand-green/60",
+                                isLandscapeMode ? "py-4" : "py-5",
+                            ].join(" ")}
+                        >
+                            <Text className={`text-white font-semibold ${isLandscapeMode ? "text-lg" : "text-xl"}`}>
+                                Continue
+                            </Text>
+                        </Pressable>
+
+                        <View className="flex-row mt-3 gap-3">
+                            <Pressable
+                                onPress={handleBack}
+                                className={[
+                                    "flex-1 rounded-2xl items-center border bg-brand-black/50 border-brand-green/35",
+                                    isLandscapeMode ? "py-3" : "py-4",
+                                ].join(" ")}
+                            >
+                                <Text className={`text-white/90 font-semibold ${isLandscapeMode ? "text-sm" : "text-base"}`}>
+                                    Back
+                                </Text>
+                            </Pressable>
+
+                            <Pressable
+                                onPress={handleCancel}
+                                className={[
+                                    "flex-1 rounded-2xl items-center border bg-brand-black/50 border-brand-green/35",
+                                    isLandscapeMode ? "py-3" : "py-4",
+                                ].join(" ")}
+                            >
+                                <Text className={`text-white/90 font-semibold ${isLandscapeMode ? "text-sm" : "text-base"}`}>
+                                    Cancel
+                                </Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </SafeAreaView>
+        </View>
+    );
 }

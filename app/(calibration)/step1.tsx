@@ -1,9 +1,7 @@
 // ============================================================
-// step1.tsx - ALTERNATIVE APPROACH
+// step1.tsx - Phone Orientation Selection
 // ============================================================
-// Each screen registers itself when focused, and only renders
-// its camera when it's the active screen. This guarantees only
-// ONE camera instance is rendering at any time.
+// User selects how their phone is mounted on the scope.
 
 import React, { useCallback } from "react";
 import { View, Text, Pressable, ScrollView, Image, StyleSheet } from "react-native";
@@ -32,20 +30,15 @@ export default function Step1() {
   const [permission] = useCameraPermissions();
   const cameraEnabled = !!permission?.granted;
 
-  // ============================================================
-  // KEY: Get context and register this screen when focused
-  // ============================================================
   const { activeScreen, setActiveScreen } = useCameraContext();
 
   useFocusEffect(
       useCallback(() => {
         setActiveScreen(SCREEN_ID);
-        return () => {
-        };
+        return () => {};
       }, [setActiveScreen])
   );
 
-  // Only render camera if this is the active screen
   const shouldRenderCamera = cameraEnabled && activeScreen === SCREEN_ID;
 
   const insets = useSafeAreaInsets();
@@ -74,7 +67,6 @@ export default function Step1() {
 
   return (
       <View className="flex-1 bg-brand-black">
-        {/* Only renders when this is the active screen */}
         {shouldRenderCamera && (
             <CameraView style={StyleSheet.absoluteFill} facing="back" />
         )}
@@ -88,7 +80,7 @@ export default function Step1() {
                   <Image source={icons.compass} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-white text-2xl font-semibold">Step 1: Phone Orientation</Text>
+                  <Text className="text-white text-2xl font-semibold">Phone Orientation</Text>
                   <Text className="text-white/80 mt-2 text-base">
                     Choose how your phone is mounted. The screen will rotate after you press Continue.
                   </Text>
