@@ -162,12 +162,15 @@ interface CalibrationState {
     // Step 4: Elevation calibration
     elevationStartPx: ScopeCenterPx | null;
     elevationEndPx: ScopeCenterPx | null;
-    elevationInverted: boolean; // true if "up" moves reticle down on screen
 
     // Step 5: Windage calibration
     windageStartPx: ScopeCenterPx | null;
     windageEndPx: ScopeCenterPx | null;
-    windageInverted: boolean; // true if "right" moves reticle left on screen
+
+    // Axes swapped: true if user turned wrong turret in step5
+    // (turned windage when asked for elevation)
+    // Step 6 will then calibrate elevation instead of windage
+    axesSwapped: boolean;
 
     // Computed pixel scales
     pxPerUnitX: number;
@@ -196,14 +199,15 @@ interface CalibrationActions {
     // Step 4: Elevation calibration
     setElevationStartPx: (pos: ScopeCenterPx) => void;
     setElevationEndPx: (pos: ScopeCenterPx) => void;
-    setElevationInverted: (inverted: boolean) => void;
     calculateElevationScale: () => void;
 
     // Step 5: Windage calibration
     setWindageStartPx: (pos: ScopeCenterPx) => void;
     setWindageEndPx: (pos: ScopeCenterPx) => void;
-    setWindageInverted: (inverted: boolean) => void;
     calculateWindageScale: () => void;
+
+    // Axes swap handling
+    setAxesSwapped: (swapped: boolean) => void;
 
     // Step 6: Reference capture
     captureBaseline: (roll0: number, pitch0: number) => void;
@@ -225,10 +229,9 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
     scopeCenterPx: null,
     elevationStartPx: null,
     elevationEndPx: null,
-    elevationInverted: false,
     windageStartPx: null,
     windageEndPx: null,
-    windageInverted: false,
+    axesSwapped: false,
     pxPerUnitX: 0,
     pxPerUnitY: 0,
     roll0: 0,
@@ -261,20 +264,12 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
 
     setElevationEndPx: (pos) => set({ elevationEndPx: pos }),
 
-    setElevationInverted: (inverted) => set({ elevationInverted: inverted }),
-
     calculateElevationScale: () => {
-        const { elevationStartPx, elevationEndPx, clickSize, elevationInverted } = get();
+        const { elevationStartPx, elevationEndPx, clickSize } = get();
         if (!elevationStartPx || !elevationEndPx) return;
 
         // Calculate vertical pixel movement
-        let deltaPxY = elevationEndPx.y - elevationStartPx.y;
-
-        // If inverted, flip the sign for correct scale calculation
-        if (elevationInverted) {
-            deltaPxY = -deltaPxY;
-        }
-
+        const deltaPxY = elevationEndPx.y - elevationStartPx.y;
         const pxPerUnitY = calculatePxPerUnit(deltaPxY, CALIBRATION_CLICK_COUNT, clickSize);
         set({ pxPerUnitY });
     },
@@ -284,23 +279,18 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
 
     setWindageEndPx: (pos) => set({ windageEndPx: pos }),
 
-    setWindageInverted: (inverted) => set({ windageInverted: inverted }),
-
     calculateWindageScale: () => {
-        const { windageStartPx, windageEndPx, clickSize, windageInverted } = get();
+        const { windageStartPx, windageEndPx, clickSize } = get();
         if (!windageStartPx || !windageEndPx) return;
 
         // Calculate horizontal pixel movement
-        let deltaPxX = windageEndPx.x - windageStartPx.x;
-
-        // If inverted, flip the sign for correct scale calculation
-        if (windageInverted) {
-            deltaPxX = -deltaPxX;
-        }
-
+        const deltaPxX = windageEndPx.x - windageStartPx.x;
         const pxPerUnitX = calculatePxPerUnit(deltaPxX, CALIBRATION_CLICK_COUNT, clickSize);
         set({ pxPerUnitX });
     },
+
+    // Axes swap handling
+    setAxesSwapped: (swapped) => set({ axesSwapped: swapped }),
 
     // Step 6: Reference capture
     captureBaseline: (roll0, pitch0) => set({ roll0, pitch0 }),
@@ -345,6 +335,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             elevationEndPx: null,
             windageStartPx: null,
             windageEndPx: null,
+            axesSwapped: false,
             pxPerUnitX: 0,
             pxPerUnitY: 0,
             roll0: 0,
@@ -365,10 +356,9 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             scopeCenterPx: null,
             elevationStartPx: null,
             elevationEndPx: null,
-            elevationInverted: false,
             windageStartPx: null,
             windageEndPx: null,
-            windageInverted: false,
+            axesSwapped: false,
             pxPerUnitX: 0,
             pxPerUnitY: 0,
             roll0: 0,
@@ -393,5 +383,4 @@ export const selectPxPerUnitX = (s: CalibrationStore) => s.pxPerUnitX;
 export const selectPxPerUnitY = (s: CalibrationStore) => s.pxPerUnitY;
 export const selectRoll0 = (s: CalibrationStore) => s.roll0;
 export const selectPitch0 = (s: CalibrationStore) => s.pitch0;
-export const selectElevationInverted = (s: CalibrationStore) => s.elevationInverted;
-export const selectWindageInverted = (s: CalibrationStore) => s.windageInverted;
+export const selectAxesSwapped = (s: CalibrationStore) => s.axesSwapped;

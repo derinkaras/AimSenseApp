@@ -1,15 +1,12 @@
 // ============================================================
-// step6.tsx - Windage Dial Calibration
+// step6.tsx - Second Turret Calibration (Windage or Elevation)
 // ============================================================
 // Two phases:
-// 1. Instruct user to dial windage RIGHT by X clicks
+// 1. Instruct user to dial turret any direction by X clicks
 // 2. User confirms new crosshair position
 //
-// UI rules:
-// - PORTRAIT: keep your existing UI unchanged (instruction + confirm)
-// - LANDSCAPE: instruction should match Step5 landscape (compact two-column card)
-//   and confirm phase becomes Step4-style:
-//   camera left + flush right control panel, responsive magnifier clamped + pushed from left
+// If axesSwapped is true (user turned windage in step5), this step
+// calibrates ELEVATION instead. Otherwise calibrates WINDAGE.
 
 import React, { useCallback, useMemo, useState } from "react";
 import {
@@ -31,6 +28,7 @@ import {
     selectMountOrientation,
     selectClickSize,
     selectScopeUnit,
+    selectAxesSwapped,
     isLandscape,
     CALIBRATION_CLICK_COUNT,
     ScopeCenterPx,
@@ -45,6 +43,7 @@ const SCREEN_ID = "step6";
 type Phase = "instruction" | "confirm";
 type StepSize = 1 | 5 | 10;
 type Direction = "up" | "down" | "left" | "right";
+type AxisDirection = "vertical" | "horizontal";
 
 const clamp = (v: number, min: number, max: number) =>
     Math.max(min, Math.min(max, v));
@@ -72,12 +71,29 @@ export default function Step6() {
     const mountOrientation = useCalibrationStore(selectMountOrientation);
     const clickSize = useCalibrationStore(selectClickSize);
     const scopeUnit = useCalibrationStore(selectScopeUnit);
+    const axesSwapped = useCalibrationStore(selectAxesSwapped);
+
+    // Normal flow (windage)
     const setWindageEndPx = useCalibrationStore((s) => s.setWindageEndPx);
-    const setWindageInverted = useCalibrationStore((s) => s.setWindageInverted);
     const calculateWindageScale = useCalibrationStore((s) => s.calculateWindageScale);
+
+    // Swapped flow (elevation)
+    const setElevationEndPx = useCalibrationStore((s) => s.setElevationEndPx);
+    const calculateElevationScale = useCalibrationStore((s) => s.calculateElevationScale);
+
     const reset = useCalibrationStore((s) => s.resetCalibration);
 
     const isLandscapeMode = isLandscape(mountOrientation);
+
+    // Determine what we're calibrating based on axesSwapped
+    const calibratingElevation = axesSwapped;
+    const turretName = calibratingElevation ? "ELEVATION" : "WINDAGE";
+    const expectedDirection = calibratingElevation ? "VERTICALLY" : "HORIZONTALLY";
+    const expectedDirectionDetail = calibratingElevation ? "up or down" : "left or right";
+    const turretLocation = calibratingElevation
+        ? "Elevation turret is usually on top of the scope"
+        : "Windage turret is usually on the side of the scope";
+    const icon = calibratingElevation ? icons.arrowUp : icons.arrowRight;
 
     // Phase state
     const [phase, setPhase] = useState<Phase>("instruction");
@@ -87,10 +103,10 @@ export default function Step6() {
     const [stepSize, setStepSize] = useState<StepSize>(1);
     const [lastTapPoint, setLastTapPoint] = useState<ScopeCenterPx | null>(null);
 
-    // Unexpected behavior modal
+    // Modal
     const [showUnexpectedModal, setShowUnexpectedModal] = useState(false);
 
-    // Camera layout (used for micro adjust clamping + magnifier clamping)
+    // Camera layout
     const [cameraLayout, setCameraLayout] = useState({
         x: 0,
         y: 0,
@@ -148,18 +164,27 @@ export default function Step6() {
 
     const handleConfirmPosition = () => {
         if (!centerPoint) return;
-        setWindageEndPx(centerPoint);
-        calculateWindageScale();
+
+        if (calibratingElevation) {
+            // Swapped: save as elevation
+            setElevationEndPx(centerPoint);
+            calculateElevationScale();
+        } else {
+            // Normal: save as windage
+            setWindageEndPx(centerPoint);
+            calculateWindageScale();
+        }
+
         router.push("/(calibration)/step7");
     };
 
-    // Unexpected behavior handling
+    // Unexpected behavior - just informational in step6
     const handleUnexpectedBehavior = () => setShowUnexpectedModal(true);
 
-    const handleUnexpectedDirection = (direction: Direction) => {
-        // If user says crosshair moved LEFT when they dialed RIGHT, it's inverted
-        if (direction === "left") setWindageInverted(true);
+    const handleAxisDirection = (axis: AxisDirection) => {
         setShowUnexpectedModal(false);
+        // In step6, we just acknowledge - no swap logic needed
+        // The user can continue or go back if they made a mistake
     };
 
     const handleBack = () => {
@@ -181,7 +206,7 @@ export default function Step6() {
         );
     };
 
-    // --------- Landscape confirm UI sizing (Step4-style) ----------
+    // Layout sizing
     const SIDE_PANEL_W = useMemo(() => {
         const w = Math.round(width * 0.34);
         return clamp(w, 220, 280);
@@ -230,7 +255,7 @@ export default function Step6() {
     const dpIcon = isLandscapeMode ? "w-4 h-4" : "w-5 h-5";
 
     // ============================================================
-    // Unexpected Behavior Modal (shared by all phases)
+    // Modal
     // ============================================================
     const renderUnexpectedModal = () => (
         <Modal
@@ -251,28 +276,40 @@ export default function Step6() {
                     ]}
                     onPress={(e) => e.stopPropagation()}
                 >
-                    <Text style={styles.modalTitle}>Unexpected behavior</Text>
+                    <Text style={styles.modalTitle}>Which way did it move?</Text>
                     <Text style={styles.modalSubtitle}>
-                        When you made that adjustment, the crosshair moved:
+                        When you dialed the turret, the crosshair moved:
                     </Text>
 
                     <View style={styles.modalButtonContainer}>
-                        {(["left", "right"] as Direction[]).map((dir) => (
-                            <Pressable
-                                key={dir}
-                                onPress={() => handleUnexpectedDirection(dir)}
-                                style={styles.modalOptionButton}
-                            >
-                                <Text style={styles.modalOptionText}>{dir.toUpperCase()}</Text>
-                            </Pressable>
-                        ))}
+                        <Pressable
+                            onPress={() => handleAxisDirection("vertical")}
+                            style={styles.modalOptionButton}
+                        >
+                            <Text style={styles.modalOptionText}>↑ UP or DOWN ↓</Text>
+                            <Text style={styles.modalOptionSubtext}>Vertical movement</Text>
+                        </Pressable>
+
+                        <Pressable
+                            onPress={() => handleAxisDirection("horizontal")}
+                            style={styles.modalOptionButton}
+                        >
+                            <Text style={styles.modalOptionText}>← LEFT or RIGHT →</Text>
+                            <Text style={styles.modalOptionSubtext}>Horizontal movement</Text>
+                        </Pressable>
                     </View>
+
+                    <Text style={[styles.modalSubtitle, { marginTop: 16, marginBottom: 0, fontSize: 12 }]}>
+                        {calibratingElevation
+                            ? "For elevation, vertical movement is expected."
+                            : "For windage, horizontal movement is expected."}
+                    </Text>
 
                     <Pressable
                         onPress={() => setShowUnexpectedModal(false)}
                         style={styles.modalCancelButton}
                     >
-                        <Text style={styles.modalCancelText}>Cancel</Text>
+                        <Text style={styles.modalCancelText}>Close</Text>
                     </Pressable>
                 </Pressable>
             </Pressable>
@@ -281,8 +318,6 @@ export default function Step6() {
 
     // ============================================================
     // Instruction Phase
-    // - PORTRAIT: unchanged
-    // - LANDSCAPE: match Step5 landscape compact two-column UI
     // ============================================================
     if (phase === "instruction") {
         return (
@@ -291,63 +326,50 @@ export default function Step6() {
 
                 <SafeAreaView className="flex-1" edges={safeAreaEdges}>
                     <View className={`flex-1 ${isLandscapeMode ? "px-4" : "px-6"} pt-4 justify-center`}>
+                        {/* Main Instruction Card */}
                         <View
                             className={[
                                 "rounded-3xl bg-brand-greenDark/85 border border-brand-green/60",
                                 isLandscapeMode ? "p-4" : "p-6",
                             ].join(" ")}
                         >
-                            {/* --- PORTRAIT HEADER (UNCHANGED) --- */}
+                            {/* --- PORTRAIT HEADER --- */}
                             {!isLandscapeMode && (
                                 <View className="items-center mb-4">
                                     <View className="size-16 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mb-3">
-                                        <Image
-                                            source={icons.arrowRight}
-                                            className="w-8 h-8"
-                                            resizeMode="contain"
-                                            tintColor="#22c55e"
-                                        />
+                                        <Image source={icon} className="w-8 h-8" resizeMode="contain" tintColor="#22c55e" />
                                     </View>
                                     <Text className="text-white text-2xl font-bold text-center">
-                                        Windage Calibration
+                                        {calibratingElevation ? "Elevation" : "Windage"} Calibration
                                     </Text>
                                 </View>
                             )}
 
-                            {/* --- LANDSCAPE: Step5-style TWO-COLUMN, COMPACT --- */}
+                            {/* --- LANDSCAPE: TWO-COLUMN --- */}
                             {isLandscapeMode ? (
                                 <View className="flex-row gap-3">
-                                    {/* Left: instruction content */}
                                     <View className="flex-1">
                                         <View className="flex-row items-center mb-2">
                                             <View className="size-10 rounded-xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-2">
-                                                <Image
-                                                    source={icons.arrowRight}
-                                                    className="w-5 h-5"
-                                                    resizeMode="contain"
-                                                    tintColor="#22c55e"
-                                                />
+                                                <Image source={icon} className="w-5 h-5" resizeMode="contain" tintColor="#22c55e" />
                                             </View>
                                             <Text className="text-white text-lg font-bold">
-                                                Windage Calibration
+                                                {calibratingElevation ? "Elevation" : "Windage"} Calibration
                                             </Text>
                                         </View>
 
                                         <View className="bg-brand-black/40 rounded-2xl px-3 py-2 mb-2">
                                             <Text className="text-white/80 text-center text-xs mb-1">
-                                                Turn the <Text className="text-white font-bold">WINDAGE</Text> turret
+                                                Turn the <Text className="text-white font-bold">{turretName}</Text> turret
                                             </Text>
 
                                             <View className="flex-row items-end justify-center">
-                                                <Text className="text-brand-greenLight text-2xl font-extrabold mr-2">
-                                                    RIGHT
-                                                </Text>
-                                                <Text className="text-white text-2xl font-extrabold">
-                                                    {CALIBRATION_CLICK_COUNT}
-                                                </Text>
-                                                <Text className="text-white/70 text-sm font-semibold ml-1">
-                                                    clicks
-                                                </Text>
+                                                <Text className="text-brand-greenLight text-xl font-extrabold mr-2">ANY DIRECTION</Text>
+                                            </View>
+
+                                            <View className="flex-row items-center justify-center mt-1">
+                                                <Text className="text-white text-2xl font-extrabold">{CALIBRATION_CLICK_COUNT}</Text>
+                                                <Text className="text-white/70 text-sm font-semibold ml-1">clicks</Text>
                                             </View>
 
                                             <Text className="text-white/50 text-center text-[10px] mt-1">
@@ -355,30 +377,24 @@ export default function Step6() {
                                             </Text>
                                         </View>
 
-                                        <View className="bg-brand-black/30 rounded-xl px-3 py-2">
-                                            <Text className="text-white/70 text-[11px] text-center leading-4">
-                                                Windage is usually on the side of the scope.{"\n"}
-                                                Follow the arrow marked on your turret.
+                                        <View className="bg-yellow-500/20 rounded-xl px-3 py-2 border border-yellow-500/40">
+                                            <Text className="text-yellow-200 text-[11px] text-center leading-4">
+                                                {calibratingElevation ? "↕" : "↔"} Should move {expectedDirection} ({expectedDirectionDetail})
                                             </Text>
                                         </View>
                                     </View>
 
-                                    {/* Right: primary action + links + nav */}
                                     <View className="w-44 justify-between">
                                         <View>
                                             <Pressable
                                                 onPress={handleDialed}
                                                 className="rounded-2xl py-3 items-center bg-brand-greenLight border border-brand-green/60"
                                             >
-                                                <Text className="text-white text-base font-semibold">
-                                                    I've dialed it
-                                                </Text>
+                                                <Text className="text-white text-base font-semibold">I've dialed it</Text>
                                             </Pressable>
 
                                             <Pressable onPress={handleUnexpectedBehavior} className="mt-2 py-2 items-center">
-                                                <Text className="text-white/50 text-xs underline">
-                                                    Unexpected behavior?
-                                                </Text>
+                                                <Text className="text-white/50 text-xs underline">Wrong direction?</Text>
                                             </Pressable>
                                         </View>
 
@@ -400,15 +416,13 @@ export default function Step6() {
                                     </View>
                                 </View>
                             ) : (
+                                /* --- PORTRAIT BODY --- */
                                 <>
-                                    {/* Portrait body (UNCHANGED) */}
                                     <View className="bg-brand-black/40 rounded-2xl p-4 mb-4">
                                         <Text className="text-white/80 text-center text-base mb-2">
-                                            Turn the <Text className="text-white font-bold">WINDAGE</Text> turret
+                                            Turn the <Text className="text-white font-bold">{turretName}</Text> turret
                                         </Text>
-                                        <Text className="text-brand-greenLight text-center text-4xl font-bold mb-2">
-                                            RIGHT
-                                        </Text>
+                                        <Text className="text-brand-greenLight text-center text-2xl font-bold mb-2">ANY DIRECTION</Text>
                                         <Text className="text-white text-center text-3xl font-bold">
                                             {CALIBRATION_CLICK_COUNT} clicks
                                         </Text>
@@ -417,10 +431,12 @@ export default function Step6() {
                                         </Text>
                                     </View>
 
-                                    <View className="bg-brand-black/30 rounded-xl px-4 py-3 mb-4">
-                                        <Text className="text-white/70 text-sm text-center">
-                                            Windage is usually on the side of the scope.{"\n"}
-                                            Follow the arrow marked on your turret.
+                                    <View className="bg-yellow-500/20 rounded-xl px-4 py-3 mb-4 border border-yellow-500/40">
+                                        <Text className="text-yellow-200 text-sm text-center font-medium">
+                                            {calibratingElevation ? "↕" : "↔"} Crosshair should move {expectedDirection} ({expectedDirectionDetail})
+                                        </Text>
+                                        <Text className="text-yellow-200/70 text-xs text-center mt-1">
+                                            {turretLocation}
                                         </Text>
                                     </View>
 
@@ -432,13 +448,13 @@ export default function Step6() {
                                     </Pressable>
 
                                     <Pressable onPress={handleUnexpectedBehavior} className="mt-3 py-3 items-center">
-                                        <Text className="text-white/50 text-sm underline">Unexpected behavior?</Text>
+                                        <Text className="text-white/50 text-sm underline">It moved the wrong direction?</Text>
                                     </Pressable>
                                 </>
                             )}
                         </View>
 
-                        {/* Back / Cancel (PORTRAIT ONLY, landscape handled in-card) */}
+                        {/* Back / Cancel (PORTRAIT ONLY) */}
                         {!isLandscapeMode && (
                             <View className="flex-row mt-4 gap-3">
                                 <Pressable
@@ -465,21 +481,14 @@ export default function Step6() {
     }
 
     // ============================================================
-    // Confirm Phase
-    // - PORTRAIT: keep existing UI unchanged
-    // - LANDSCAPE: Step4-style (camera left + flush right panel)
+    // Confirm Phase - LANDSCAPE
     // ============================================================
-
     if (isLandscapeMode) {
         return (
             <View className="flex-1 bg-brand-black">
-                {/* Camera region (left) */}
                 <View
                     onLayout={handleCameraLayout}
-                    style={[
-                        StyleSheet.absoluteFill,
-                        { right: cameraInsets.padRight, bottom: cameraInsets.padBottom },
-                    ]}
+                    style={[StyleSheet.absoluteFill, { right: cameraInsets.padRight, bottom: cameraInsets.padBottom }]}
                 >
                     {shouldRenderCamera && (
                         <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
@@ -487,10 +496,7 @@ export default function Step6() {
 
                             {centerPoint && (
                                 <View
-                                    style={[
-                                        styles.crosshairContainer,
-                                        { left: centerPoint.x - 30, top: centerPoint.y - 30 },
-                                    ]}
+                                    style={[styles.crosshairContainer, { left: centerPoint.x - 30, top: centerPoint.y - 30 }]}
                                     pointerEvents="none"
                                 >
                                     <View style={styles.crosshairVertical} />
@@ -536,31 +542,20 @@ export default function Step6() {
                     )}
                 </View>
 
-                {/* Right panel (flush right) */}
                 <SafeAreaView
                     className="absolute top-0 bottom-0 right-0"
                     edges={["top", "bottom", "right"]}
                     style={{ width: SIDE_PANEL_W }}
                 >
                     <View className="flex-1 bg-brand-black/95 border-l border-brand-green/30">
-                        {/* Header */}
                         <View className="px-3 pt-3 pb-2">
                             <View className="flex-row items-start">
                                 <View className="size-8 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
-                                    <Image
-                                        source={icons.target}
-                                        className="w-4 h-4"
-                                        resizeMode="contain"
-                                        tintColor="#0b7f4f"
-                                    />
+                                    <Image source={icons.target} className="w-4 h-4" resizeMode="contain" tintColor="#0b7f4f" />
                                 </View>
                                 <View className="flex-1">
-                                    <Text className="text-white font-semibold text-sm">
-                                        Confirm New Crosshair
-                                    </Text>
-                                    <Text className="text-white/60 text-[11px]">
-                                        Tap, then fine-tune.
-                                    </Text>
+                                    <Text className="text-white font-semibold text-sm">Confirm New Position</Text>
+                                    <Text className="text-white/60 text-[11px]">Tap, then fine-tune.</Text>
                                 </View>
                             </View>
                         </View>
@@ -601,18 +596,12 @@ export default function Step6() {
                                         </View>
                                     </View>
 
-                                    {/* D-pad */}
                                     <View className="mt-3 items-center">
                                         <Pressable
                                             onPress={() => handleMicroAdjust("up")}
                                             className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mb-1`}
                                         >
-                                            <Image
-                                                source={icons.chevronUp}
-                                                className={dpIcon}
-                                                resizeMode="contain"
-                                                tintColor="#0b7f4f"
-                                            />
+                                            <Image source={icons.chevronUp} className={dpIcon} resizeMode="contain" tintColor="#0b7f4f" />
                                         </Pressable>
 
                                         <View className="flex-row items-center gap-1">
@@ -620,32 +609,18 @@ export default function Step6() {
                                                 onPress={() => handleMicroAdjust("left")}
                                                 className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center`}
                                             >
-                                                <Image
-                                                    source={icons.chevronLeft}
-                                                    className={dpIcon}
-                                                    resizeMode="contain"
-                                                    tintColor="#0b7f4f"
-                                                />
+                                                <Image source={icons.chevronLeft} className={dpIcon} resizeMode="contain" tintColor="#0b7f4f" />
                                             </Pressable>
 
-                                            <View
-                                                className={`${dpBtn} rounded-xl bg-brand-black/50 border border-brand-green/20 items-center justify-center`}
-                                            >
-                                                <Text className="text-white/50 text-[11px] font-mono">
-                                                    {stepSize}px
-                                                </Text>
+                                            <View className={`${dpBtn} rounded-xl bg-brand-black/50 border border-brand-green/20 items-center justify-center`}>
+                                                <Text className="text-white/50 text-[11px] font-mono">{stepSize}px</Text>
                                             </View>
 
                                             <Pressable
                                                 onPress={() => handleMicroAdjust("right")}
                                                 className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center`}
                                             >
-                                                <Image
-                                                    source={icons.chevronRight}
-                                                    className={dpIcon}
-                                                    resizeMode="contain"
-                                                    tintColor="#0b7f4f"
-                                                />
+                                                <Image source={icons.chevronRight} className={dpIcon} resizeMode="contain" tintColor="#0b7f4f" />
                                             </Pressable>
                                         </View>
 
@@ -653,12 +628,7 @@ export default function Step6() {
                                             onPress={() => handleMicroAdjust("down")}
                                             className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mt-1`}
                                         >
-                                            <Image
-                                                source={icons.chevronDown}
-                                                className={dpIcon}
-                                                resizeMode="contain"
-                                                tintColor="#0b7f4f"
-                                            />
+                                            <Image source={icons.chevronDown} className={dpIcon} resizeMode="contain" tintColor="#0b7f4f" />
                                         </Pressable>
                                     </View>
 
@@ -679,7 +649,6 @@ export default function Step6() {
                             )}
                         </View>
 
-                        {/* Back / Cancel */}
                         <View className="px-3 pb-3">
                             <View className="flex-row mt-2 gap-2">
                                 <Pressable
@@ -699,34 +668,26 @@ export default function Step6() {
                         </View>
                     </View>
                 </SafeAreaView>
+
+                {renderUnexpectedModal()}
             </View>
         );
     }
 
-    // ---------------------------
-    // PORTRAIT confirm (unchanged)
-    // ---------------------------
+    // ============================================================
+    // Confirm Phase - PORTRAIT
+    // ============================================================
     const controlPanelHeight = 240;
 
     return (
         <View className="flex-1 bg-brand-black">
-            {/* Camera Feed (tappable area) */}
-            <View
-                onLayout={handleCameraLayout}
-                style={[StyleSheet.absoluteFill, { bottom: controlPanelHeight + bottomPadding }]}
-            >
+            <View onLayout={handleCameraLayout} style={[StyleSheet.absoluteFill, { bottom: controlPanelHeight + bottomPadding }]}>
                 {shouldRenderCamera && (
                     <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
                         <CameraView style={StyleSheet.absoluteFill} facing="back" />
 
                         {centerPoint && (
-                            <View
-                                style={[
-                                    styles.crosshairContainer,
-                                    { left: centerPoint.x - 30, top: centerPoint.y - 30 },
-                                ]}
-                                pointerEvents="none"
-                            >
+                            <View style={[styles.crosshairContainer, { left: centerPoint.x - 30, top: centerPoint.y - 30 }]} pointerEvents="none">
                                 <View style={styles.crosshairVertical} />
                                 <View style={styles.crosshairHorizontal} />
                                 <View style={styles.crosshairCenter} />
@@ -745,10 +706,7 @@ export default function Step6() {
 
                 {centerPoint && (
                     <View
-                        style={[
-                            styles.magnifier,
-                            { top: insets.top + 10, right: 10, width: 120, height: 120 },
-                        ]}
+                        style={[styles.magnifier, { top: insets.top + 10, right: 10, width: 120, height: 120 }]}
                         pointerEvents="none"
                     >
                         <View style={styles.magnifierInner}>
@@ -765,47 +723,27 @@ export default function Step6() {
                 )}
             </View>
 
-            {/* Control Panel (portrait unchanged) */}
             <SafeAreaView className="absolute bottom-0 left-0 right-0" edges={["bottom"]}>
-                <View
-                    style={{ paddingBottom: bottomPadding }}
-                    className="bg-brand-black/95 border-t border-brand-green/30 px-4 pt-4"
-                >
-                    {/* Header */}
+                <View style={{ paddingBottom: bottomPadding }} className="bg-brand-black/95 border-t border-brand-green/30 px-4 pt-4">
                     <View className="flex-row items-center mb-3">
                         <View className="size-9 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
-                            <Image
-                                source={icons.target}
-                                className="w-5 h-5"
-                                resizeMode="contain"
-                                tintColor="#0b7f4f"
-                            />
+                            <Image source={icons.target} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
                         </View>
                         <View className="flex-1">
-                            <Text className="text-white font-semibold text-base">
-                                Confirm New Crosshair Position
-                            </Text>
-                            <Text className="text-white/60 text-xs">
-                                Tap the crosshair center again, then fine-tune.
-                            </Text>
+                            <Text className="text-white font-semibold text-base">Confirm New Crosshair Position</Text>
+                            <Text className="text-white/60 text-xs">Tap the crosshair center, then fine-tune.</Text>
                         </View>
                     </View>
 
                     {centerPoint ? (
                         <View className="flex-row gap-3">
-                            {/* D-Pad */}
                             <View className="flex-1 items-center">
                                 <View className="items-center">
                                     <Pressable
                                         onPress={() => handleMicroAdjust("up")}
                                         className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mb-1"
                                     >
-                                        <Image
-                                            source={icons.chevronUp}
-                                            className="w-5 h-5"
-                                            resizeMode="contain"
-                                            tintColor="#0b7f4f"
-                                        />
+                                        <Image source={icons.chevronUp} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
                                     </Pressable>
 
                                     <View className="flex-row items-center gap-1">
@@ -813,12 +751,7 @@ export default function Step6() {
                                             onPress={() => handleMicroAdjust("left")}
                                             className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center"
                                         >
-                                            <Image
-                                                source={icons.chevronLeft}
-                                                className="w-5 h-5"
-                                                resizeMode="contain"
-                                                tintColor="#0b7f4f"
-                                            />
+                                            <Image source={icons.chevronLeft} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
                                         </Pressable>
 
                                         <View className="size-10 rounded-xl bg-brand-black/50 border border-brand-green/20 items-center justify-center">
@@ -829,12 +762,7 @@ export default function Step6() {
                                             onPress={() => handleMicroAdjust("right")}
                                             className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center"
                                         >
-                                            <Image
-                                                source={icons.chevronRight}
-                                                className="w-5 h-5"
-                                                resizeMode="contain"
-                                                tintColor="#0b7f4f"
-                                            />
+                                            <Image source={icons.chevronRight} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
                                         </Pressable>
                                     </View>
 
@@ -842,17 +770,11 @@ export default function Step6() {
                                         onPress={() => handleMicroAdjust("down")}
                                         className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mt-1"
                                     >
-                                        <Image
-                                            source={icons.chevronDown}
-                                            className="w-5 h-5"
-                                            resizeMode="contain"
-                                            tintColor="#0b7f4f"
-                                        />
+                                        <Image source={icons.chevronDown} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
                                     </Pressable>
                                 </View>
                             </View>
 
-                            {/* Step Size + Reset */}
                             <View className="justify-center gap-2">
                                 <Text className="text-white/50 text-xs text-center">Step</Text>
                                 <View className="flex-row gap-1">
@@ -867,12 +789,7 @@ export default function Step6() {
                                                     : "bg-brand-black/40 border-brand-green/30",
                                             ].join(" ")}
                                         >
-                                            <Text
-                                                className={[
-                                                    "text-xs font-semibold",
-                                                    stepSize === size ? "text-white" : "text-white/60",
-                                                ].join(" ")}
-                                            >
+                                            <Text className={["text-xs font-semibold", stepSize === size ? "text-white" : "text-white/60"].join(" ")}>
                                                 {size}px
                                             </Text>
                                         </Pressable>
@@ -887,7 +804,6 @@ export default function Step6() {
                                 </Pressable>
                             </View>
 
-                            {/* Confirm Button */}
                             <View className="justify-center">
                                 <Pressable
                                     onPress={handleConfirmPosition}
@@ -900,13 +816,10 @@ export default function Step6() {
                         </View>
                     ) : (
                         <View className="py-4">
-                            <Text className="text-white/60 text-center text-sm">
-                                Tap where the crosshair moved to after dialing.
-                            </Text>
+                            <Text className="text-white/60 text-center text-sm">Tap where the crosshair moved to after dialing.</Text>
                         </View>
                     )}
 
-                    {/* Back / Cancel */}
                     <View className="flex-row mt-3 gap-3">
                         <Pressable
                             onPress={handleBack}
@@ -924,6 +837,8 @@ export default function Step6() {
                     </View>
                 </View>
             </SafeAreaView>
+
+            {renderUnexpectedModal()}
         </View>
     );
 }
@@ -1020,7 +935,7 @@ const styles = StyleSheet.create({
         borderRadius: 3,
         backgroundColor: "#22c55e",
     },
-    // Modal styles (landscape-safe)
+    // Modal styles
     modalOverlay: {
         flex: 1,
         backgroundColor: "rgba(0, 0, 0, 0.85)",
@@ -1038,7 +953,7 @@ const styles = StyleSheet.create({
         maxWidth: 340,
     },
     modalContentLandscape: {
-        maxWidth: 400,
+        maxWidth: 420,
         paddingVertical: 20,
         paddingHorizontal: 28,
     },
@@ -1054,6 +969,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         textAlign: "center",
         marginBottom: 20,
+        lineHeight: 20,
     },
     modalButtonContainer: {
         gap: 12,
@@ -1070,6 +986,11 @@ const styles = StyleSheet.create({
         color: "white",
         fontSize: 18,
         fontWeight: "600",
+    },
+    modalOptionSubtext: {
+        color: "rgba(255, 255, 255, 0.5)",
+        fontSize: 12,
+        marginTop: 4,
     },
     modalCancelButton: {
         marginTop: 16,

@@ -1,16 +1,13 @@
 // ============================================================
-// step5.tsx - Elevation Dial Calibration
+// step5.tsx - First Turret Calibration (Expects Elevation)
 // ============================================================
 // Two phases:
-// 1. Instruct user to dial elevation UP by X clicks
+// 1. Instruct user to dial ELEVATION any direction by X clicks
 // 2. User confirms new crosshair position
 //
-// UI rules:
-// - Instruction (green card): keep as you have it (portrait + landscape)
-// - Confirm:
-//    - PORTRAIT: keep existing bottom panel UI
-//    - LANDSCAPE: Step4-style (camera left + flush right panel)
-//      + responsive magnifier clamped inside visible camera + pushed from left
+// If crosshair moved horizontally instead of vertically,
+// user turned the wrong turret (windage). We accept it as
+// windage calibration and swap so step6 does elevation.
 
 import React, { useCallback, useMemo, useState } from "react";
 import {
@@ -32,6 +29,7 @@ import {
     selectMountOrientation,
     selectClickSize,
     selectScopeUnit,
+    selectAxesSwapped,
     isLandscape,
     CALIBRATION_CLICK_COUNT,
     ScopeCenterPx,
@@ -46,6 +44,7 @@ const SCREEN_ID = "step5";
 type Phase = "instruction" | "confirm";
 type StepSize = 1 | 5 | 10;
 type Direction = "up" | "down" | "left" | "right";
+type AxisDirection = "vertical" | "horizontal";
 
 const clamp = (v: number, min: number, max: number) =>
     Math.max(min, Math.min(max, v));
@@ -73,10 +72,21 @@ export default function Step5() {
     const mountOrientation = useCalibrationStore(selectMountOrientation);
     const clickSize = useCalibrationStore(selectClickSize);
     const scopeUnit = useCalibrationStore(selectScopeUnit);
+    const axesSwapped = useCalibrationStore(selectAxesSwapped);
+
+    // Elevation actions (normal flow)
     const setElevationEndPx = useCalibrationStore((s) => s.setElevationEndPx);
-    const setElevationInverted = useCalibrationStore((s) => s.setElevationInverted);
     const calculateElevationScale = useCalibrationStore((s) => s.calculateElevationScale);
     const setWindageStartPx = useCalibrationStore((s) => s.setWindageStartPx);
+
+    // Windage actions (if wrong turret)
+    const setWindageEndPx = useCalibrationStore((s) => s.setWindageEndPx);
+    const calculateWindageScale = useCalibrationStore((s) => s.calculateWindageScale);
+    const setElevationStartPx = useCalibrationStore((s) => s.setElevationStartPx);
+
+    // Axes swap
+    const setAxesSwapped = useCalibrationStore((s) => s.setAxesSwapped);
+
     const reset = useCalibrationStore((s) => s.resetCalibration);
 
     const isLandscapeMode = isLandscape(mountOrientation);
@@ -89,8 +99,9 @@ export default function Step5() {
     const [stepSize, setStepSize] = useState<StepSize>(1);
     const [lastTapPoint, setLastTapPoint] = useState<ScopeCenterPx | null>(null);
 
-    // Unexpected behavior modal
+    // Modals
     const [showUnexpectedModal, setShowUnexpectedModal] = useState(false);
+    const [showSwappedModal, setShowSwappedModal] = useState(false);
 
     // Camera layout (used for micro adjust clamping + magnifier clamping)
     const [cameraLayout, setCameraLayout] = useState({
@@ -150,19 +161,44 @@ export default function Step5() {
 
     const handleConfirmPosition = () => {
         if (!centerPoint) return;
-        setElevationEndPx(centerPoint);
-        setWindageStartPx(centerPoint);
-        calculateElevationScale();
+
+        if (axesSwapped) {
+            // User turned windage turret - save as WINDAGE calibration
+            setWindageEndPx(centerPoint);
+            setElevationStartPx(centerPoint); // Next step will use this as elevation start
+            calculateWindageScale();
+        } else {
+            // Normal flow: save as ELEVATION calibration
+            setElevationEndPx(centerPoint);
+            setWindageStartPx(centerPoint);
+            calculateElevationScale();
+        }
+
         router.push("/(calibration)/step6");
     };
 
     // Unexpected behavior handling
     const handleUnexpectedBehavior = () => setShowUnexpectedModal(true);
 
-    const handleUnexpectedDirection = (direction: Direction) => {
-        // If user says crosshair moved DOWN when they dialed UP, it's inverted
-        if (direction === "down") setElevationInverted(true);
+    const handleAxisDirection = (axis: AxisDirection) => {
         setShowUnexpectedModal(false);
+
+        if (axis === "vertical") {
+            // Correct! They turned elevation turret - movement is vertical
+            // Just close modal, they can continue normally
+        } else {
+            // Wrong turret! They turned windage instead of elevation
+            // We'll save this as windage calibration
+            setShowSwappedModal(true);
+        }
+    };
+
+    const handleSwappedConfirm = () => {
+        // Mark that axes are swapped (they turned windage instead of elevation)
+        setAxesSwapped(true);
+        setShowSwappedModal(false);
+        // Go to confirm phase - they still need to tap the position
+        setPhase("confirm");
     };
 
     const handleBack = () => {
@@ -203,8 +239,6 @@ export default function Step5() {
 
     const magnifierPos = useMemo(() => {
         const margin = 10;
-
-        // push farther from the left edge (scaled + clamped)
         const LEFT_SAFE_PAD = clamp(Math.round(width * 0.06), 24, 44);
 
         const fallbackW = Math.max(0, width - cameraInsets.padRight);
@@ -237,7 +271,7 @@ export default function Step5() {
     const dpIcon = isLandscapeMode ? "w-4 h-4" : "w-5 h-5";
 
     // ============================================================
-    // Unexpected Behavior Modal (shared by all phases)
+    // Modals
     // ============================================================
     const renderUnexpectedModal = () => (
         <Modal
@@ -258,21 +292,27 @@ export default function Step5() {
                     ]}
                     onPress={(e) => e.stopPropagation()}
                 >
-                    <Text style={styles.modalTitle}>Unexpected behavior</Text>
+                    <Text style={styles.modalTitle}>Which way did it move?</Text>
                     <Text style={styles.modalSubtitle}>
-                        When you made that adjustment, the crosshair moved:
+                        When you dialed the turret, the crosshair moved:
                     </Text>
 
                     <View style={styles.modalButtonContainer}>
-                        {(["up", "down"] as Direction[]).map((dir) => (
-                            <Pressable
-                                key={dir}
-                                onPress={() => handleUnexpectedDirection(dir)}
-                                style={styles.modalOptionButton}
-                            >
-                                <Text style={styles.modalOptionText}>{dir.toUpperCase()}</Text>
-                            </Pressable>
-                        ))}
+                        <Pressable
+                            onPress={() => handleAxisDirection("vertical")}
+                            style={styles.modalOptionButton}
+                        >
+                            <Text style={styles.modalOptionText}>↑ UP or DOWN ↓</Text>
+                            <Text style={styles.modalOptionSubtext}>Vertical movement</Text>
+                        </Pressable>
+
+                        <Pressable
+                            onPress={() => handleAxisDirection("horizontal")}
+                            style={styles.modalOptionButton}
+                        >
+                            <Text style={styles.modalOptionText}>← LEFT or RIGHT →</Text>
+                            <Text style={styles.modalOptionSubtext}>Horizontal movement</Text>
+                        </Pressable>
                     </View>
 
                     <Pressable
@@ -282,6 +322,47 @@ export default function Step5() {
                         <Text style={styles.modalCancelText}>Cancel</Text>
                     </Pressable>
                 </Pressable>
+            </Pressable>
+        </Modal>
+    );
+
+    const renderSwappedModal = () => (
+        <Modal
+            visible={showSwappedModal}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowSwappedModal(false)}
+            supportedOrientations={["portrait", "landscape"]}
+        >
+            <Pressable
+                style={styles.modalOverlay}
+                onPress={() => {}}
+            >
+                <View
+                    style={[
+                        styles.modalContent,
+                        isLandscapeMode && styles.modalContentLandscape,
+                    ]}
+                >
+                    <View style={styles.modalIconContainer}>
+                        <Text style={styles.modalIcon}>✓</Text>
+                    </View>
+
+                    <Text style={styles.modalTitle}>No problem!</Text>
+                    <Text style={styles.modalSubtitle}>
+                        Looks like you turned the windage turret instead of elevation. That's okay — we'll use this for windage calibration.
+                    </Text>
+                    <Text style={[styles.modalSubtitle, { marginTop: 12, fontWeight: "600", color: "rgba(255,255,255,0.9)" }]}>
+                        The next step will calibrate elevation instead.
+                    </Text>
+
+                    <Pressable
+                        onPress={handleSwappedConfirm}
+                        style={styles.modalPrimaryButton}
+                    >
+                        <Text style={styles.modalPrimaryButtonText}>Continue</Text>
+                    </Pressable>
+                </View>
             </Pressable>
         </Modal>
     );
@@ -331,7 +412,10 @@ export default function Step5() {
                                             </Text>
 
                                             <View className="flex-row items-end justify-center">
-                                                <Text className="text-brand-greenLight text-2xl font-extrabold mr-2">UP</Text>
+                                                <Text className="text-brand-greenLight text-xl font-extrabold mr-2">ANY DIRECTION</Text>
+                                            </View>
+
+                                            <View className="flex-row items-center justify-center mt-1">
                                                 <Text className="text-white text-2xl font-extrabold">{CALIBRATION_CLICK_COUNT}</Text>
                                                 <Text className="text-white/70 text-sm font-semibold ml-1">clicks</Text>
                                             </View>
@@ -341,10 +425,9 @@ export default function Step5() {
                                             </Text>
                                         </View>
 
-                                        <View className="bg-brand-black/30 rounded-xl px-3 py-2">
-                                            <Text className="text-white/70 text-[11px] text-center leading-4">
-                                                Elevation is usually on top of the scope.{"\n"}
-                                                Follow the arrow marked on your turret.
+                                        <View className="bg-yellow-500/20 rounded-xl px-3 py-2 border border-yellow-500/40">
+                                            <Text className="text-yellow-200 text-[11px] text-center leading-4">
+                                                ↕ Should move VERTICALLY (up/down)
                                             </Text>
                                         </View>
                                     </View>
@@ -360,7 +443,7 @@ export default function Step5() {
                                             </Pressable>
 
                                             <Pressable onPress={handleUnexpectedBehavior} className="mt-2 py-2 items-center">
-                                                <Text className="text-white/50 text-xs underline">Unexpected behavior?</Text>
+                                                <Text className="text-white/50 text-xs underline">It moved sideways?</Text>
                                             </Pressable>
                                         </View>
 
@@ -388,7 +471,7 @@ export default function Step5() {
                                         <Text className="text-white/80 text-center text-base mb-2">
                                             Turn the <Text className="text-white font-bold">ELEVATION</Text> turret
                                         </Text>
-                                        <Text className="text-brand-greenLight text-center text-4xl font-bold mb-2">UP</Text>
+                                        <Text className="text-brand-greenLight text-center text-2xl font-bold mb-2">ANY DIRECTION</Text>
                                         <Text className="text-white text-center text-3xl font-bold">
                                             {CALIBRATION_CLICK_COUNT} clicks
                                         </Text>
@@ -397,10 +480,12 @@ export default function Step5() {
                                         </Text>
                                     </View>
 
-                                    <View className="bg-brand-black/30 rounded-xl px-4 py-3 mb-4">
-                                        <Text className="text-white/70 text-sm text-center">
-                                            Elevation is usually on top of the scope.{"\n"}
-                                            Follow the arrow marked on your turret.
+                                    <View className="bg-yellow-500/20 rounded-xl px-4 py-3 mb-4 border border-yellow-500/40">
+                                        <Text className="text-yellow-200 text-sm text-center font-medium">
+                                            Crosshair should move VERTICALLY (up or down)
+                                        </Text>
+                                        <Text className="text-yellow-200/70 text-xs text-center mt-1">
+                                            Elevation turret is usually on top of the scope
                                         </Text>
                                     </View>
 
@@ -412,13 +497,13 @@ export default function Step5() {
                                     </Pressable>
 
                                     <Pressable onPress={handleUnexpectedBehavior} className="mt-3 py-3 items-center">
-                                        <Text className="text-white/50 text-sm underline">Unexpected behavior?</Text>
+                                        <Text className="text-white/50 text-sm underline">It moved sideways instead?</Text>
                                     </Pressable>
                                 </>
                             )}
                         </View>
 
-                        {/* Back / Cancel (PORTRAIT ONLY, landscape handled in-card) */}
+                        {/* Back / Cancel (PORTRAIT ONLY) */}
                         {!isLandscapeMode && (
                             <View className="flex-row mt-4 gap-3">
                                 <Pressable
@@ -440,16 +525,14 @@ export default function Step5() {
                 </SafeAreaView>
 
                 {renderUnexpectedModal()}
+                {renderSwappedModal()}
             </View>
         );
     }
 
     // ============================================================
-    // Confirm Phase
-    // - PORTRAIT: keep your existing bottom panel UI
-    // - LANDSCAPE: Step4-style (camera left + flush right panel)
+    // Confirm Phase - LANDSCAPE
     // ============================================================
-
     if (isLandscapeMode) {
         return (
             <View className="flex-1 bg-brand-black">
@@ -462,7 +545,6 @@ export default function Step5() {
                         <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
                             <CameraView style={StyleSheet.absoluteFill} facing="back" />
 
-                            {/* Crosshair overlay */}
                             {centerPoint && (
                                 <View
                                     style={[styles.crosshairContainer, { left: centerPoint.x - 30, top: centerPoint.y - 30 }]}
@@ -474,7 +556,6 @@ export default function Step5() {
                                 </View>
                             )}
 
-                            {/* Guide text when no point set */}
                             {!centerPoint && (
                                 <View style={styles.guideOverlay} pointerEvents="none">
                                     <View style={styles.guideBox}>
@@ -485,7 +566,6 @@ export default function Step5() {
                         </Pressable>
                     )}
 
-                    {/* Magnifier (responsive + clamped + pushed from left) */}
                     {centerPoint && (
                         <View
                             style={[
@@ -513,21 +593,20 @@ export default function Step5() {
                     )}
                 </View>
 
-                {/* Right panel (flush right) */}
+                {/* Right panel */}
                 <SafeAreaView
                     className="absolute top-0 bottom-0 right-0"
                     edges={["top", "bottom", "right"]}
                     style={{ width: SIDE_PANEL_W }}
                 >
                     <View className="flex-1 bg-brand-black/95 border-l border-brand-green/30">
-                        {/* Header */}
                         <View className="px-3 pt-3 pb-2">
                             <View className="flex-row items-start">
                                 <View className="size-8 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
                                     <Image source={icons.target} className="w-4 h-4" resizeMode="contain" tintColor="#0b7f4f" />
                                 </View>
                                 <View className="flex-1">
-                                    <Text className="text-white font-semibold text-sm">Confirm New Crosshair</Text>
+                                    <Text className="text-white font-semibold text-sm">Confirm New Position</Text>
                                     <Text className="text-white/60 text-[11px]">Tap, then fine-tune.</Text>
                                 </View>
                             </View>
@@ -542,7 +621,6 @@ export default function Step5() {
                                 </View>
                             ) : (
                                 <>
-                                    {/* Step */}
                                     <View className="mt-1">
                                         <Text className="text-white/50 text-[11px] mb-1">Step</Text>
                                         <View className="flex-row gap-1">
@@ -570,7 +648,6 @@ export default function Step5() {
                                         </View>
                                     </View>
 
-                                    {/* D-pad */}
                                     <View className="mt-3 items-center">
                                         <Pressable
                                             onPress={() => handleMicroAdjust("up")}
@@ -624,7 +701,6 @@ export default function Step5() {
                             )}
                         </View>
 
-                        {/* Back / Cancel */}
                         <View className="px-3 pb-3">
                             <View className="flex-row mt-2 gap-2">
                                 <Pressable
@@ -644,24 +720,25 @@ export default function Step5() {
                         </View>
                     </View>
                 </SafeAreaView>
+
+                {renderUnexpectedModal()}
+                {renderSwappedModal()}
             </View>
         );
     }
 
-    // ---------------------------
-    // PORTRAIT confirm (unchanged)
-    // ---------------------------
+    // ============================================================
+    // Confirm Phase - PORTRAIT
+    // ============================================================
     const controlPanelHeight = 240;
 
     return (
         <View className="flex-1 bg-brand-black">
-            {/* Camera Feed (tappable area) */}
             <View onLayout={handleCameraLayout} style={[StyleSheet.absoluteFill, { bottom: controlPanelHeight + bottomPadding }]}>
                 {shouldRenderCamera && (
                     <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
                         <CameraView style={StyleSheet.absoluteFill} facing="back" />
 
-                        {/* Crosshair overlay */}
                         {centerPoint && (
                             <View style={[styles.crosshairContainer, { left: centerPoint.x - 30, top: centerPoint.y - 30 }]} pointerEvents="none">
                                 <View style={styles.crosshairVertical} />
@@ -670,7 +747,6 @@ export default function Step5() {
                             </View>
                         )}
 
-                        {/* Guide text when no point set */}
                         {!centerPoint && (
                             <View style={styles.guideOverlay}>
                                 <View style={styles.guideBox}>
@@ -681,7 +757,6 @@ export default function Step5() {
                     </Pressable>
                 )}
 
-                {/* Magnifier (portrait original: top-right 120) */}
                 {centerPoint && (
                     <View
                         style={[styles.magnifier, { top: insets.top + 10, right: 10, width: 120, height: 120 }]}
@@ -701,23 +776,20 @@ export default function Step5() {
                 )}
             </View>
 
-            {/* Control Panel (portrait unchanged) */}
             <SafeAreaView className="absolute bottom-0 left-0 right-0" edges={["bottom"]}>
                 <View style={{ paddingBottom: bottomPadding }} className="bg-brand-black/95 border-t border-brand-green/30 px-4 pt-4">
-                    {/* Header */}
                     <View className="flex-row items-center mb-3">
                         <View className="size-9 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
                             <Image source={icons.target} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
                         </View>
                         <View className="flex-1">
                             <Text className="text-white font-semibold text-base">Confirm New Crosshair Position</Text>
-                            <Text className="text-white/60 text-xs">Tap the crosshair center again, then fine-tune.</Text>
+                            <Text className="text-white/60 text-xs">Tap the crosshair center, then fine-tune.</Text>
                         </View>
                     </View>
 
                     {centerPoint ? (
                         <View className="flex-row gap-3">
-                            {/* D-Pad */}
                             <View className="flex-1 items-center">
                                 <View className="items-center">
                                     <Pressable
@@ -756,7 +828,6 @@ export default function Step5() {
                                 </View>
                             </View>
 
-                            {/* Step Size + Reset */}
                             <View className="justify-center gap-2">
                                 <Text className="text-white/50 text-xs text-center">Step</Text>
                                 <View className="flex-row gap-1">
@@ -786,7 +857,6 @@ export default function Step5() {
                                 </Pressable>
                             </View>
 
-                            {/* Confirm Button */}
                             <View className="justify-center">
                                 <Pressable
                                     onPress={handleConfirmPosition}
@@ -803,7 +873,6 @@ export default function Step5() {
                         </View>
                     )}
 
-                    {/* Back / Cancel */}
                     <View className="flex-row mt-3 gap-3">
                         <Pressable
                             onPress={handleBack}
@@ -821,6 +890,9 @@ export default function Step5() {
                     </View>
                 </View>
             </SafeAreaView>
+
+            {renderUnexpectedModal()}
+            {renderSwappedModal()}
         </View>
     );
 }
@@ -917,7 +989,7 @@ const styles = StyleSheet.create({
         borderRadius: 3,
         backgroundColor: "#22c55e",
     },
-    // Modal styles (landscape-safe)
+    // Modal styles
     modalOverlay: {
         flex: 1,
         backgroundColor: "rgba(0, 0, 0, 0.85)",
@@ -935,9 +1007,17 @@ const styles = StyleSheet.create({
         maxWidth: 340,
     },
     modalContentLandscape: {
-        maxWidth: 400,
+        maxWidth: 420,
         paddingVertical: 20,
         paddingHorizontal: 28,
+    },
+    modalIconContainer: {
+        alignItems: "center",
+        marginBottom: 16,
+    },
+    modalIcon: {
+        fontSize: 48,
+        color: "#22c55e",
     },
     modalTitle: {
         color: "white",
@@ -951,6 +1031,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         textAlign: "center",
         marginBottom: 20,
+        lineHeight: 20,
     },
     modalButtonContainer: {
         gap: 12,
@@ -964,6 +1045,23 @@ const styles = StyleSheet.create({
         borderColor: "rgba(11, 127, 79, 0.4)",
     },
     modalOptionText: {
+        color: "white",
+        fontSize: 18,
+        fontWeight: "600",
+    },
+    modalOptionSubtext: {
+        color: "rgba(255, 255, 255, 0.5)",
+        fontSize: 12,
+        marginTop: 4,
+    },
+    modalPrimaryButton: {
+        paddingVertical: 16,
+        borderRadius: 16,
+        alignItems: "center",
+        backgroundColor: "#0b7f4f",
+        marginTop: 8,
+    },
+    modalPrimaryButtonText: {
         color: "white",
         fontSize: 18,
         fontWeight: "600",
