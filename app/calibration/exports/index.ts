@@ -404,7 +404,42 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             pitch0: 0,
         });
 
-        console.log("Calibration saved:", result);
+        // Format readable calibration summary
+        const totalClicks = CALIBRATION_CLICK_COUNT;
+        const totalUnits = totalClicks * result.clickSize;
+        const elevDeltaX = result.elevationEndPx.x - result.elevationStartPx.x;
+        const elevDeltaY = result.elevationEndPx.y - result.elevationStartPx.y;
+        const windDeltaX = result.windageEndPx.x - result.windageStartPx.x;
+        const windDeltaY = result.windageEndPx.y - result.windageStartPx.y;
+
+        console.log(`
+══════════════════════════════════════════════════════════════
+                    CALIBRATION COMPLETE                       
+══════════════════════════════════════════════════════════════
+  DEVICE SETUP                                                 
+    Mount Orientation:  ${result.mountOrientation}
+    Screen Rotation:    ${result.screenRotation}°
+    Camera Zoom:        ${(result.cameraZoom * 100).toFixed(0)}%
+    Focus Point:        (${result.focusPoint?.x ?? 'N/A'}, ${result.focusPoint?.y ?? 'N/A'})
+──────────────────────────────────────────────────────────────
+  SCOPE SETTINGS                                               
+    Unit:               ${result.scopeUnit}
+    Click Size:         ${result.clickSize} ${result.scopeUnit}/click
+──────────────────────────────────────────────────────────────
+  CALIBRATION POINTS                                           
+    Scope Center:       (${result.scopeCenterPx.x}, ${result.scopeCenterPx.y})
+    Elevation:          (${result.elevationStartPx.x}, ${result.elevationStartPx.y}) → (${result.elevationEndPx.x}, ${result.elevationEndPx.y})  Δ(${elevDeltaX}, ${elevDeltaY})
+    Windage:            (${result.windageStartPx.x}, ${result.windageStartPx.y}) → (${result.windageEndPx.x}, ${result.windageEndPx.y})  Δ(${windDeltaX}, ${windDeltaY})
+──────────────────────────────────────────────────────────────
+  COMPUTED SCALE (${totalClicks} clicks = ${totalUnits} ${result.scopeUnit})
+    Pixels per ${result.scopeUnit} (X):  ${result.pxPerUnitX.toFixed(2)}
+    Pixels per ${result.scopeUnit} (Y):  ${result.pxPerUnitY.toFixed(2)}
+──────────────────────────────────────────────────────────────
+  IMU REFERENCE                                                
+    Roll₀:              ${result.roll0.toFixed(2)}°
+    Pitch₀:             ${result.pitch0.toFixed(2)}°
+══════════════════════════════════════════════════════════════
+        `);
         return result;
     },
 

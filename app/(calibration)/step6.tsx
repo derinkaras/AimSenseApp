@@ -33,6 +33,7 @@ import {
     selectCameraZoom,
     selectFocusPoint,
     selectScreenRotation,
+    selectScopeCenterPx,
     isLandscape,
     CALIBRATION_CLICK_COUNT,
     ScopeCenterPx,
@@ -79,6 +80,7 @@ export default function Step6() {
     const cameraZoom = useCalibrationStore(selectCameraZoom);
     const focusPoint = useCalibrationStore(selectFocusPoint);
     const screenRotation = useCalibrationStore(selectScreenRotation);
+    const scopeCenterPx = useCalibrationStore(selectScopeCenterPx);
 
     // Determine if focus is locked (autofocus should be off)
     const focusLocked = focusPoint !== null;
@@ -175,14 +177,23 @@ export default function Step6() {
         if (!centerPoint) return;
 
         if (axesSwapped) {
-            // User turned windage turret - save as WINDAGE calibration
+            // User turned windage turret instead of elevation - save as WINDAGE calibration
+            // Windage started at scope center, ended at centerPoint
+            if (scopeCenterPx) {
+                setWindageStartPx(scopeCenterPx);
+            }
             setWindageEndPx(centerPoint);
-            setElevationStartPx(centerPoint); // Next step will use this as elevation start
             calculateWindageScale();
+            // Note: elevationStartPx was already set in step5 as scopeCenterPx
+            // Step7 will calibrate elevation since axes are swapped
         } else {
             // Normal flow: save as ELEVATION calibration
+            // Elevation started at scope center (set in step5), ended at centerPoint
             setElevationEndPx(centerPoint);
-            setWindageStartPx(centerPoint);
+            // After user dials back, windage will start from scope center
+            if (scopeCenterPx) {
+                setWindageStartPx(scopeCenterPx);
+            }
             calculateElevationScale();
         }
 
