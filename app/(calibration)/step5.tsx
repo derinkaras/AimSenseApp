@@ -205,6 +205,7 @@ export default function Step5() {
         if (phase === "confirm") {
             setPhase("instruction");
             setCenterPoint(null);
+            setAxesSwapped(false)
         } else {
             router.back();
         }
@@ -293,8 +294,12 @@ export default function Step5() {
                     onPress={(e) => e.stopPropagation()}
                 >
                     <Text style={styles.modalTitle}>Which way did it move?</Text>
+
+                    {/* UPDATED COPY */}
                     <Text style={styles.modalSubtitle}>
-                        When you dialed the turret, the crosshair moved:
+                        When you dialed the turret, note the direction the crosshair moved.{"\n"}
+                        Listen to each click carefully — over- or under-dialing will reduce precision.{"\n"}
+                        Remember the direction you turned — you’ll need to dial back the same number of clicks later.
                     </Text>
 
                     <View style={styles.modalButtonContainer}>
@@ -349,13 +354,11 @@ export default function Step5() {
                     </View>
 
                     <Text style={styles.modalTitle}>No problem!</Text>
+
+                    {/* UPDATED COPY */}
                     <Text style={styles.modalSubtitle}>
                         Looks like you turned the windage turret instead of elevation. That's okay — we'll use this for windage calibration.
                     </Text>
-                    <Text style={[styles.modalSubtitle, { marginTop: 12, fontWeight: "600", color: "rgba(255,255,255,0.9)" }]}>
-                        The next step will calibrate elevation instead.
-                    </Text>
-
                     <Pressable
                         onPress={handleSwappedConfirm}
                         style={styles.modalPrimaryButton}
@@ -423,6 +426,12 @@ export default function Step5() {
                                             <Text className="text-white/50 text-center text-[10px] mt-1">
                                                 ({getClickSizeLabel(scopeUnit, clickSize)} per click)
                                             </Text>
+
+                                            {/* ADDED COPY (no UI change, just text) */}
+                                            <Text className="text-white/70 text-center text-[10px] mt-2 leading-4">
+                                                Listen to each click carefully — going above or under reduces precision.{"\n"}
+                                                Remember the direction you turn — you’ll reverse the same clicks later.
+                                            </Text>
                                         </View>
 
                                         <View className="bg-yellow-500/20 rounded-xl px-3 py-2 border border-yellow-500/40">
@@ -477,6 +486,12 @@ export default function Step5() {
                                         </Text>
                                         <Text className="text-white/50 text-center text-sm mt-2">
                                             ({getClickSizeLabel(scopeUnit, clickSize)} per click)
+                                        </Text>
+
+                                        {/* ADDED COPY (no UI change, just text) */}
+                                        <Text className="text-white/70 text-center text-xs mt-3 leading-5">
+                                            Listen to each click carefully — going above or under reduces precision.{"\n"}
+                                            Remember the direction you turn — you’ll reverse the same clicks later.
                                         </Text>
                                     </View>
 
@@ -783,7 +798,7 @@ export default function Step5() {
                             <Image source={icons.target} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
                         </View>
                         <View className="flex-1">
-                            <Text className="text-white font-semibold text-base">Confirm New Crosshair Position</Text>
+                            <Text className="text-white font-semibold text-base">{`Confirm New ${ axesSwapped ? "Windage" : "Elevation"} Crosshair Position`}</Text>
                             <Text className="text-white/60 text-xs">Tap the crosshair center, then fine-tune.</Text>
                         </View>
                     </View>

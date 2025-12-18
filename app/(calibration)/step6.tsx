@@ -15,7 +15,6 @@ import {
     Pressable,
     Image,
     StyleSheet,
-    Modal,
     GestureResponderEvent,
     useWindowDimensions,
 } from "react-native";
@@ -43,7 +42,6 @@ const SCREEN_ID = "step6";
 type Phase = "instruction" | "confirm";
 type StepSize = 1 | 5 | 10;
 type Direction = "up" | "down" | "left" | "right";
-type AxisDirection = "vertical" | "horizontal";
 
 const clamp = (v: number, min: number, max: number) =>
     Math.max(min, Math.min(max, v));
@@ -102,9 +100,6 @@ export default function Step6() {
     const [centerPoint, setCenterPoint] = useState<ScopeCenterPx | null>(null);
     const [stepSize, setStepSize] = useState<StepSize>(1);
     const [lastTapPoint, setLastTapPoint] = useState<ScopeCenterPx | null>(null);
-
-    // Modal
-    const [showUnexpectedModal, setShowUnexpectedModal] = useState(false);
 
     // Camera layout
     const [cameraLayout, setCameraLayout] = useState({
@@ -178,15 +173,6 @@ export default function Step6() {
         router.push("/(calibration)/step7");
     };
 
-    // Unexpected behavior - just informational in step6
-    const handleUnexpectedBehavior = () => setShowUnexpectedModal(true);
-
-    const handleAxisDirection = (axis: AxisDirection) => {
-        setShowUnexpectedModal(false);
-        // In step6, we just acknowledge - no swap logic needed
-        // The user can continue or go back if they made a mistake
-    };
-
     const handleBack = () => {
         if (phase === "confirm") {
             setPhase("instruction");
@@ -255,68 +241,6 @@ export default function Step6() {
     const dpIcon = isLandscapeMode ? "w-4 h-4" : "w-5 h-5";
 
     // ============================================================
-    // Modal
-    // ============================================================
-    const renderUnexpectedModal = () => (
-        <Modal
-            visible={showUnexpectedModal}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setShowUnexpectedModal(false)}
-            supportedOrientations={["portrait", "landscape"]}
-        >
-            <Pressable
-                style={styles.modalOverlay}
-                onPress={() => setShowUnexpectedModal(false)}
-            >
-                <Pressable
-                    style={[
-                        styles.modalContent,
-                        isLandscapeMode && styles.modalContentLandscape,
-                    ]}
-                    onPress={(e) => e.stopPropagation()}
-                >
-                    <Text style={styles.modalTitle}>Which way did it move?</Text>
-                    <Text style={styles.modalSubtitle}>
-                        When you dialed the turret, the crosshair moved:
-                    </Text>
-
-                    <View style={styles.modalButtonContainer}>
-                        <Pressable
-                            onPress={() => handleAxisDirection("vertical")}
-                            style={styles.modalOptionButton}
-                        >
-                            <Text style={styles.modalOptionText}>↑ UP or DOWN ↓</Text>
-                            <Text style={styles.modalOptionSubtext}>Vertical movement</Text>
-                        </Pressable>
-
-                        <Pressable
-                            onPress={() => handleAxisDirection("horizontal")}
-                            style={styles.modalOptionButton}
-                        >
-                            <Text style={styles.modalOptionText}>← LEFT or RIGHT →</Text>
-                            <Text style={styles.modalOptionSubtext}>Horizontal movement</Text>
-                        </Pressable>
-                    </View>
-
-                    <Text style={[styles.modalSubtitle, { marginTop: 16, marginBottom: 0, fontSize: 12 }]}>
-                        {calibratingElevation
-                            ? "For elevation, vertical movement is expected."
-                            : "For windage, horizontal movement is expected."}
-                    </Text>
-
-                    <Pressable
-                        onPress={() => setShowUnexpectedModal(false)}
-                        style={styles.modalCancelButton}
-                    >
-                        <Text style={styles.modalCancelText}>Close</Text>
-                    </Pressable>
-                </Pressable>
-            </Pressable>
-        </Modal>
-    );
-
-    // ============================================================
     // Instruction Phase
     // ============================================================
     if (phase === "instruction") {
@@ -375,6 +299,12 @@ export default function Step6() {
                                             <Text className="text-white/50 text-center text-[10px] mt-1">
                                                 ({getClickSizeLabel(scopeUnit, clickSize)} per click)
                                             </Text>
+
+                                            {/* Click accuracy + direction reminder */}
+                                            <Text className="text-white/70 text-center text-[10px] mt-2 leading-4">
+                                                Listen to each click carefully — going above or under reduces precision.{"\n"}
+                                                Remember the direction you turn — you’ll reverse the same clicks later.
+                                            </Text>
                                         </View>
 
                                         <View className="bg-yellow-500/20 rounded-xl px-3 py-2 border border-yellow-500/40">
@@ -391,10 +321,6 @@ export default function Step6() {
                                                 className="rounded-2xl py-3 items-center bg-brand-greenLight border border-brand-green/60"
                                             >
                                                 <Text className="text-white text-base font-semibold">I've dialed it</Text>
-                                            </Pressable>
-
-                                            <Pressable onPress={handleUnexpectedBehavior} className="mt-2 py-2 items-center">
-                                                <Text className="text-white/50 text-xs underline">Wrong direction?</Text>
                                             </Pressable>
                                         </View>
 
@@ -429,11 +355,17 @@ export default function Step6() {
                                         <Text className="text-white/50 text-center text-sm mt-2">
                                             ({getClickSizeLabel(scopeUnit, clickSize)} per click)
                                         </Text>
+
+                                        {/* Click accuracy + direction reminder */}
+                                        <Text className="text-white/70 text-center text-xs mt-3 leading-5">
+                                            Listen to each click carefully — going above or under reduces precision.{"\n"}
+                                            Remember the direction you turn — you’ll reverse the same clicks later.
+                                        </Text>
                                     </View>
 
                                     <View className="bg-yellow-500/20 rounded-xl px-4 py-3 mb-4 border border-yellow-500/40">
                                         <Text className="text-yellow-200 text-sm text-center font-medium">
-                                            {calibratingElevation ? "↕" : "↔"} Crosshair should move {expectedDirection} ({expectedDirectionDetail})
+                                            {`Crosshair should move ${expectedDirection} (${expectedDirectionDetail})`}
                                         </Text>
                                         <Text className="text-yellow-200/70 text-xs text-center mt-1">
                                             {turretLocation}
@@ -445,10 +377,6 @@ export default function Step6() {
                                         className="rounded-2xl py-5 items-center bg-brand-greenLight border border-brand-green/60"
                                     >
                                         <Text className="text-white text-xl font-semibold">I've dialed it</Text>
-                                    </Pressable>
-
-                                    <Pressable onPress={handleUnexpectedBehavior} className="mt-3 py-3 items-center">
-                                        <Text className="text-white/50 text-sm underline">It moved the wrong direction?</Text>
                                     </Pressable>
                                 </>
                             )}
@@ -474,8 +402,6 @@ export default function Step6() {
                         )}
                     </View>
                 </SafeAreaView>
-
-                {renderUnexpectedModal()}
             </View>
         );
     }
@@ -668,8 +594,6 @@ export default function Step6() {
                         </View>
                     </View>
                 </SafeAreaView>
-
-                {renderUnexpectedModal()}
             </View>
         );
     }
@@ -730,7 +654,7 @@ export default function Step6() {
                             <Image source={icons.target} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
                         </View>
                         <View className="flex-1">
-                            <Text className="text-white font-semibold text-base">Confirm New Crosshair Position</Text>
+                            <Text className="text-white font-semibold text-base">{`Confirm New Crosshair ${ axesSwapped ? "Elevation" : "Windage"} Position`}</Text>
                             <Text className="text-white/60 text-xs">Tap the crosshair center, then fine-tune.</Text>
                         </View>
                     </View>
@@ -837,8 +761,6 @@ export default function Step6() {
                     </View>
                 </View>
             </SafeAreaView>
-
-            {renderUnexpectedModal()}
         </View>
     );
 }
@@ -934,71 +856,5 @@ const styles = StyleSheet.create({
         height: 6,
         borderRadius: 3,
         backgroundColor: "#22c55e",
-    },
-    // Modal styles
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: "rgba(0, 0, 0, 0.85)",
-        justifyContent: "center",
-        alignItems: "center",
-        padding: 24,
-    },
-    modalContent: {
-        backgroundColor: "#0a0a0a",
-        borderRadius: 24,
-        borderWidth: 1,
-        borderColor: "rgba(11, 127, 79, 0.4)",
-        padding: 24,
-        width: "100%",
-        maxWidth: 340,
-    },
-    modalContentLandscape: {
-        maxWidth: 420,
-        paddingVertical: 20,
-        paddingHorizontal: 28,
-    },
-    modalTitle: {
-        color: "white",
-        fontSize: 20,
-        fontWeight: "bold",
-        textAlign: "center",
-        marginBottom: 8,
-    },
-    modalSubtitle: {
-        color: "rgba(255, 255, 255, 0.7)",
-        fontSize: 14,
-        textAlign: "center",
-        marginBottom: 20,
-        lineHeight: 20,
-    },
-    modalButtonContainer: {
-        gap: 12,
-    },
-    modalOptionButton: {
-        paddingVertical: 16,
-        borderRadius: 16,
-        alignItems: "center",
-        backgroundColor: "rgba(11, 127, 79, 0.3)",
-        borderWidth: 1,
-        borderColor: "rgba(11, 127, 79, 0.4)",
-    },
-    modalOptionText: {
-        color: "white",
-        fontSize: 18,
-        fontWeight: "600",
-    },
-    modalOptionSubtext: {
-        color: "rgba(255, 255, 255, 0.5)",
-        fontSize: 12,
-        marginTop: 4,
-    },
-    modalCancelButton: {
-        marginTop: 16,
-        paddingVertical: 12,
-        alignItems: "center",
-    },
-    modalCancelText: {
-        color: "rgba(255, 255, 255, 0.5)",
-        fontSize: 14,
     },
 });
