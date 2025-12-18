@@ -24,6 +24,7 @@ import {
     selectScopeCenterPx,
     selectCameraZoom,
     selectFocusPoint,
+    selectScreenRotation,
     selectRoll0,
     selectPitch0,
     selectPxPerUnitX,
@@ -62,6 +63,7 @@ export default function Step8() {
     const scopeCenterPx = useCalibrationStore(selectScopeCenterPx);
     const cameraZoom = useCalibrationStore(selectCameraZoom);
     const focusPoint = useCalibrationStore(selectFocusPoint);
+    const screenRotation = useCalibrationStore(selectScreenRotation);
     const roll0 = useCalibrationStore(selectRoll0);
     const pitch0 = useCalibrationStore(selectPitch0);
     const pxPerUnitX = useCalibrationStore(selectPxPerUnitX);
@@ -69,6 +71,9 @@ export default function Step8() {
 
     // Determine if focus is locked (autofocus should be off)
     const focusLocked = focusPoint !== null;
+
+    // Rotation transform style
+    const rotationTransform = { transform: [{ rotate: `${screenRotation}deg` }] };
 
     const finishCalibration = useCalibrationStore((s) => s.finishCalibration);
     const reset = useCalibrationStore((s) => s.resetCalibration);
@@ -203,7 +208,11 @@ export default function Step8() {
 
     return (
         <View className="flex-1 bg-brand-black">
-            {shouldRenderCamera && <CameraView style={StyleSheet.absoluteFill} facing="back" zoom={cameraZoom} autofocus={focusLocked ? "off" : "on"} />}
+            {shouldRenderCamera && (
+                <View style={[StyleSheet.absoluteFill, rotationTransform]}>
+                    <CameraView style={StyleSheet.absoluteFill} facing="back" zoom={cameraZoom} autofocus={focusLocked ? "off" : "on"} />
+                </View>
+            )}
 
             <SafeAreaView className="flex-1" edges={safeAreaEdges}>
                 {!isLandscapeMode ? (

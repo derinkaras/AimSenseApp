@@ -32,6 +32,7 @@ import {
     selectAxesSwapped,
     selectCameraZoom,
     selectFocusPoint,
+    selectScreenRotation,
     isLandscape,
     CALIBRATION_CLICK_COUNT,
     ScopeCenterPx,
@@ -77,9 +78,14 @@ export default function Step6() {
     const axesSwapped = useCalibrationStore(selectAxesSwapped);
     const cameraZoom = useCalibrationStore(selectCameraZoom);
     const focusPoint = useCalibrationStore(selectFocusPoint);
+    const screenRotation = useCalibrationStore(selectScreenRotation);
 
     // Determine if focus is locked (autofocus should be off)
     const focusLocked = focusPoint !== null;
+
+    // Rotation transform style
+    const rotationTransform = { transform: [{ rotate: `${screenRotation}deg` }] };
+
     const setElevationEndPx = useCalibrationStore((s) => s.setElevationEndPx);
     const calculateElevationScale = useCalibrationStore((s) => s.calculateElevationScale);
     const setWindageStartPx = useCalibrationStore((s) => s.setWindageStartPx);
@@ -400,14 +406,7 @@ export default function Step6() {
                         isLandscapeMode && styles.modalContentLandscape,
                     ]}
                 >
-                    <View style={styles.modalIconContainer}>
-                        <Image
-                            source={icons.arrowUp}
-                            style={{ width: 48, height: 48, transform: [{ rotate: '180deg' }] }}
-                            resizeMode="contain"
-                            tintColor="#22c55e"
-                        />
-                    </View>
+
 
                     <Text style={styles.modalTitle}>Dial Back to Zero</Text>
 
@@ -434,7 +433,11 @@ export default function Step6() {
     if (phase === "instruction") {
         return (
             <View className="flex-1 bg-brand-black">
-                {shouldRenderCamera && <CameraView style={StyleSheet.absoluteFill} facing="back" zoom={cameraZoom} autofocus={focusLocked ? "off" : "on"} />}
+                {shouldRenderCamera && (
+                    <View style={[StyleSheet.absoluteFill, rotationTransform]}>
+                        <CameraView style={StyleSheet.absoluteFill} facing="back" zoom={cameraZoom} autofocus={focusLocked ? "off" : "on"} />
+                    </View>
+                )}
 
                 <SafeAreaView className="flex-1" edges={safeAreaEdges}>
                     <View className={`flex-1 ${isLandscapeMode ? "px-4" : "px-6"} pt-4 justify-center`}>
@@ -494,7 +497,7 @@ export default function Step6() {
 
                                         <View className="bg-yellow-500/20 rounded-xl px-3 py-2 border border-yellow-500/40">
                                             <Text className="text-yellow-200 text-[11px] text-center leading-4">
-                                                ↕ Should move VERTICALLY (up/down)
+                                                Should move VERTICALLY (up/down)
                                             </Text>
                                         </View>
                                     </View>
@@ -617,7 +620,9 @@ export default function Step6() {
                 >
                     {shouldRenderCamera && (
                         <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
-                            <CameraView style={StyleSheet.absoluteFill} facing="back" zoom={cameraZoom} autofocus={focusLocked ? "off" : "on"} />
+                            <View style={[StyleSheet.absoluteFill, rotationTransform]}>
+                                <CameraView style={StyleSheet.absoluteFill} facing="back" zoom={cameraZoom} autofocus={focusLocked ? "off" : "on"} />
+                            </View>
 
                             {centerPoint && (
                                 <View
@@ -680,7 +685,7 @@ export default function Step6() {
                                     <Image source={icons.target} className="w-4 h-4" resizeMode="contain" tintColor="#0b7f4f" />
                                 </View>
                                 <View className="flex-1">
-                                    <Text className="text-white font-semibold text-sm">Confirm New Position</Text>
+                                    <Text className="text-white font-semibold text-sm">{`Confirm New ${ axesSwapped ? "Windage" : "Elevation"} Crosshair Position`}</Text>
                                     <Text className="text-white/60 text-[11px]">Tap, then fine-tune.</Text>
                                 </View>
                             </View>
@@ -812,7 +817,9 @@ export default function Step6() {
             <View onLayout={handleCameraLayout} style={[StyleSheet.absoluteFill, { bottom: controlPanelHeight + bottomPadding }]}>
                 {shouldRenderCamera && (
                     <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
-                        <CameraView style={StyleSheet.absoluteFill} facing="back" zoom={cameraZoom} autofocus={focusLocked ? "off" : "on"} />
+                        <View style={[StyleSheet.absoluteFill, rotationTransform]}>
+                            <CameraView style={StyleSheet.absoluteFill} facing="back" zoom={cameraZoom} autofocus={focusLocked ? "off" : "on"} />
+                        </View>
 
                         {centerPoint && (
                             <View style={[styles.crosshairContainer, { left: centerPoint.x - 30, top: centerPoint.y - 30 }]} pointerEvents="none">

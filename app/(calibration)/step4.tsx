@@ -1,9 +1,9 @@
 // ============================================================
-// step4.tsx - Camera Zoom & Focus Calibration
+// step4.tsx - Camera Setup (Zoom, Focus & Rotation)
 // ============================================================
-// User sets zoom level and tap-to-focus point for the camera.
-// Focus is LOCKED to the tapped point and persists through all
-// subsequent calibration steps. Autofocus is disabled once locked.
+// User sets zoom level, tap-to-focus point, and screen rotation
+// to align the camera view with their scope's crosshair.
+// These settings persist through all subsequent calibration steps.
 
 import React, { useCallback, useRef, useState, useMemo, useEffect } from "react";
 import {
@@ -25,6 +25,7 @@ import {
   selectMountOrientation,
   selectCameraZoom,
   selectFocusPoint,
+  selectScreenRotation,
   isLandscape,
   FocusPoint,
 } from "@/app/calibration/exports";
@@ -36,6 +37,10 @@ const SCREEN_ID = "step4";
 
 const clamp = (v: number, min: number, max: number) =>
     Math.max(min, Math.min(max, v));
+
+// Rotation range in degrees
+const MAX_ROTATION = 45;
+const MIN_ROTATION = -45;
 
 export default function Step4() {
   const [permission] = useCameraPermissions();
@@ -61,15 +66,18 @@ export default function Step4() {
   const mountOrientation = useCalibrationStore(selectMountOrientation);
   const storedZoom = useCalibrationStore(selectCameraZoom);
   const storedFocusPoint = useCalibrationStore(selectFocusPoint);
+  const storedRotation = useCalibrationStore(selectScreenRotation);
   const setCameraZoom = useCalibrationStore((s) => s.setCameraZoom);
   const setStoreFocusPoint = useCalibrationStore((s) => s.setFocusPoint);
+  const setStoreRotation = useCalibrationStore((s) => s.setScreenRotation);
   const reset = useCalibrationStore((s) => s.resetCalibration);
 
   const isLandscapeMode = isLandscape(mountOrientation);
 
-  // Local state for zoom and focus
+  // Local state for zoom, focus, and rotation
   const [zoom, setZoom] = useState(storedZoom);
   const [focusPoint, setLocalFocusPoint] = useState<FocusPoint | null>(storedFocusPoint);
+  const [rotation, setRotation] = useState(storedRotation);
   const [showFocusIndicator, setShowFocusIndicator] = useState(false);
   const [isFocusing, setIsFocusing] = useState(false);
   const [focusLocked, setFocusLocked] = useState(!!storedFocusPoint);
@@ -92,15 +100,15 @@ export default function Step4() {
 
   // Layout sizing
   const SIDE_PANEL_W = useMemo(() => {
-    const w = Math.round(width * 0.34);
-    return clamp(w, 220, 280);
+    const w = Math.round(width * 0.38);
+    return clamp(w, 260, 320);
   }, [width]);
 
   const cameraInsets = useMemo(() => {
     if (isLandscapeMode) {
       return { padRight: SIDE_PANEL_W, padBottom: 0 };
     }
-    return { padRight: 0, padBottom: 280 + bottomPadding };
+    return { padRight: 0, padBottom: 340 + bottomPadding };
   }, [isLandscapeMode, SIDE_PANEL_W, bottomPadding]);
 
   const handleCameraLayout = (event: any) => {
@@ -112,7 +120,6 @@ export default function Step4() {
   const applyFocus = useCallback(async (normalizedX: number, normalizedY: number) => {
     try {
       if (cameraRef.current) {
-        // Use the focus method if available (expo-camera)
         // @ts-ignore - focus method exists on CameraView but may not be typed
         if (typeof cameraRef.current.focus === 'function') {
           await cameraRef.current.focus({ x: normalizedX, y: normalizedY });
@@ -126,7 +133,6 @@ export default function Step4() {
   // Re-apply focus when camera becomes ready or focus point exists
   useEffect(() => {
     if (focusPoint && shouldRenderCamera && cameraLayout.width > 0 && !focusAppliedRef.current) {
-      // Small delay to ensure camera is ready
       const timer = setTimeout(() => {
         applyFocus(focusPoint.normalizedX, focusPoint.normalizedY);
         focusAppliedRef.current = true;
@@ -165,14 +171,13 @@ export default function Step4() {
     // Apply focus to camera
     await applyFocus(normalizedX, normalizedY);
 
-    // Animate focus indicator - show "focusing" state
+    // Animate focus indicator
     setTimeout(() => {
       setIsFocusing(false);
       setFocusLocked(true);
       focusAppliedRef.current = true;
     }, 800);
 
-    // Hide the large focus indicator after animation
     setTimeout(() => {
       setShowFocusIndicator(false);
     }, 1500);
@@ -182,10 +187,17 @@ export default function Step4() {
     setZoom(value);
   };
 
+  const handleRotationChange = (value: number) => {
+    // Round to 0.5 degree increments
+    const rounded = Math.round(value * 2) / 2;
+    setRotation(rounded);
+  };
+
   const handleNext = () => {
-    // Save zoom and focus to store
+    // Save all settings to store
     setCameraZoom(zoom);
     setStoreFocusPoint(focusPoint);
+    setStoreRotation(rotation);
     router.push("/(calibration)/step5");
   };
 
@@ -201,19 +213,20 @@ export default function Step4() {
     );
   };
 
-  const handleResetZoom = () => {
-    setZoom(0);
-  };
-
+  const handleResetZoom = () => setZoom(0);
+  const handleResetRotation = () => setRotation(0);
   const handleClearFocus = () => {
     setLocalFocusPoint(null);
     setFocusLocked(false);
     focusAppliedRef.current = false;
   };
 
+  // Rotation transform style
+  const rotationTransform = { transform: [{ rotate: `${rotation}deg` }] };
+
   // Layout adjustments
-  const headerPadding = isLandscapeMode ? "p-3" : "p-4";
-  const titleSize = isLandscapeMode ? "text-lg" : "text-xl";
+  const headerPadding = isLandscapeMode ? "p-2" : "p-3";
+  const titleSize = isLandscapeMode ? "text-base" : "text-lg";
   const subtitleSize = isLandscapeMode ? "text-xs" : "text-sm";
 
   // ============================================================
@@ -222,7 +235,7 @@ export default function Step4() {
   if (isLandscapeMode) {
     return (
         <View className="flex-1 bg-brand-black">
-          {/* Camera Feed */}
+          {/* Camera Feed with rotation */}
           <View
               onLayout={handleCameraLayout}
               style={[
@@ -232,23 +245,22 @@ export default function Step4() {
           >
             {shouldRenderCamera && (
                 <Pressable onPress={handleTapToFocus} style={StyleSheet.absoluteFill}>
-                  <CameraView
-                      ref={cameraRef}
-                      style={StyleSheet.absoluteFill}
-                      facing="back"
-                      zoom={zoom}
-                      autofocus={focusLocked ? "off" : "on"}
-                  />
+                  <View style={[StyleSheet.absoluteFill, rotationTransform]}>
+                    <CameraView
+                        ref={cameraRef}
+                        style={StyleSheet.absoluteFill}
+                        facing="back"
+                        zoom={zoom}
+                        autofocus={focusLocked ? "off" : "on"}
+                    />
+                  </View>
 
                   {/* Focus indicator - animating */}
                   {focusPoint && showFocusIndicator && (
                       <View
                           style={[
                             styles.focusIndicator,
-                            {
-                              left: focusPoint.x - 30,
-                              top: focusPoint.y - 30,
-                            },
+                            { left: focusPoint.x - 30, top: focusPoint.y - 30 },
                           ]}
                           pointerEvents="none"
                       >
@@ -260,22 +272,18 @@ export default function Step4() {
                       </View>
                   )}
 
-                  {/* Locked focus point indicator (persistent) */}
+                  {/* Locked focus point indicator */}
                   {focusPoint && !showFocusIndicator && focusLocked && (
                       <View
                           style={[
                             styles.lockedFocusIndicator,
-                            {
-                              left: focusPoint.x - 24,
-                              top: focusPoint.y - 24,
-                            },
+                            { left: focusPoint.x - 24, top: focusPoint.y - 24 },
                           ]}
                           pointerEvents="none"
                       >
                         <View style={styles.lockedFocusOuter}>
                           <View style={styles.lockedFocusInner} />
                         </View>
-                        <Text style={styles.lockedFocusLabel}>LOCKED</Text>
                       </View>
                   )}
 
@@ -283,8 +291,8 @@ export default function Step4() {
                   {!focusPoint && (
                       <View style={styles.guideOverlay}>
                         <View style={styles.guideBox}>
-                          <Text style={styles.guideText}>Tap to lock focus point</Text>
-                          <Text style={styles.guideSubtext}>Focus will stay locked during calibration</Text>
+                          <Text style={styles.guideText}>Tap to lock focus</Text>
+                          <Text style={styles.guideSubtext}>Use rotation to align crosshair</Text>
                         </View>
                       </View>
                   )}
@@ -294,34 +302,32 @@ export default function Step4() {
 
           {/* Side Panel */}
           <SafeAreaView
-              className="absolute right-0 top-0 bottom-0 bg-brand-black/90 border-l border-brand-green/30"
+              className="absolute right-0 top-0 bottom-0 bg-brand-black/95 border-l border-brand-green/30"
               style={{ width: SIDE_PANEL_W }}
               edges={["top", "bottom", "right"]}
           >
             <View className="flex-1 p-3">
               {/* Header */}
-              <View className={`rounded-2xl ${headerPadding} bg-brand-greenDark/70 border border-brand-green/60 mb-3`}>
+              <View className={`rounded-xl ${headerPadding} bg-brand-greenDark/70 border border-brand-green/60 mb-2`}>
                 <View className="flex-row items-center">
-                  <View className="size-9 rounded-xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-2">
-                    <Image source={icons.camera} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
+                  <View className="size-8 rounded-lg bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-2">
+                    <Image source={icons.camera} className="w-4 h-4" resizeMode="contain" tintColor="#0b7f4f" />
                   </View>
                   <View className="flex-1">
                     <Text className={`text-white ${titleSize} font-semibold`}>Camera Setup</Text>
-                    <Text className={`text-white/70 mt-0.5 ${subtitleSize}`}>
-                      Set zoom & lock focus
-                    </Text>
+                    <Text className={`text-white/70 ${subtitleSize}`}>Zoom, focus & align</Text>
                   </View>
                 </View>
               </View>
 
               {/* Zoom Control */}
-              <View className="rounded-2xl bg-brand-greenDark/50 border border-brand-green/40 p-3 mb-3">
-                <View className="flex-row items-center justify-between mb-2">
-                  <Text className="text-white font-semibold text-sm">Zoom Level</Text>
-                  <Text className="text-brand-greenLight font-mono text-sm">{(zoom * 100).toFixed(0)}%</Text>
+              <View className="rounded-xl bg-brand-greenDark/50 border border-brand-green/40 p-2 mb-2">
+                <View className="flex-row items-center justify-between mb-1">
+                  <Text className="text-white font-semibold text-xs">Zoom</Text>
+                  <Text className="text-brand-greenLight font-mono text-xs">{(zoom * 100).toFixed(0)}%</Text>
                 </View>
                 <Slider
-                    style={{ width: "100%", height: 40 }}
+                    style={{ width: "100%", height: 36 }}
                     minimumValue={0}
                     maximumValue={1}
                     value={zoom}
@@ -330,37 +336,61 @@ export default function Step4() {
                     maximumTrackTintColor="#333"
                     thumbTintColor="#22c55e"
                 />
-                <Pressable
-                    onPress={handleResetZoom}
-                    className="mt-2 py-2 rounded-lg bg-brand-black/40 border border-brand-green/30 items-center"
-                >
-                  <Text className="text-white/70 text-xs font-semibold">Reset Zoom</Text>
-                </Pressable>
+              </View>
+
+              {/* Rotation Control */}
+              <View className="rounded-xl bg-brand-greenDark/50 border border-brand-green/40 p-2 mb-2">
+                <View className="flex-row items-center justify-between mb-1">
+                  <Text className="text-white font-semibold text-xs">Rotation</Text>
+                  <Text className={`font-mono text-xs ${rotation === 0 ? "text-white/50" : "text-brand-greenLight"}`}>
+                    {rotation > 0 ? "+" : ""}{rotation.toFixed(1)}°
+                  </Text>
+                </View>
+                <Slider
+                    style={{ width: "100%", height: 36 }}
+                    minimumValue={MIN_ROTATION}
+                    maximumValue={MAX_ROTATION}
+                    value={rotation}
+                    onValueChange={handleRotationChange}
+                    minimumTrackTintColor="#0b7f4f"
+                    maximumTrackTintColor="#333"
+                    thumbTintColor="#22c55e"
+                />
+                <View className="flex-row justify-between px-1">
+                  <Text className="text-white/40 text-[10px]">-45°</Text>
+                  <Pressable onPress={handleResetRotation}>
+                    <Text className="text-brand-greenLight/70 text-[10px] font-semibold">Reset</Text>
+                  </Pressable>
+                  <Text className="text-white/40 text-[10px]">+45°</Text>
+                </View>
               </View>
 
               {/* Focus Status */}
-              <View className="rounded-2xl bg-brand-greenDark/50 border border-brand-green/40 p-3 mb-3">
-                <Text className="text-white font-semibold text-sm mb-2">Focus Lock</Text>
+              <View className="rounded-xl bg-brand-greenDark/50 border border-brand-green/40 p-2 mb-2">
+                <Text className="text-white font-semibold text-xs mb-1">Focus Lock</Text>
                 {focusPoint ? (
-                    <>
-                      <View className={`flex-row items-center justify-center mb-2 py-2 rounded-lg ${focusLocked ? "bg-brand-greenLight/20" : "bg-yellow-500/20"}`}>
-                        <View className={`w-2 h-2 rounded-full mr-2 ${focusLocked ? "bg-brand-greenLight" : "bg-yellow-500"}`} />
-                        <Text className={`text-xs font-semibold ${focusLocked ? "text-brand-greenLight" : "text-yellow-500"}`}>
-                          {focusLocked ? "FOCUS LOCKED" : "FOCUSING..."}
+                    <View className="flex-row items-center">
+                      <View className={`flex-1 flex-row items-center justify-center py-1.5 rounded-lg ${focusLocked ? "bg-brand-greenLight/20" : "bg-yellow-500/20"}`}>
+                        <View className={`w-2 h-2 rounded-full mr-1.5 ${focusLocked ? "bg-brand-greenLight" : "bg-yellow-500"}`} />
+                        <Text className={`text-[10px] font-semibold ${focusLocked ? "text-brand-greenLight" : "text-yellow-500"}`}>
+                          {focusLocked ? "LOCKED" : "FOCUSING..."}
                         </Text>
                       </View>
-                      <Pressable
-                          onPress={handleClearFocus}
-                          className="py-2 rounded-lg bg-brand-black/40 border border-brand-green/30 items-center"
-                      >
-                        <Text className="text-white/70 text-xs font-semibold">Clear & Re-focus</Text>
+                      <Pressable onPress={handleClearFocus} className="ml-2 px-2 py-1.5 rounded-lg bg-brand-black/40 border border-brand-green/30">
+                        <Text className="text-white/70 text-[10px] font-semibold">Clear</Text>
                       </Pressable>
-                    </>
+                    </View>
                 ) : (
-                    <Text className="text-white/50 text-xs text-center py-2">
-                      Tap camera to lock focus
-                    </Text>
+                    <Text className="text-white/50 text-[10px] text-center py-1.5">Tap camera to lock focus</Text>
                 )}
+              </View>
+
+              {/* Tip */}
+              <View className="rounded-xl bg-brand-black/40 border border-brand-green/25 p-2 mb-2">
+                <Text className="text-white/60 text-[10px]">
+                  <Text className="text-white/80 font-semibold">Tip: </Text>
+                  Adjust rotation until the guide lines align with your scope's crosshair.
+                </Text>
               </View>
 
               {/* Spacer */}
@@ -369,7 +399,7 @@ export default function Step4() {
               {/* CTAs */}
               <Pressable
                   onPress={handleNext}
-                  className="rounded-xl py-3 items-center bg-brand-greenLight border border-brand-green/60 mb-2"
+                  className="rounded-xl py-2.5 items-center bg-brand-greenLight border border-brand-green/60 mb-2"
               >
                 <Text className="text-white font-semibold text-sm">Continue</Text>
               </Pressable>
@@ -381,7 +411,6 @@ export default function Step4() {
                 >
                   <Text className="text-white/90 font-semibold text-xs">Back</Text>
                 </Pressable>
-
                 <Pressable
                     onPress={handleCancel}
                     className="flex-1 py-2 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
@@ -400,33 +429,29 @@ export default function Step4() {
   // ============================================================
   return (
       <View className="flex-1 bg-brand-black">
-        {/* Camera Feed */}
+        {/* Camera Feed with rotation */}
         <View
             onLayout={handleCameraLayout}
-            style={[
-              StyleSheet.absoluteFill,
-              { bottom: cameraInsets.padBottom },
-            ]}
+            style={[StyleSheet.absoluteFill, { bottom: cameraInsets.padBottom }]}
         >
           {shouldRenderCamera && (
               <Pressable onPress={handleTapToFocus} style={StyleSheet.absoluteFill}>
-                <CameraView
-                    ref={cameraRef}
-                    style={StyleSheet.absoluteFill}
-                    facing="back"
-                    zoom={zoom}
-                    autofocus={focusLocked ? "off" : "on"}
-                />
+                <View style={[StyleSheet.absoluteFill, rotationTransform]}>
+                  <CameraView
+                      ref={cameraRef}
+                      style={StyleSheet.absoluteFill}
+                      facing="back"
+                      zoom={zoom}
+                      autofocus={focusLocked ? "off" : "on"}
+                  />
+                </View>
 
                 {/* Focus indicator - animating */}
                 {focusPoint && showFocusIndicator && (
                     <View
                         style={[
                           styles.focusIndicator,
-                          {
-                            left: focusPoint.x - 30,
-                            top: focusPoint.y - 30,
-                          },
+                          { left: focusPoint.x - 30, top: focusPoint.y - 30 },
                         ]}
                         pointerEvents="none"
                     >
@@ -438,22 +463,18 @@ export default function Step4() {
                     </View>
                 )}
 
-                {/* Locked focus point indicator (persistent) */}
+                {/* Locked focus point indicator */}
                 {focusPoint && !showFocusIndicator && focusLocked && (
                     <View
                         style={[
                           styles.lockedFocusIndicator,
-                          {
-                            left: focusPoint.x - 24,
-                            top: focusPoint.y - 24,
-                          },
+                          { left: focusPoint.x - 24, top: focusPoint.y - 24 },
                         ]}
                         pointerEvents="none"
                     >
                       <View style={styles.lockedFocusOuter}>
                         <View style={styles.lockedFocusInner} />
                       </View>
-                      <Text style={styles.lockedFocusLabel}>LOCKED</Text>
                     </View>
                 )}
 
@@ -461,8 +482,8 @@ export default function Step4() {
                 {!focusPoint && (
                     <View style={styles.guideOverlay}>
                       <View style={styles.guideBox}>
-                        <Text style={styles.guideText}>Tap to lock focus point</Text>
-                        <Text style={styles.guideSubtext}>Focus will stay locked during calibration</Text>
+                        <Text style={styles.guideText}>Tap to lock focus</Text>
+                        <Text style={styles.guideSubtext}>Use rotation to align crosshair</Text>
                       </View>
                     </View>
                 )}
@@ -471,64 +492,93 @@ export default function Step4() {
         </View>
 
         {/* Bottom Panel */}
-        <SafeAreaView className="flex-1" edges={safeAreaEdges}>
-          <View className="flex-1" />
+        <SafeAreaView className="flex-1" edges={safeAreaEdges} pointerEvents="box-none">
+          <View className="flex-1" pointerEvents="none" />
 
           <View
               className="bg-brand-black/95 border-t border-brand-green/30 px-5 pt-4"
               style={{ paddingBottom: bottomPadding }}
           >
             {/* Header */}
-            <View className="rounded-2xl p-4 bg-brand-greenDark/70 border border-brand-green/60 mb-4">
+            <View className="rounded-2xl p-3 bg-brand-greenDark/70 border border-brand-green/60 mb-3">
               <View className="flex-row items-center">
-                <View className="size-10 rounded-xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-3">
+                <View className="size-9 rounded-xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-3">
                   <Image source={icons.camera} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
                 </View>
                 <View className="flex-1">
                   <Text className="text-white text-lg font-semibold">Camera Setup</Text>
-                  <Text className="text-white/70 mt-0.5 text-sm">
-                    Adjust zoom and tap to lock focus on your reticle
-                  </Text>
+                  <Text className="text-white/70 text-sm">Adjust zoom, focus & rotation to align with crosshair</Text>
                 </View>
               </View>
             </View>
 
-            {/* Zoom Control */}
-            <View className="rounded-2xl bg-brand-greenDark/50 border border-brand-green/40 p-4 mb-4">
-              <View className="flex-row items-center justify-between mb-2">
-                <Text className="text-white font-semibold">Zoom Level</Text>
-                <Text className="text-brand-greenLight font-mono text-lg">{(zoom * 100).toFixed(0)}%</Text>
+            {/* Controls Row */}
+            <View className="flex-row gap-3 mb-3">
+              {/* Zoom Control */}
+              <View className="flex-1 rounded-xl bg-brand-greenDark/50 border border-brand-green/40 p-3">
+                <View className="flex-row items-center justify-between mb-1">
+                  <Text className="text-white font-semibold text-sm">Zoom</Text>
+                  <Text className="text-brand-greenLight font-mono text-sm">{(zoom * 100).toFixed(0)}%</Text>
+                </View>
+                <Slider
+                    style={{ width: "100%", height: 40 }}
+                    minimumValue={0}
+                    maximumValue={1}
+                    value={zoom}
+                    onValueChange={handleZoomChange}
+                    minimumTrackTintColor="#0b7f4f"
+                    maximumTrackTintColor="#333"
+                    thumbTintColor="#22c55e"
+                />
               </View>
-              <Slider
-                  style={{ width: "100%", height: 44 }}
-                  minimumValue={0}
-                  maximumValue={1}
-                  value={zoom}
-                  onValueChange={handleZoomChange}
-                  minimumTrackTintColor="#0b7f4f"
-                  maximumTrackTintColor="#333"
-                  thumbTintColor="#22c55e"
-              />
-              <View className="flex-row gap-3 mt-2">
-                <Pressable
-                    onPress={handleResetZoom}
-                    className="flex-1 py-2 rounded-lg bg-brand-black/40 border border-brand-green/30 items-center"
-                >
-                  <Text className="text-white/70 text-sm font-semibold">Reset Zoom</Text>
-                </Pressable>
-                {focusPoint && (
-                    <Pressable
-                        onPress={handleClearFocus}
-                        className="flex-1 py-2 rounded-lg bg-brand-black/40 border border-brand-green/30 items-center"
-                    >
-                      <Text className="text-white/70 text-sm font-semibold">Clear Focus</Text>
-                    </Pressable>
-                )}
+
+              {/* Rotation Control */}
+              <View className="flex-1 rounded-xl bg-brand-greenDark/50 border border-brand-green/40 p-3">
+                <View className="flex-row items-center justify-between mb-1">
+                  <Text className="text-white font-semibold text-sm">Rotation</Text>
+                  <Text className={`font-mono text-sm ${rotation === 0 ? "text-white/50" : "text-brand-greenLight"}`}>
+                    {rotation > 0 ? "+" : ""}{rotation.toFixed(1)}°
+                  </Text>
+                </View>
+                <Slider
+                    style={{ width: "100%", height: 40 }}
+                    minimumValue={MIN_ROTATION}
+                    maximumValue={MAX_ROTATION}
+                    value={rotation}
+                    onValueChange={handleRotationChange}
+                    minimumTrackTintColor="#0b7f4f"
+                    maximumTrackTintColor="#333"
+                    thumbTintColor="#22c55e"
+                />
               </View>
             </View>
 
+            {/* Reset buttons row */}
+            <View className="flex-row gap-3 mb-3">
+              <Pressable
+                  onPress={handleResetZoom}
+                  className="flex-1 py-2 rounded-lg bg-brand-black/40 border border-brand-green/30 items-center"
+              >
+                <Text className="text-white/70 text-sm font-semibold">Reset Zoom</Text>
+              </Pressable>
+              <Pressable
+                  onPress={handleResetRotation}
+                  className="flex-1 py-2 rounded-lg bg-brand-black/40 border border-brand-green/30 items-center"
+              >
+                <Text className="text-white/70 text-sm font-semibold">Reset Rotation</Text>
+              </Pressable>
+              {focusPoint && (
+                  <Pressable
+                      onPress={handleClearFocus}
+                      className="flex-1 py-2 rounded-lg bg-brand-black/40 border border-brand-green/30 items-center"
+                  >
+                    <Text className="text-white/70 text-sm font-semibold">Clear Focus</Text>
+                  </Pressable>
+              )}
+            </View>
+
             {/* Focus Status */}
-            <View className="flex-row items-center justify-center mb-4">
+            <View className="flex-row items-center justify-center mb-3">
               <View className={`px-4 py-2 rounded-full flex-row items-center ${focusPoint ? (focusLocked ? "bg-brand-greenLight/20" : "bg-yellow-500/20") : "bg-brand-black/40"} border ${focusPoint ? (focusLocked ? "border-brand-greenLight" : "border-yellow-500") : "border-brand-green/30"}`}>
                 {focusPoint && (
                     <View className={`w-2 h-2 rounded-full mr-2 ${focusLocked ? "bg-brand-greenLight" : "bg-yellow-500"}`} />
@@ -554,7 +604,6 @@ export default function Step4() {
               >
                 <Text className="text-white/90 font-semibold text-sm">Back</Text>
               </Pressable>
-
               <Pressable
                   onPress={handleCancel}
                   className="flex-1 py-3 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
@@ -610,7 +659,7 @@ const styles = StyleSheet.create({
   },
   focusRingAnimating: {
     borderWidth: 3,
-    borderColor: "#eab308", // yellow while focusing
+    borderColor: "#eab308",
   },
   focusRingLocked: {
     borderWidth: 2,
@@ -619,9 +668,9 @@ const styles = StyleSheet.create({
   lockedFocusIndicator: {
     position: "absolute",
     width: 48,
-    height: 60,
+    height: 48,
     alignItems: "center",
-    justifyContent: "flex-start",
+    justifyContent: "center",
   },
   lockedFocusOuter: {
     width: 48,
@@ -638,12 +687,5 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     backgroundColor: "#22c55e",
-  },
-  lockedFocusLabel: {
-    marginTop: 2,
-    fontSize: 9,
-    fontWeight: "bold",
-    color: "#22c55e",
-    letterSpacing: 0.5,
   },
 });

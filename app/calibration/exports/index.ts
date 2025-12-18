@@ -53,6 +53,7 @@ export interface CalibrationResult {
     // Camera settings
     cameraZoom: number;
     focusPoint: FocusPoint | null;
+    screenRotation: number; // Degrees to rotate camera view to align with crosshair
     // Scope center
     scopeCenterPx: ScopeCenterPx;
     // Elevation calibration positions (for debugging/verification)
@@ -183,6 +184,7 @@ interface CalibrationState {
     // Step 4: Camera zoom and focus
     cameraZoom: number;
     focusPoint: FocusPoint | null;
+    screenRotation: number; // Degrees to rotate camera view
 
     // Step 5: Scope center alignment
     scopeCenterPx: ScopeCenterPx | null;
@@ -223,6 +225,7 @@ interface CalibrationActions {
     // Step 4: Camera zoom and focus
     setCameraZoom: (zoom: number) => void;
     setFocusPoint: (point: FocusPoint | null) => void;
+    setScreenRotation: (degrees: number) => void;
 
     // Step 5: Scope center
     setScopeCenterPx: (center: ScopeCenterPx) => void;
@@ -258,6 +261,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
     clickSize: 0.25, // Default ¼ MOA
     cameraZoom: 0,
     focusPoint: null,
+    screenRotation: 0,
     scopeCenterPx: null,
     elevationStartPx: null,
     elevationEndPx: null,
@@ -292,6 +296,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
     // Step 4: Camera zoom and focus
     setCameraZoom: (zoom) => set({ cameraZoom: zoom }),
     setFocusPoint: (point) => set({ focusPoint: point }),
+    setScreenRotation: (degrees) => set({ screenRotation: degrees }),
 
     // Step 5: Scope center
     setScopeCenterPx: (center) => set({ scopeCenterPx: center }),
@@ -339,6 +344,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             clickSize,
             cameraZoom,
             focusPoint,
+            screenRotation,
             scopeCenterPx,
             elevationStartPx,
             elevationEndPx,
@@ -366,6 +372,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             clickSize,
             cameraZoom,
             focusPoint,
+            screenRotation,
             scopeCenterPx,
             elevationStartPx,
             elevationEndPx,
@@ -384,6 +391,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             mountOrientation: "portrait",
             cameraZoom: 0,
             focusPoint: null,
+            screenRotation: 0,
             scopeCenterPx: null,
             elevationStartPx: null,
             elevationEndPx: null,
@@ -409,6 +417,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             clickSize: 0.25,
             cameraZoom: 0,
             focusPoint: null,
+            screenRotation: 0,
             scopeCenterPx: null,
             elevationStartPx: null,
             elevationEndPx: null,
@@ -436,6 +445,7 @@ export const selectScopeUnit = (s: CalibrationStore) => s.scopeUnit;
 export const selectClickSize = (s: CalibrationStore) => s.clickSize;
 export const selectCameraZoom = (s: CalibrationStore) => s.cameraZoom;
 export const selectFocusPoint = (s: CalibrationStore) => s.focusPoint;
+export const selectScreenRotation = (s: CalibrationStore) => s.screenRotation;
 export const selectScopeCenterPx = (s: CalibrationStore) => s.scopeCenterPx;
 export const selectElevationStartPx = (s: CalibrationStore) => s.elevationStartPx;
 export const selectElevationEndPx = (s: CalibrationStore) => s.elevationEndPx;

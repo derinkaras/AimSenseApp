@@ -13,18 +13,21 @@ import {
     Pressable,
     Image,
     StyleSheet,
+    ScrollView,
     useWindowDimensions,
     GestureResponderEvent,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import Slider from "@react-native-community/slider";
 
 import {
     useCalibrationStore,
     selectMountOrientation,
     selectCameraZoom,
     selectFocusPoint,
+    selectScreenRotation,
     isLandscape,
     ScopeCenterPx,
 } from "@/app/calibration/exports";
@@ -34,6 +37,10 @@ import { useCameraContext } from "./_layout";
 
 const SCREEN_ID = "step5";
 type StepSize = 1 | 5 | 10;
+
+// Rotation range in degrees
+const MAX_ROTATION = 45;
+const MIN_ROTATION = -45;
 
 const clamp = (v: number, min: number, max: number) =>
     Math.max(min, Math.min(max, v));
@@ -62,14 +69,22 @@ export default function Step5() {
     const mountOrientation = useCalibrationStore(selectMountOrientation);
     const cameraZoom = useCalibrationStore(selectCameraZoom);
     const focusPoint = useCalibrationStore(selectFocusPoint);
+    const storedRotation = useCalibrationStore(selectScreenRotation);
     const setScopeCenterPx = useCalibrationStore((s) => s.setScopeCenterPx);
     const setElevationStartPx = useCalibrationStore((s) => s.setElevationStartPx);
+    const setStoreRotation = useCalibrationStore((s) => s.setScreenRotation);
     const reset = useCalibrationStore((s) => s.resetCalibration);
 
     const isLandscapeMode = isLandscape(mountOrientation);
 
     // Determine if focus is locked (autofocus should be off)
     const focusLocked = focusPoint !== null;
+
+    // Local rotation state (synced with store)
+    const [rotation, setRotation] = useState(storedRotation);
+
+    // Rotation transform style
+    const rotationTransform = { transform: [{ rotate: `${rotation}deg` }] };
 
     // Center point state
     const [centerPoint, setCenterPoint] = useState<ScopeCenterPx | null>(null);
@@ -188,10 +203,19 @@ export default function Step5() {
         if (lastTapPoint) setCenterPoint(lastTapPoint);
     };
 
+    const handleRotationChange = (value: number) => {
+        // Round to 0.5 degree increments
+        const rounded = Math.round(value * 2) / 2;
+        setRotation(rounded);
+    };
+
+    const handleResetRotation = () => setRotation(0);
+
     const handleNext = () => {
         if (!centerPoint) return;
         setScopeCenterPx(centerPoint);
         setElevationStartPx(centerPoint);
+        setStoreRotation(rotation); // Save rotation to store
         router.push("/(calibration)/step6");
     };
 
@@ -228,12 +252,14 @@ export default function Step5() {
                 >
                     {shouldRenderCamera && (
                         <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
-                            <CameraView
-                                style={StyleSheet.absoluteFill}
-                                facing="back"
-                                zoom={cameraZoom}
-                                autofocus={focusLocked ? "off" : "on"}
-                            />
+                            <View style={[StyleSheet.absoluteFill, rotationTransform]}>
+                                <CameraView
+                                    style={StyleSheet.absoluteFill}
+                                    facing="back"
+                                    zoom={cameraZoom}
+                                    autofocus={focusLocked ? "off" : "on"}
+                                />
+                            </View>
 
                             {centerPoint && (
                                 <View
@@ -294,7 +320,7 @@ export default function Step5() {
                     style={{ width: SIDE_PANEL_W }}
                 >
                     <View className="flex-1 bg-brand-black/95 border-l border-brand-green/30">
-                        {/* Header */}
+                        {/* Header - Fixed at top */}
                         <View className="px-3 pt-3 pb-2">
                             <View className="flex-row items-start">
                                 <View className="size-8 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
@@ -316,9 +342,42 @@ export default function Step5() {
                             </View>
                         </View>
 
-                        <View className="flex-1 px-3">
+                        {/* Scrollable Content */}
+                        <ScrollView
+                            className="flex-1 px-3"
+                            showsVerticalScrollIndicator={true}
+                            bounces={false}
+                            contentContainerStyle={{ paddingBottom: 8 }}
+                        >
+                            {/* Rotation Control - always visible */}
+                            <View className="mt-2 rounded-xl bg-brand-greenDark/50 border border-brand-green/40 p-2 mb-2">
+                                <View className="flex-row items-center justify-between mb-1">
+                                    <Text className="text-white font-semibold text-[11px]">Rotation</Text>
+                                    <Text className={`font-mono text-[11px] ${rotation === 0 ? "text-white/50" : "text-brand-greenLight"}`}>
+                                        {rotation > 0 ? "+" : ""}{rotation.toFixed(1)}°
+                                    </Text>
+                                </View>
+                                <Slider
+                                    style={{ width: "100%", height: 32 }}
+                                    minimumValue={MIN_ROTATION}
+                                    maximumValue={MAX_ROTATION}
+                                    value={rotation}
+                                    onValueChange={handleRotationChange}
+                                    minimumTrackTintColor="#0b7f4f"
+                                    maximumTrackTintColor="#333"
+                                    thumbTintColor="#22c55e"
+                                />
+                                <View className="flex-row justify-between px-1">
+                                    <Text className="text-white/40 text-[9px]">-45°</Text>
+                                    <Pressable onPress={handleResetRotation}>
+                                        <Text className="text-brand-greenLight/70 text-[9px] font-semibold">Reset</Text>
+                                    </Pressable>
+                                    <Text className="text-white/40 text-[9px]">+45°</Text>
+                                </View>
+                            </View>
+
                             {!centerPoint ? (
-                                <View className="mt-2 p-3 rounded-2xl bg-brand-black/40 border border-brand-green/25">
+                                <View className="p-3 rounded-2xl bg-brand-black/40 border border-brand-green/25">
                                     <Text className="text-white/70 text-[12px] leading-4">
                                         Take your time — this sets your overlay reference.
                                     </Text>
@@ -427,9 +486,9 @@ export default function Step5() {
                                     </Pressable>
                                 </>
                             )}
-                        </View>
+                        </ScrollView>
 
-                        {/* Back / Cancel */}
+                        {/* Back / Cancel - Fixed at bottom */}
                         <View className="px-3 pb-3">
                             <View className="flex-row mt-2 gap-2">
                                 <Pressable
@@ -470,12 +529,14 @@ export default function Step5() {
             >
                 {shouldRenderCamera && (
                     <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
-                        <CameraView
-                            style={StyleSheet.absoluteFill}
-                            facing="back"
-                            zoom={cameraZoom}
-                            autofocus={focusLocked ? "off" : "on"}
-                        />
+                        <View style={[StyleSheet.absoluteFill, rotationTransform]}>
+                            <CameraView
+                                style={StyleSheet.absoluteFill}
+                                facing="back"
+                                zoom={cameraZoom}
+                                autofocus={focusLocked ? "off" : "on"}
+                            />
+                        </View>
 
                         {/* Crosshair overlay at center point */}
                         {centerPoint && (
@@ -527,150 +588,185 @@ export default function Step5() {
             </View>
 
             {/* Control Panel (portrait original) */}
-            <SafeAreaView className="absolute bottom-0 left-0 right-0" edges={["bottom"]}>
+            <SafeAreaView className="absolute bottom-0 left-0 right-0" edges={["bottom"]} style={{ maxHeight: height * 0.6 }}>
                 <View
                     style={{ paddingBottom: bottomPadding }}
-                    className="bg-brand-black/95 border-t border-brand-green/30 px-4 pt-4"
+                    className="bg-brand-black/95 border-t border-brand-green/30"
                 >
-                    {/* Header */}
-                    <View className="flex-row items-center mb-3">
-                        <View className="size-9 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
-                            <Image
-                                source={icons.target}
-                                className="w-5 h-5"
-                                resizeMode="contain"
-                                tintColor="#0b7f4f"
+                    {/* Scrollable Content */}
+                    <ScrollView
+                        className="px-4 pt-4"
+                        showsVerticalScrollIndicator={true}
+                        bounces={false}
+                        style={{ maxHeight: height * 0.42 }}
+                    >
+                        {/* Header */}
+                        <View className="flex-row items-center mb-3">
+                            <View className="size-9 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
+                                <Image
+                                    source={icons.target}
+                                    className="w-5 h-5"
+                                    resizeMode="contain"
+                                    tintColor="#0b7f4f"
+                                />
+                            </View>
+                            <View className="flex-1">
+                                <Text className="text-white font-semibold text-base">Align Scope Center</Text>
+                                <Text className="text-white/60 text-xs">Tap the crosshair center, then fine-tune.</Text>
+                            </View>
+                        </View>
+
+                        {/* Rotation Control - always visible */}
+                        <View className="rounded-xl bg-brand-greenDark/50 border border-brand-green/40 p-3 mb-3">
+                            <View className="flex-row items-center justify-between mb-1">
+                                <Text className="text-white font-semibold text-sm">Rotation</Text>
+                                <Text className={`font-mono text-sm ${rotation === 0 ? "text-white/50" : "text-brand-greenLight"}`}>
+                                    {rotation > 0 ? "+" : ""}{rotation.toFixed(1)}°
+                                </Text>
+                            </View>
+                            <Slider
+                                style={{ width: "100%", height: 36 }}
+                                minimumValue={MIN_ROTATION}
+                                maximumValue={MAX_ROTATION}
+                                value={rotation}
+                                onValueChange={handleRotationChange}
+                                minimumTrackTintColor="#0b7f4f"
+                                maximumTrackTintColor="#333"
+                                thumbTintColor="#22c55e"
                             />
+                            <View className="flex-row justify-between px-1">
+                                <Text className="text-white/40 text-[10px]">-45°</Text>
+                                <Pressable onPress={handleResetRotation}>
+                                    <Text className="text-brand-greenLight/70 text-[10px] font-semibold">Reset</Text>
+                                </Pressable>
+                                <Text className="text-white/40 text-[10px]">+45°</Text>
+                            </View>
                         </View>
-                        <View className="flex-1">
-                            <Text className="text-white font-semibold text-base">Align Scope Center</Text>
-                            <Text className="text-white/60 text-xs">Tap the crosshair center, then fine-tune.</Text>
-                        </View>
-                    </View>
 
-                    {centerPoint ? (
-                        <>
-                            {/* Micro Adjust Controls */}
-                            <View className="flex-row gap-3">
-                                {/* D-Pad */}
-                                <View className="flex-1 items-center">
-                                    <View className="items-center">
-                                        {/* Up */}
-                                        <Pressable
-                                            onPress={() => handleMicroAdjust("up")}
-                                            className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mb-1"
-                                        >
-                                            <Image
-                                                source={icons.chevronUp}
-                                                className="w-5 h-5"
-                                                resizeMode="contain"
-                                                tintColor="#0b7f4f"
-                                            />
-                                        </Pressable>
-
-                                        {/* Left / Center / Right */}
-                                        <View className="flex-row items-center gap-1">
+                        {centerPoint ? (
+                            <>
+                                {/* Micro Adjust Controls */}
+                                <View className="flex-row gap-3 pb-2">
+                                    {/* D-Pad */}
+                                    <View className="flex-1 items-center">
+                                        <View className="items-center">
+                                            {/* Up */}
                                             <Pressable
-                                                onPress={() => handleMicroAdjust("left")}
-                                                className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center"
+                                                onPress={() => handleMicroAdjust("up")}
+                                                className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mb-1"
                                             >
                                                 <Image
-                                                    source={icons.chevronLeft}
+                                                    source={icons.chevronUp}
                                                     className="w-5 h-5"
                                                     resizeMode="contain"
                                                     tintColor="#0b7f4f"
                                                 />
                                             </Pressable>
 
-                                            <View className="size-10 rounded-xl bg-brand-black/50 border border-brand-green/20 items-center justify-center">
-                                                <Text className="text-white/50 text-xs font-mono">{stepSize}px</Text>
+                                            {/* Left / Center / Right */}
+                                            <View className="flex-row items-center gap-1">
+                                                <Pressable
+                                                    onPress={() => handleMicroAdjust("left")}
+                                                    className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center"
+                                                >
+                                                    <Image
+                                                        source={icons.chevronLeft}
+                                                        className="w-5 h-5"
+                                                        resizeMode="contain"
+                                                        tintColor="#0b7f4f"
+                                                    />
+                                                </Pressable>
+
+                                                <View className="size-10 rounded-xl bg-brand-black/50 border border-brand-green/20 items-center justify-center">
+                                                    <Text className="text-white/50 text-xs font-mono">{stepSize}px</Text>
+                                                </View>
+
+                                                <Pressable
+                                                    onPress={() => handleMicroAdjust("right")}
+                                                    className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center"
+                                                >
+                                                    <Image
+                                                        source={icons.chevronRight}
+                                                        className="w-5 h-5"
+                                                        resizeMode="contain"
+                                                        tintColor="#0b7f4f"
+                                                    />
+                                                </Pressable>
                                             </View>
 
+                                            {/* Down */}
                                             <Pressable
-                                                onPress={() => handleMicroAdjust("right")}
-                                                className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center"
+                                                onPress={() => handleMicroAdjust("down")}
+                                                className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mt-1"
                                             >
                                                 <Image
-                                                    source={icons.chevronRight}
+                                                    source={icons.chevronDown}
                                                     className="w-5 h-5"
                                                     resizeMode="contain"
                                                     tintColor="#0b7f4f"
                                                 />
                                             </Pressable>
                                         </View>
+                                    </View>
 
-                                        {/* Down */}
+                                    {/* Step Size + Reset */}
+                                    <View className="justify-center gap-2">
+                                        <Text className="text-white/50 text-xs text-center">Step</Text>
+                                        <View className="flex-row gap-1">
+                                            {([1, 5, 10] as StepSize[]).map((size) => (
+                                                <Pressable
+                                                    key={size}
+                                                    onPress={() => setStepSize(size)}
+                                                    className={[
+                                                        "px-3 py-2 rounded-lg border",
+                                                        stepSize === size
+                                                            ? "bg-brand-greenLight/20 border-brand-greenLight"
+                                                            : "bg-brand-black/40 border-brand-green/30",
+                                                    ].join(" ")}
+                                                >
+                                                    <Text
+                                                        className={[
+                                                            "text-xs font-semibold",
+                                                            stepSize === size ? "text-white" : "text-white/60",
+                                                        ].join(" ")}
+                                                    >
+                                                        {size}px
+                                                    </Text>
+                                                </Pressable>
+                                            ))}
+                                        </View>
+
                                         <Pressable
-                                            onPress={() => handleMicroAdjust("down")}
-                                            className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mt-1"
+                                            onPress={handleReset}
+                                            className="px-3 py-2 rounded-lg bg-brand-black/40 border border-brand-green/30 items-center"
                                         >
-                                            <Image
-                                                source={icons.chevronDown}
-                                                className="w-5 h-5"
-                                                resizeMode="contain"
-                                                tintColor="#0b7f4f"
-                                            />
+                                            <Text className="text-white/70 text-xs font-semibold">Reset</Text>
+                                        </Pressable>
+                                    </View>
+
+                                    {/* Save Center Button */}
+                                    <View className="justify-center">
+                                        <Pressable
+                                            onPress={handleNext}
+                                            className="px-5 py-4 rounded-2xl bg-brand-greenLight border border-brand-green/60 items-center justify-center"
+                                        >
+                                            <Text className="text-white font-semibold text-sm">Save</Text>
+                                            <Text className="text-white font-semibold text-sm">Center</Text>
                                         </Pressable>
                                     </View>
                                 </View>
-
-                                {/* Step Size + Reset */}
-                                <View className="justify-center gap-2">
-                                    <Text className="text-white/50 text-xs text-center">Step</Text>
-                                    <View className="flex-row gap-1">
-                                        {([1, 5, 10] as StepSize[]).map((size) => (
-                                            <Pressable
-                                                key={size}
-                                                onPress={() => setStepSize(size)}
-                                                className={[
-                                                    "px-3 py-2 rounded-lg border",
-                                                    stepSize === size
-                                                        ? "bg-brand-greenLight/20 border-brand-greenLight"
-                                                        : "bg-brand-black/40 border-brand-green/30",
-                                                ].join(" ")}
-                                            >
-                                                <Text
-                                                    className={[
-                                                        "text-xs font-semibold",
-                                                        stepSize === size ? "text-white" : "text-white/60",
-                                                    ].join(" ")}
-                                                >
-                                                    {size}px
-                                                </Text>
-                                            </Pressable>
-                                        ))}
-                                    </View>
-
-                                    <Pressable
-                                        onPress={handleReset}
-                                        className="px-3 py-2 rounded-lg bg-brand-black/40 border border-brand-green/30 items-center"
-                                    >
-                                        <Text className="text-white/70 text-xs font-semibold">Reset</Text>
-                                    </Pressable>
-                                </View>
-
-                                {/* Save Center Button */}
-                                <View className="justify-center">
-                                    <Pressable
-                                        onPress={handleNext}
-                                        className="px-5 py-4 rounded-2xl bg-brand-greenLight border border-brand-green/60 items-center justify-center"
-                                    >
-                                        <Text className="text-white font-semibold text-sm">Save</Text>
-                                        <Text className="text-white font-semibold text-sm">Center</Text>
-                                    </Pressable>
-                                </View>
+                            </>
+                        ) : (
+                            <View className="py-4">
+                                <Text className="text-white/60 text-center text-sm">
+                                    Take your time — this sets your overlay reference.
+                                </Text>
                             </View>
-                        </>
-                    ) : (
-                        <View className="py-4">
-                            <Text className="text-white/60 text-center text-sm">
-                                Take your time — this sets your overlay reference.
-                            </Text>
-                        </View>
-                    )}
+                        )}
+                    </ScrollView>
 
-                    {/* Back / Cancel */}
-                    <View className="flex-row mt-3 gap-3">
+                    {/* Back / Cancel - Fixed at bottom, outside ScrollView */}
+                    <View className="flex-row px-4 pt-3 gap-3">
                         <Pressable
                             onPress={handleBack}
                             className="flex-1 py-3 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
