@@ -1,12 +1,11 @@
 // ============================================================
-// step4.tsx - Align Scope Center (Tap + Micro Adjust)
+// step4.tsx - Camera Zoom & Focus Calibration
 // ============================================================
-// UI rules:
-// - PORTRAIT: keep your original UI (bottom panel) unchanged
-// - LANDSCAPE: Step4-style (camera left + flush right panel)
-// - Magnifier: responsive size + clamped inside visible camera + pushed from left
+// User sets zoom level and tap-to-focus point for the camera.
+// Focus is LOCKED to the tapped point and persists through all
+// subsequent calibration steps. Autofocus is disabled once locked.
 
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useRef, useState, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -19,19 +18,21 @@ import {
 import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import Slider from "@react-native-community/slider";
 
 import {
   useCalibrationStore,
   selectMountOrientation,
+  selectCameraZoom,
+  selectFocusPoint,
   isLandscape,
-  ScopeCenterPx,
+  FocusPoint,
 } from "@/app/calibration/exports";
 import icons from "@/app/constants/icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import { useCameraContext } from "./_layout";
 
 const SCREEN_ID = "step4";
-type StepSize = 1 | 5 | 10;
 
 const clamp = (v: number, min: number, max: number) =>
     Math.max(min, Math.min(max, v));
@@ -41,11 +42,11 @@ export default function Step4() {
   const cameraEnabled = !!permission?.granted;
 
   const { activeScreen, setActiveScreen } = useCameraContext();
+  const cameraRef = useRef<CameraView>(null);
 
   useFocusEffect(
       useCallback(() => {
-        console.log(SCREEN_ID)
-
+        console.log(SCREEN_ID);
         setActiveScreen(SCREEN_ID);
         return () => {};
       }, [setActiveScreen])
@@ -58,19 +59,22 @@ export default function Step4() {
   const navigation = useNavigation();
 
   const mountOrientation = useCalibrationStore(selectMountOrientation);
-  const setScopeCenterPx = useCalibrationStore((s) => s.setScopeCenterPx);
-  const setElevationStartPx = useCalibrationStore((s) => s.setElevationStartPx);
+  const storedZoom = useCalibrationStore(selectCameraZoom);
+  const storedFocusPoint = useCalibrationStore(selectFocusPoint);
+  const setCameraZoom = useCalibrationStore((s) => s.setCameraZoom);
+  const setStoreFocusPoint = useCalibrationStore((s) => s.setFocusPoint);
   const reset = useCalibrationStore((s) => s.resetCalibration);
 
   const isLandscapeMode = isLandscape(mountOrientation);
 
-  // Center point state
-  const [centerPoint, setCenterPoint] = useState<ScopeCenterPx | null>(null);
-  const [stepSize, setStepSize] = useState<StepSize>(1);
-  const [lastTapPoint, setLastTapPoint] = useState<ScopeCenterPx | null>(null);
+  // Local state for zoom and focus
+  const [zoom, setZoom] = useState(storedZoom);
+  const [focusPoint, setLocalFocusPoint] = useState<FocusPoint | null>(storedFocusPoint);
+  const [showFocusIndicator, setShowFocusIndicator] = useState(false);
+  const [isFocusing, setIsFocusing] = useState(false);
+  const [focusLocked, setFocusLocked] = useState(!!storedFocusPoint);
 
-  // Track camera view bounds
-  const cameraViewRef = useRef<View>(null);
+  // Camera layout for calculating normalized coordinates
   const [cameraLayout, setCameraLayout] = useState({
     x: 0,
     y: 0,
@@ -78,113 +82,110 @@ export default function Step4() {
     height: 0,
   });
 
+  // Ref to track if we need to re-apply focus
+  const focusAppliedRef = useRef(false);
+
   const safeAreaEdges: ("top" | "bottom" | "left" | "right")[] = ["top", "bottom"];
   if (isLandscapeMode) safeAreaEdges.push("left", "right");
 
   const bottomPadding = Math.max(insets.bottom, 8);
 
-  // ---------------------------
-  // Responsive sizing (landscape)
-  // ---------------------------
+  // Layout sizing
   const SIDE_PANEL_W = useMemo(() => {
     const w = Math.round(width * 0.34);
     return clamp(w, 220, 280);
   }, [width]);
 
-  const MAGNIFIER_SIZE = useMemo(() => {
-    const base = isLandscapeMode ? width * 0.12 : width * 0.22;
-    return clamp(Math.round(base), isLandscapeMode ? 84 : 100, isLandscapeMode ? 120 : 140);
-  }, [width, isLandscapeMode]);
-
-  const bottomPanelHeight = 240;
-
   const cameraInsets = useMemo(() => {
     if (isLandscapeMode) {
       return { padRight: SIDE_PANEL_W, padBottom: 0 };
     }
-    return { padRight: 0, padBottom: bottomPanelHeight + bottomPadding };
-  }, [isLandscapeMode, SIDE_PANEL_W, bottomPanelHeight, bottomPadding]);
-
-  // Magnifier clamped to visible camera area.
-  // Also "push farther from left" to avoid edge hugs and small-phone clipping.
-  const magnifierPos = useMemo(() => {
-    const margin = 10;
-
-    // stronger push from left (scales with device; clamps)
-    const LEFT_SAFE_PAD = clamp(Math.round(width * 0.06), 24, 44);
-
-    const fallbackW = Math.max(0, width - cameraInsets.padRight);
-    const fallbackH = Math.max(0, height - cameraInsets.padBottom);
-
-    // Prefer measured camera layout, fallback to effective screen region.
-    const containerW = cameraLayout.width > 0 ? cameraLayout.width : fallbackW;
-    const containerH = cameraLayout.height > 0 ? cameraLayout.height : fallbackH;
-
-    const leftMin = LEFT_SAFE_PAD;
-    const leftMax = Math.max(leftMin, containerW - MAGNIFIER_SIZE - margin);
-
-    const topMin = insets.top + margin;
-    const topMax = Math.max(topMin, containerH - MAGNIFIER_SIZE - margin);
-
-    return {
-      left: clamp(LEFT_SAFE_PAD, leftMin, leftMax),
-      top: clamp(insets.top + margin, topMin, topMax),
-    };
-  }, [
-    width,
-    height,
-    insets.top,
-    cameraInsets.padRight,
-    cameraInsets.padBottom,
-    cameraLayout.width,
-    cameraLayout.height,
-    MAGNIFIER_SIZE,
-  ]);
+    return { padRight: 0, padBottom: 280 + bottomPadding };
+  }, [isLandscapeMode, SIDE_PANEL_W, bottomPadding]);
 
   const handleCameraLayout = (event: any) => {
     const { x, y, width, height } = event.nativeEvent.layout;
     setCameraLayout({ x, y, width, height });
   };
 
-  const handleTap = (event: GestureResponderEvent) => {
-    const { locationX, locationY } = event.nativeEvent;
-    const newPoint = { x: Math.round(locationX), y: Math.round(locationY) };
-    setCenterPoint(newPoint);
-    setLastTapPoint(newPoint);
-  };
-
-  const handleMicroAdjust = (direction: "up" | "down" | "left" | "right") => {
-    if (!centerPoint) return;
-
-    const delta = stepSize;
-    let newPoint = { ...centerPoint };
-
-    switch (direction) {
-      case "up":
-        newPoint.y = Math.max(0, centerPoint.y - delta);
-        break;
-      case "down":
-        newPoint.y = Math.min(cameraLayout.height, centerPoint.y + delta);
-        break;
-      case "left":
-        newPoint.x = Math.max(0, centerPoint.x - delta);
-        break;
-      case "right":
-        newPoint.x = Math.min(cameraLayout.width, centerPoint.x + delta);
-        break;
+  // Apply focus to camera using normalized coordinates
+  const applyFocus = useCallback(async (normalizedX: number, normalizedY: number) => {
+    try {
+      if (cameraRef.current) {
+        // Use the focus method if available (expo-camera)
+        // @ts-ignore - focus method exists on CameraView but may not be typed
+        if (typeof cameraRef.current.focus === 'function') {
+          await cameraRef.current.focus({ x: normalizedX, y: normalizedY });
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to apply focus:", err);
     }
+  }, []);
 
-    setCenterPoint(newPoint);
+  // Re-apply focus when camera becomes ready or focus point exists
+  useEffect(() => {
+    if (focusPoint && shouldRenderCamera && cameraLayout.width > 0 && !focusAppliedRef.current) {
+      // Small delay to ensure camera is ready
+      const timer = setTimeout(() => {
+        applyFocus(focusPoint.normalizedX, focusPoint.normalizedY);
+        focusAppliedRef.current = true;
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [focusPoint, shouldRenderCamera, cameraLayout.width, applyFocus]);
+
+  // Reset focus applied ref when focus point changes
+  useEffect(() => {
+    focusAppliedRef.current = false;
+  }, [focusPoint?.x, focusPoint?.y]);
+
+  const handleTapToFocus = async (event: GestureResponderEvent) => {
+    if (cameraLayout.width === 0 || cameraLayout.height === 0) return;
+
+    const { locationX, locationY } = event.nativeEvent;
+
+    // Calculate normalized coordinates (0-1) for camera API
+    const normalizedX = clamp(locationX / cameraLayout.width, 0, 1);
+    const normalizedY = clamp(locationY / cameraLayout.height, 0, 1);
+
+    const point: FocusPoint = {
+      x: Math.round(locationX),
+      y: Math.round(locationY),
+      normalizedX,
+      normalizedY,
+    };
+
+    setLocalFocusPoint(point);
+    setShowFocusIndicator(true);
+    setIsFocusing(true);
+    setFocusLocked(false);
+    focusAppliedRef.current = false;
+
+    // Apply focus to camera
+    await applyFocus(normalizedX, normalizedY);
+
+    // Animate focus indicator - show "focusing" state
+    setTimeout(() => {
+      setIsFocusing(false);
+      setFocusLocked(true);
+      focusAppliedRef.current = true;
+    }, 800);
+
+    // Hide the large focus indicator after animation
+    setTimeout(() => {
+      setShowFocusIndicator(false);
+    }, 1500);
   };
 
-  const handleReset = () => {
-    if (lastTapPoint) setCenterPoint(lastTapPoint);
+  const handleZoomChange = (value: number) => {
+    setZoom(value);
   };
 
   const handleNext = () => {
-    if (!centerPoint) return;
-    setScopeCenterPx(centerPoint);
-    setElevationStartPx(centerPoint);
+    // Save zoom and focus to store
+    setCameraZoom(zoom);
+    setStoreFocusPoint(focusPoint);
     router.push("/(calibration)/step5");
   };
 
@@ -200,19 +201,29 @@ export default function Step4() {
     );
   };
 
-  // Compact sizing for landscape D-pad
-  const dpBtn = isLandscapeMode ? "size-9" : "size-10";
-  const dpIcon = isLandscapeMode ? "w-4 h-4" : "w-5 h-5";
+  const handleResetZoom = () => {
+    setZoom(0);
+  };
+
+  const handleClearFocus = () => {
+    setLocalFocusPoint(null);
+    setFocusLocked(false);
+    focusAppliedRef.current = false;
+  };
+
+  // Layout adjustments
+  const headerPadding = isLandscapeMode ? "p-3" : "p-4";
+  const titleSize = isLandscapeMode ? "text-lg" : "text-xl";
+  const subtitleSize = isLandscapeMode ? "text-xs" : "text-sm";
 
   // ============================================================
-  // LANDSCAPE: Step4-style (camera left + flush right panel)
+  // LANDSCAPE Layout
   // ============================================================
   if (isLandscapeMode) {
     return (
         <View className="flex-1 bg-brand-black">
-          {/* Camera Feed (left region) */}
+          {/* Camera Feed */}
           <View
-              ref={cameraViewRef}
               onLayout={handleCameraLayout}
               style={[
                 StyleSheet.absoluteFill,
@@ -220,220 +231,163 @@ export default function Step4() {
               ]}
           >
             {shouldRenderCamera && (
-                <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
-                  <CameraView style={StyleSheet.absoluteFill} facing="back" />
+                <Pressable onPress={handleTapToFocus} style={StyleSheet.absoluteFill}>
+                  <CameraView
+                      ref={cameraRef}
+                      style={StyleSheet.absoluteFill}
+                      facing="back"
+                      zoom={zoom}
+                      autofocus={focusLocked ? "off" : "on"}
+                  />
 
-                  {centerPoint && (
+                  {/* Focus indicator - animating */}
+                  {focusPoint && showFocusIndicator && (
                       <View
                           style={[
-                            styles.crosshairContainer,
-                            { left: centerPoint.x - 30, top: centerPoint.y - 30 },
+                            styles.focusIndicator,
+                            {
+                              left: focusPoint.x - 30,
+                              top: focusPoint.y - 30,
+                            },
                           ]}
                           pointerEvents="none"
                       >
-                        <View style={styles.crosshairVertical} />
-                        <View style={styles.crosshairHorizontal} />
-                        <View style={styles.crosshairCenter} />
+                        <View style={[
+                          styles.focusRing,
+                          isFocusing && styles.focusRingAnimating,
+                          focusLocked && styles.focusRingLocked
+                        ]} />
                       </View>
                   )}
 
-                  {!centerPoint && (
-                      <View style={styles.guideOverlay} pointerEvents="none">
+                  {/* Locked focus point indicator (persistent) */}
+                  {focusPoint && !showFocusIndicator && focusLocked && (
+                      <View
+                          style={[
+                            styles.lockedFocusIndicator,
+                            {
+                              left: focusPoint.x - 24,
+                              top: focusPoint.y - 24,
+                            },
+                          ]}
+                          pointerEvents="none"
+                      >
+                        <View style={styles.lockedFocusOuter}>
+                          <View style={styles.lockedFocusInner} />
+                        </View>
+                        <Text style={styles.lockedFocusLabel}>LOCKED</Text>
+                      </View>
+                  )}
+
+                  {/* Guide overlay */}
+                  {!focusPoint && (
+                      <View style={styles.guideOverlay}>
                         <View style={styles.guideBox}>
-                          <Text style={styles.guideText}>Tap on the crosshair center</Text>
+                          <Text style={styles.guideText}>Tap to lock focus point</Text>
+                          <Text style={styles.guideSubtext}>Focus will stay locked during calibration</Text>
                         </View>
                       </View>
                   )}
                 </Pressable>
             )}
-
-            {/* Magnifier (clamped + pushed from left) */}
-            {centerPoint && (
-                <View
-                    style={[
-                      styles.magnifier,
-                      {
-                        width: MAGNIFIER_SIZE,
-                        height: MAGNIFIER_SIZE,
-                        left: magnifierPos.left,
-                        top: magnifierPos.top,
-                      },
-                    ]}
-                    pointerEvents="none"
-                >
-                  <View style={styles.magnifierInner}>
-                    <Text style={styles.magnifierLabel}>
-                      {centerPoint.x}, {centerPoint.y}
-                    </Text>
-                    <View style={styles.magnifierCrosshair}>
-                      <View style={styles.magnifierCrosshairV} />
-                      <View style={styles.magnifierCrosshairH} />
-                      <View style={styles.magnifierCrosshairDot} />
-                    </View>
-                  </View>
-                </View>
-            )}
           </View>
 
-          {/* Right panel (flush right) */}
+          {/* Side Panel */}
           <SafeAreaView
-              className="absolute top-0 bottom-0 right-0"
-              edges={["top", "bottom", "right"]}
+              className="absolute right-0 top-0 bottom-0 bg-brand-black/90 border-l border-brand-green/30"
               style={{ width: SIDE_PANEL_W }}
+              edges={["top", "bottom", "right"]}
           >
-            <View className="flex-1 bg-brand-black/95 border-l border-brand-green/30">
+            <View className="flex-1 p-3">
               {/* Header */}
-              <View className="px-3 pt-3 pb-2">
-                <View className="flex-row items-start">
-                  <View className="size-8 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
-                    <Image
-                        source={icons.target}
-                        className="w-4 h-4"
-                        resizeMode="contain"
-                        tintColor="#0b7f4f"
-                    />
+              <View className={`rounded-2xl ${headerPadding} bg-brand-greenDark/70 border border-brand-green/60 mb-3`}>
+                <View className="flex-row items-center">
+                  <View className="size-9 rounded-xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-2">
+                    <Image source={icons.camera} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
                   </View>
                   <View className="flex-1">
-                    <Text className="text-white font-semibold text-sm">
-                      Align Scope Center
-                    </Text>
-                    <Text className="text-white/60 text-[11px]">
-                      Tap, then fine-tune.
+                    <Text className={`text-white ${titleSize} font-semibold`}>Camera Setup</Text>
+                    <Text className={`text-white/70 mt-0.5 ${subtitleSize}`}>
+                      Set zoom & lock focus
                     </Text>
                   </View>
                 </View>
               </View>
 
-              <View className="flex-1 px-3">
-                {!centerPoint ? (
-                    <View className="mt-2 p-3 rounded-2xl bg-brand-black/40 border border-brand-green/25">
-                      <Text className="text-white/70 text-[12px] leading-4">
-                        Take your time — this sets your overlay reference.
-                      </Text>
-                    </View>
-                ) : (
+              {/* Zoom Control */}
+              <View className="rounded-2xl bg-brand-greenDark/50 border border-brand-green/40 p-3 mb-3">
+                <View className="flex-row items-center justify-between mb-2">
+                  <Text className="text-white font-semibold text-sm">Zoom Level</Text>
+                  <Text className="text-brand-greenLight font-mono text-sm">{(zoom * 100).toFixed(0)}%</Text>
+                </View>
+                <Slider
+                    style={{ width: "100%", height: 40 }}
+                    minimumValue={0}
+                    maximumValue={1}
+                    value={zoom}
+                    onValueChange={handleZoomChange}
+                    minimumTrackTintColor="#0b7f4f"
+                    maximumTrackTintColor="#333"
+                    thumbTintColor="#22c55e"
+                />
+                <Pressable
+                    onPress={handleResetZoom}
+                    className="mt-2 py-2 rounded-lg bg-brand-black/40 border border-brand-green/30 items-center"
+                >
+                  <Text className="text-white/70 text-xs font-semibold">Reset Zoom</Text>
+                </Pressable>
+              </View>
+
+              {/* Focus Status */}
+              <View className="rounded-2xl bg-brand-greenDark/50 border border-brand-green/40 p-3 mb-3">
+                <Text className="text-white font-semibold text-sm mb-2">Focus Lock</Text>
+                {focusPoint ? (
                     <>
-                      <View className="mt-1">
-                        <Text className="text-white/50 text-[11px] mb-1">Step</Text>
-                        <View className="flex-row gap-1">
-                          {([1, 5, 10] as StepSize[]).map((size) => (
-                              <Pressable
-                                  key={size}
-                                  onPress={() => setStepSize(size)}
-                                  className={[
-                                    "flex-1 py-2 rounded-xl border items-center",
-                                    stepSize === size
-                                        ? "bg-brand-greenLight/20 border-brand-greenLight"
-                                        : "bg-brand-black/40 border-brand-green/30",
-                                  ].join(" ")}
-                              >
-                                <Text
-                                    className={[
-                                      "text-[12px] font-semibold",
-                                      stepSize === size ? "text-white" : "text-white/60",
-                                    ].join(" ")}
-                                >
-                                  {size}px
-                                </Text>
-                              </Pressable>
-                          ))}
-                        </View>
-                      </View>
-
-                      <View className="mt-3 items-center">
-                        <Pressable
-                            onPress={() => handleMicroAdjust("up")}
-                            className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mb-1`}
-                        >
-                          <Image
-                              source={icons.chevronUp}
-                              className={dpIcon}
-                              resizeMode="contain"
-                              tintColor="#0b7f4f"
-                          />
-                        </Pressable>
-
-                        <View className="flex-row items-center gap-1">
-                          <Pressable
-                              onPress={() => handleMicroAdjust("left")}
-                              className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center`}
-                          >
-                            <Image
-                                source={icons.chevronLeft}
-                                className={dpIcon}
-                                resizeMode="contain"
-                                tintColor="#0b7f4f"
-                            />
-                          </Pressable>
-
-                          <View className={`${dpBtn} rounded-xl bg-brand-black/50 border border-brand-green/20 items-center justify-center`}>
-                            <Text className="text-white/50 text-[11px] font-mono">
-                              {stepSize}px
-                            </Text>
-                          </View>
-
-                          <Pressable
-                              onPress={() => handleMicroAdjust("right")}
-                              className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center`}
-                          >
-                            <Image
-                                source={icons.chevronRight}
-                                className={dpIcon}
-                                resizeMode="contain"
-                                tintColor="#0b7f4f"
-                            />
-                          </Pressable>
-                        </View>
-
-                        <Pressable
-                            onPress={() => handleMicroAdjust("down")}
-                            className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mt-1`}
-                        >
-                          <Image
-                              source={icons.chevronDown}
-                              className={dpIcon}
-                              resizeMode="contain"
-                              tintColor="#0b7f4f"
-                          />
-                        </Pressable>
-                      </View>
-
-                      <Pressable
-                          onPress={handleReset}
-                          className="mt-3 py-2 rounded-xl bg-brand-black/40 border border-brand-green/30 items-center"
-                      >
-                        <Text className="text-white/75 text-[12px] font-semibold">
-                          Reset to tap
+                      <View className={`flex-row items-center justify-center mb-2 py-2 rounded-lg ${focusLocked ? "bg-brand-greenLight/20" : "bg-yellow-500/20"}`}>
+                        <View className={`w-2 h-2 rounded-full mr-2 ${focusLocked ? "bg-brand-greenLight" : "bg-yellow-500"}`} />
+                        <Text className={`text-xs font-semibold ${focusLocked ? "text-brand-greenLight" : "text-yellow-500"}`}>
+                          {focusLocked ? "FOCUS LOCKED" : "FOCUSING..."}
                         </Text>
-                      </Pressable>
-
+                      </View>
                       <Pressable
-                          onPress={handleNext}
-                          className="mt-3 w-full py-3 rounded-2xl bg-brand-greenLight border border-brand-green/60 items-center"
+                          onPress={handleClearFocus}
+                          className="py-2 rounded-lg bg-brand-black/40 border border-brand-green/30 items-center"
                       >
-                        <Text className="text-white font-semibold text-sm">Save Center</Text>
+                        <Text className="text-white/70 text-xs font-semibold">Clear & Re-focus</Text>
                       </Pressable>
                     </>
+                ) : (
+                    <Text className="text-white/50 text-xs text-center py-2">
+                      Tap camera to lock focus
+                    </Text>
                 )}
               </View>
 
-              {/* Back / Cancel */}
-              <View className="px-3 pb-3">
-                <View className="flex-row mt-2 gap-2">
-                  <Pressable
-                      onPress={handleBack}
-                      className="flex-1 py-2 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
-                  >
-                    <Text className="text-white/90 font-semibold text-[12px]">Back</Text>
-                  </Pressable>
+              {/* Spacer */}
+              <View className="flex-1" />
 
-                  <Pressable
-                      onPress={handleCancel}
-                      className="flex-1 py-2 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
-                  >
-                    <Text className="text-white/90 font-semibold text-[12px]">Cancel</Text>
-                  </Pressable>
-                </View>
+              {/* CTAs */}
+              <Pressable
+                  onPress={handleNext}
+                  className="rounded-xl py-3 items-center bg-brand-greenLight border border-brand-green/60 mb-2"
+              >
+                <Text className="text-white font-semibold text-sm">Continue</Text>
+              </Pressable>
+
+              <View className="flex-row gap-2">
+                <Pressable
+                    onPress={handleBack}
+                    className="flex-1 py-2 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
+                >
+                  <Text className="text-white/90 font-semibold text-xs">Back</Text>
+                </Pressable>
+
+                <Pressable
+                    onPress={handleCancel}
+                    className="flex-1 py-2 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
+                >
+                  <Text className="text-white/90 font-semibold text-xs">Cancel</Text>
+                </Pressable>
               </View>
             </View>
           </SafeAreaView>
@@ -442,217 +396,157 @@ export default function Step4() {
   }
 
   // ============================================================
-  // PORTRAIT: keep your original UI unchanged
+  // PORTRAIT Layout
   // ============================================================
-
-  // Control panel dimensions based on orientation (portrait uses original bottom panel)
-  const controlPanelHeight = 240;
-
   return (
       <View className="flex-1 bg-brand-black">
-        {/* Camera Feed (tappable area) */}
+        {/* Camera Feed */}
         <View
-            ref={cameraViewRef}
             onLayout={handleCameraLayout}
-            style={[StyleSheet.absoluteFill, { bottom: controlPanelHeight + bottomPadding }]}
+            style={[
+              StyleSheet.absoluteFill,
+              { bottom: cameraInsets.padBottom },
+            ]}
         >
           {shouldRenderCamera && (
-              <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
-                <CameraView style={StyleSheet.absoluteFill} facing="back" />
+              <Pressable onPress={handleTapToFocus} style={StyleSheet.absoluteFill}>
+                <CameraView
+                    ref={cameraRef}
+                    style={StyleSheet.absoluteFill}
+                    facing="back"
+                    zoom={zoom}
+                    autofocus={focusLocked ? "off" : "on"}
+                />
 
-                {/* Crosshair overlay at center point */}
-                {centerPoint && (
+                {/* Focus indicator - animating */}
+                {focusPoint && showFocusIndicator && (
                     <View
                         style={[
-                          styles.crosshairContainer,
-                          { left: centerPoint.x - 30, top: centerPoint.y - 30 },
+                          styles.focusIndicator,
+                          {
+                            left: focusPoint.x - 30,
+                            top: focusPoint.y - 30,
+                          },
                         ]}
                         pointerEvents="none"
                     >
-                      <View style={styles.crosshairVertical} />
-                      <View style={styles.crosshairHorizontal} />
-                      <View style={styles.crosshairCenter} />
+                      <View style={[
+                        styles.focusRing,
+                        isFocusing && styles.focusRingAnimating,
+                        focusLocked && styles.focusRingLocked
+                      ]} />
                     </View>
                 )}
 
-                {/* Guide text when no point set */}
-                {!centerPoint && (
+                {/* Locked focus point indicator (persistent) */}
+                {focusPoint && !showFocusIndicator && focusLocked && (
+                    <View
+                        style={[
+                          styles.lockedFocusIndicator,
+                          {
+                            left: focusPoint.x - 24,
+                            top: focusPoint.y - 24,
+                          },
+                        ]}
+                        pointerEvents="none"
+                    >
+                      <View style={styles.lockedFocusOuter}>
+                        <View style={styles.lockedFocusInner} />
+                      </View>
+                      <Text style={styles.lockedFocusLabel}>LOCKED</Text>
+                    </View>
+                )}
+
+                {/* Guide overlay */}
+                {!focusPoint && (
                     <View style={styles.guideOverlay}>
                       <View style={styles.guideBox}>
-                        <Text style={styles.guideText}>Tap on the crosshair center</Text>
+                        <Text style={styles.guideText}>Tap to lock focus point</Text>
+                        <Text style={styles.guideSubtext}>Focus will stay locked during calibration</Text>
                       </View>
                     </View>
                 )}
               </Pressable>
           )}
-
-          {/* Magnifier (portrait original: top-right) */}
-          {centerPoint && (
-              <View
-                  style={[
-                    styles.magnifier,
-                    { width: 120, height: 120, top: insets.top + 10, right: 10 },
-                  ]}
-                  pointerEvents="none"
-              >
-                <View style={styles.magnifierInner}>
-                  <Text style={styles.magnifierLabel}>
-                    {centerPoint.x}, {centerPoint.y}
-                  </Text>
-                  <View style={styles.magnifierCrosshair}>
-                    <View style={styles.magnifierCrosshairV} />
-                    <View style={styles.magnifierCrosshairH} />
-                    <View style={styles.magnifierCrosshairDot} />
-                  </View>
-                </View>
-              </View>
-          )}
         </View>
 
-        {/* Control Panel (portrait original) */}
-        <SafeAreaView className="absolute bottom-0 left-0 right-0" edges={["bottom"]}>
+        {/* Bottom Panel */}
+        <SafeAreaView className="flex-1" edges={safeAreaEdges}>
+          <View className="flex-1" />
+
           <View
+              className="bg-brand-black/95 border-t border-brand-green/30 px-5 pt-4"
               style={{ paddingBottom: bottomPadding }}
-              className="bg-brand-black/95 border-t border-brand-green/30 px-4 pt-4"
           >
             {/* Header */}
-            <View className="flex-row items-center mb-3">
-              <View className="size-9 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
-                <Image
-                    source={icons.target}
-                    className="w-5 h-5"
-                    resizeMode="contain"
-                    tintColor="#0b7f4f"
-                />
-              </View>
-              <View className="flex-1">
-                <Text className="text-white font-semibold text-base">Align Scope Center</Text>
-                <Text className="text-white/60 text-xs">Tap the crosshair center, then fine-tune.</Text>
+            <View className="rounded-2xl p-4 bg-brand-greenDark/70 border border-brand-green/60 mb-4">
+              <View className="flex-row items-center">
+                <View className="size-10 rounded-xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-3">
+                  <Image source={icons.camera} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-white text-lg font-semibold">Camera Setup</Text>
+                  <Text className="text-white/70 mt-0.5 text-sm">
+                    Adjust zoom and tap to lock focus on your reticle
+                  </Text>
+                </View>
               </View>
             </View>
 
-            {centerPoint ? (
-                <>
-                  {/* Micro Adjust Controls */}
-                  <View className="flex-row gap-3">
-                    {/* D-Pad */}
-                    <View className="flex-1 items-center">
-                      <View className="items-center">
-                        {/* Up */}
-                        <Pressable
-                            onPress={() => handleMicroAdjust("up")}
-                            className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mb-1"
-                        >
-                          <Image
-                              source={icons.chevronUp}
-                              className="w-5 h-5"
-                              resizeMode="contain"
-                              tintColor="#0b7f4f"
-                          />
-                        </Pressable>
+            {/* Zoom Control */}
+            <View className="rounded-2xl bg-brand-greenDark/50 border border-brand-green/40 p-4 mb-4">
+              <View className="flex-row items-center justify-between mb-2">
+                <Text className="text-white font-semibold">Zoom Level</Text>
+                <Text className="text-brand-greenLight font-mono text-lg">{(zoom * 100).toFixed(0)}%</Text>
+              </View>
+              <Slider
+                  style={{ width: "100%", height: 44 }}
+                  minimumValue={0}
+                  maximumValue={1}
+                  value={zoom}
+                  onValueChange={handleZoomChange}
+                  minimumTrackTintColor="#0b7f4f"
+                  maximumTrackTintColor="#333"
+                  thumbTintColor="#22c55e"
+              />
+              <View className="flex-row gap-3 mt-2">
+                <Pressable
+                    onPress={handleResetZoom}
+                    className="flex-1 py-2 rounded-lg bg-brand-black/40 border border-brand-green/30 items-center"
+                >
+                  <Text className="text-white/70 text-sm font-semibold">Reset Zoom</Text>
+                </Pressable>
+                {focusPoint && (
+                    <Pressable
+                        onPress={handleClearFocus}
+                        className="flex-1 py-2 rounded-lg bg-brand-black/40 border border-brand-green/30 items-center"
+                    >
+                      <Text className="text-white/70 text-sm font-semibold">Clear Focus</Text>
+                    </Pressable>
+                )}
+              </View>
+            </View>
 
-                        {/* Left / Center / Right */}
-                        <View className="flex-row items-center gap-1">
-                          <Pressable
-                              onPress={() => handleMicroAdjust("left")}
-                              className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center"
-                          >
-                            <Image
-                                source={icons.chevronLeft}
-                                className="w-5 h-5"
-                                resizeMode="contain"
-                                tintColor="#0b7f4f"
-                            />
-                          </Pressable>
+            {/* Focus Status */}
+            <View className="flex-row items-center justify-center mb-4">
+              <View className={`px-4 py-2 rounded-full flex-row items-center ${focusPoint ? (focusLocked ? "bg-brand-greenLight/20" : "bg-yellow-500/20") : "bg-brand-black/40"} border ${focusPoint ? (focusLocked ? "border-brand-greenLight" : "border-yellow-500") : "border-brand-green/30"}`}>
+                {focusPoint && (
+                    <View className={`w-2 h-2 rounded-full mr-2 ${focusLocked ? "bg-brand-greenLight" : "bg-yellow-500"}`} />
+                )}
+                <Text className={`text-sm font-semibold ${focusPoint ? (focusLocked ? "text-brand-greenLight" : "text-yellow-500") : "text-white/50"}`}>
+                  {focusPoint ? (focusLocked ? "Focus Locked" : "Focusing...") : "Tap camera to lock focus"}
+                </Text>
+              </View>
+            </View>
 
-                          <View className="size-10 rounded-xl bg-brand-black/50 border border-brand-green/20 items-center justify-center">
-                            <Text className="text-white/50 text-xs font-mono">{stepSize}px</Text>
-                          </View>
+            {/* CTAs */}
+            <Pressable
+                onPress={handleNext}
+                className="rounded-2xl py-4 items-center bg-brand-greenLight border border-brand-green/60"
+            >
+              <Text className="text-white font-semibold text-lg">Continue</Text>
+            </Pressable>
 
-                          <Pressable
-                              onPress={() => handleMicroAdjust("right")}
-                              className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center"
-                          >
-                            <Image
-                                source={icons.chevronRight}
-                                className="w-5 h-5"
-                                resizeMode="contain"
-                                tintColor="#0b7f4f"
-                            />
-                          </Pressable>
-                        </View>
-
-                        {/* Down */}
-                        <Pressable
-                            onPress={() => handleMicroAdjust("down")}
-                            className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mt-1"
-                        >
-                          <Image
-                              source={icons.chevronDown}
-                              className="w-5 h-5"
-                              resizeMode="contain"
-                              tintColor="#0b7f4f"
-                          />
-                        </Pressable>
-                      </View>
-                    </View>
-
-                    {/* Step Size + Reset */}
-                    <View className="justify-center gap-2">
-                      <Text className="text-white/50 text-xs text-center">Step</Text>
-                      <View className="flex-row gap-1">
-                        {([1, 5, 10] as StepSize[]).map((size) => (
-                            <Pressable
-                                key={size}
-                                onPress={() => setStepSize(size)}
-                                className={[
-                                  "px-3 py-2 rounded-lg border",
-                                  stepSize === size
-                                      ? "bg-brand-greenLight/20 border-brand-greenLight"
-                                      : "bg-brand-black/40 border-brand-green/30",
-                                ].join(" ")}
-                            >
-                              <Text
-                                  className={[
-                                    "text-xs font-semibold",
-                                    stepSize === size ? "text-white" : "text-white/60",
-                                  ].join(" ")}
-                              >
-                                {size}px
-                              </Text>
-                            </Pressable>
-                        ))}
-                      </View>
-
-                      <Pressable
-                          onPress={handleReset}
-                          className="px-3 py-2 rounded-lg bg-brand-black/40 border border-brand-green/30 items-center"
-                      >
-                        <Text className="text-white/70 text-xs font-semibold">Reset</Text>
-                      </Pressable>
-                    </View>
-
-                    {/* Save Center Button */}
-                    <View className="justify-center">
-                      <Pressable
-                          onPress={handleNext}
-                          className="px-5 py-4 rounded-2xl bg-brand-greenLight border border-brand-green/60 items-center justify-center"
-                      >
-                        <Text className="text-white font-semibold text-sm">Save</Text>
-                        <Text className="text-white font-semibold text-sm">Center</Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                </>
-            ) : (
-                <View className="py-4">
-                  <Text className="text-white/60 text-center text-sm">
-                    Take your time — this sets your overlay reference.
-                  </Text>
-                </View>
-            )}
-
-            {/* Back / Cancel */}
             <View className="flex-row mt-3 gap-3">
               <Pressable
                   onPress={handleBack}
@@ -675,95 +569,81 @@ export default function Step4() {
 }
 
 const styles = StyleSheet.create({
-  crosshairContainer: {
-    position: "absolute",
-    width: 60,
-    height: 60,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  crosshairVertical: {
-    position: "absolute",
-    width: 2,
-    height: 60,
-    backgroundColor: "#0b7f4f",
-  },
-  crosshairHorizontal: {
-    position: "absolute",
-    width: 60,
-    height: 2,
-    backgroundColor: "#0b7f4f",
-  },
-  crosshairCenter: {
-    position: "absolute",
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#22c55e",
-    borderWidth: 1,
-    borderColor: "#0b7f4f",
-  },
   guideOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
   },
   guideBox: {
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.75)",
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(11, 127, 79, 0.4)",
+    alignItems: "center",
   },
   guideText: {
     color: "white",
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
   },
-  magnifier: {
+  guideSubtext: {
+    color: "rgba(255, 255, 255, 0.6)",
+    fontSize: 13,
+    marginTop: 4,
+  },
+  focusIndicator: {
     position: "absolute",
-    borderRadius: 12,
+    width: 60,
+    height: 60,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  focusRing: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     borderWidth: 2,
-    borderColor: "#0b7f4f",
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
-    overflow: "hidden",
+    borderColor: "#22c55e",
+    backgroundColor: "transparent",
   },
-  magnifierInner: {
-    flex: 1,
+  focusRingAnimating: {
+    borderWidth: 3,
+    borderColor: "#eab308", // yellow while focusing
+  },
+  focusRingLocked: {
+    borderWidth: 2,
+    borderColor: "#22c55e",
+  },
+  lockedFocusIndicator: {
+    position: "absolute",
+    width: 48,
+    height: 60,
+    alignItems: "center",
+    justifyContent: "flex-start",
+  },
+  lockedFocusOuter: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: "#22c55e",
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "rgba(34, 197, 94, 0.15)",
   },
-  magnifierLabel: {
-    position: "absolute",
-    bottom: 4,
-    color: "#0b7f4f",
-    fontSize: 10,
-    fontFamily: "monospace",
-  },
-  magnifierCrosshair: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  magnifierCrosshairV: {
-    position: "absolute",
-    width: 1,
-    height: 40,
+  lockedFocusInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: "#22c55e",
   },
-  magnifierCrosshairH: {
-    position: "absolute",
-    width: 40,
-    height: 1,
-    backgroundColor: "#22c55e",
-  },
-  magnifierCrosshairDot: {
-    position: "absolute",
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#22c55e",
+  lockedFocusLabel: {
+    marginTop: 2,
+    fontSize: 9,
+    fontWeight: "bold",
+    color: "#22c55e",
+    letterSpacing: 0.5,
   },
 });

@@ -35,13 +35,33 @@ export interface ScopeCenterPx {
     y: number;
 }
 
+export interface FocusPoint {
+    // Pixel coordinates (for UI display)
+    x: number;
+    y: number;
+    // Normalized coordinates (0-1) for camera focus API
+    normalizedX: number;
+    normalizedY: number;
+}
+
 export interface CalibrationResult {
     mountOrientation: MountOrientation;
     roll0: number;
     pitch0: number;
     scopeUnit: ScopeUnit;
     clickSize: number;
+    // Camera settings
+    cameraZoom: number;
+    focusPoint: FocusPoint | null;
+    // Scope center
     scopeCenterPx: ScopeCenterPx;
+    // Elevation calibration positions (for debugging/verification)
+    elevationStartPx: ScopeCenterPx;
+    elevationEndPx: ScopeCenterPx;
+    // Windage calibration positions (for debugging/verification)
+    windageStartPx: ScopeCenterPx;
+    windageEndPx: ScopeCenterPx;
+    // Computed pixel scales
     pxPerUnitX: number;
     pxPerUnitY: number;
     calibratedAt: number;
@@ -152,33 +172,37 @@ interface CalibrationState {
     mountOrientation: MountOrientation;
     pendingOrientation: MountOrientation;
 
-    // Step 2: Scope setup
+    // Step 2: Reference (baseline IMU)
+    roll0: number;
+    pitch0: number;
+
+    // Step 3: Scope setup
     scopeUnit: ScopeUnit;
     clickSize: number;
 
-    // Step 3: Scope center alignment
+    // Step 4: Camera zoom and focus
+    cameraZoom: number;
+    focusPoint: FocusPoint | null;
+
+    // Step 5: Scope center alignment
     scopeCenterPx: ScopeCenterPx | null;
 
-    // Step 4: Elevation calibration
+    // Step 6: Elevation calibration
     elevationStartPx: ScopeCenterPx | null;
     elevationEndPx: ScopeCenterPx | null;
 
-    // Step 5: Windage calibration
+    // Step 7: Windage calibration
     windageStartPx: ScopeCenterPx | null;
     windageEndPx: ScopeCenterPx | null;
 
-    // Axes swapped: true if user turned wrong turret in step5
+    // Axes swapped: true if user turned wrong turret in step6
     // (turned windage when asked for elevation)
-    // Step 6 will then calibrate elevation instead of windage
+    // Step 7 will then calibrate elevation instead of windage
     axesSwapped: boolean;
 
     // Computed pixel scales
     pxPerUnitX: number;
     pxPerUnitY: number;
-
-    // Step 6: Reference (baseline IMU)
-    roll0: number;
-    pitch0: number;
 
     // Saved result
     savedResult: CalibrationResult | null;
@@ -189,28 +213,32 @@ interface CalibrationActions {
     setPendingOrientation: (o: MountOrientation) => void;
     confirmOrientation: () => Promise<void>;
 
-    // Step 2: Scope setup
+    // Step 2: Reference capture
+    captureBaseline: (roll0: number, pitch0: number) => void;
+
+    // Step 3: Scope setup
     setScopeUnit: (unit: ScopeUnit) => void;
     setClickSize: (size: number) => void;
 
-    // Step 3: Scope center
+    // Step 4: Camera zoom and focus
+    setCameraZoom: (zoom: number) => void;
+    setFocusPoint: (point: FocusPoint | null) => void;
+
+    // Step 5: Scope center
     setScopeCenterPx: (center: ScopeCenterPx) => void;
 
-    // Step 4: Elevation calibration
+    // Step 6: Elevation calibration
     setElevationStartPx: (pos: ScopeCenterPx) => void;
     setElevationEndPx: (pos: ScopeCenterPx) => void;
     calculateElevationScale: () => void;
 
-    // Step 5: Windage calibration
+    // Step 7: Windage calibration
     setWindageStartPx: (pos: ScopeCenterPx) => void;
     setWindageEndPx: (pos: ScopeCenterPx) => void;
     calculateWindageScale: () => void;
 
     // Axes swap handling
     setAxesSwapped: (swapped: boolean) => void;
-
-    // Step 6: Reference capture
-    captureBaseline: (roll0: number, pitch0: number) => void;
 
     // Finish & reset
     finishCalibration: () => Promise<CalibrationResult>;
@@ -224,8 +252,12 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
     // Initial state
     mountOrientation: "portrait",
     pendingOrientation: "portrait",
+    roll0: 0,
+    pitch0: 0,
     scopeUnit: "MOA",
     clickSize: 0.25, // Default ¼ MOA
+    cameraZoom: 0,
+    focusPoint: null,
     scopeCenterPx: null,
     elevationStartPx: null,
     elevationEndPx: null,
@@ -234,8 +266,6 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
     axesSwapped: false,
     pxPerUnitX: 0,
     pxPerUnitY: 0,
-    roll0: 0,
-    pitch0: 0,
     savedResult: null,
 
     // Step 1: Phone orientation
@@ -247,7 +277,10 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
         set({ mountOrientation: pendingOrientation });
     },
 
-    // Step 2: Scope setup
+    // Step 2: Reference capture
+    captureBaseline: (roll0, pitch0) => set({ roll0, pitch0 }),
+
+    // Step 3: Scope setup
     setScopeUnit: (unit) => {
         // Reset click size to default when unit changes
         const defaultClickSize = unit === "MOA" ? 0.25 : 0.1;
@@ -256,10 +289,14 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
 
     setClickSize: (size) => set({ clickSize: size }),
 
-    // Step 3: Scope center
+    // Step 4: Camera zoom and focus
+    setCameraZoom: (zoom) => set({ cameraZoom: zoom }),
+    setFocusPoint: (point) => set({ focusPoint: point }),
+
+    // Step 5: Scope center
     setScopeCenterPx: (center) => set({ scopeCenterPx: center }),
 
-    // Step 4: Elevation calibration
+    // Step 6: Elevation calibration
     setElevationStartPx: (pos) => set({ elevationStartPx: pos }),
 
     setElevationEndPx: (pos) => set({ elevationEndPx: pos }),
@@ -274,7 +311,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
         set({ pxPerUnitY });
     },
 
-    // Step 5: Windage calibration
+    // Step 7: Windage calibration
     setWindageStartPx: (pos) => set({ windageStartPx: pos }),
 
     setWindageEndPx: (pos) => set({ windageEndPx: pos }),
@@ -292,9 +329,6 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
     // Axes swap handling
     setAxesSwapped: (swapped) => set({ axesSwapped: swapped }),
 
-    // Step 6: Reference capture
-    captureBaseline: (roll0, pitch0) => set({ roll0, pitch0 }),
-
     // Finish calibration
     finishCalibration: async () => {
         const {
@@ -303,13 +337,25 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             pitch0,
             scopeUnit,
             clickSize,
+            cameraZoom,
+            focusPoint,
             scopeCenterPx,
+            elevationStartPx,
+            elevationEndPx,
+            windageStartPx,
+            windageEndPx,
             pxPerUnitX,
             pxPerUnitY,
         } = get();
 
         if (!scopeCenterPx) {
             throw new Error("Scope center not calibrated");
+        }
+        if (!elevationStartPx || !elevationEndPx) {
+            throw new Error("Elevation not calibrated");
+        }
+        if (!windageStartPx || !windageEndPx) {
+            throw new Error("Windage not calibrated");
         }
 
         const result: CalibrationResult = {
@@ -318,7 +364,13 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             pitch0,
             scopeUnit,
             clickSize,
+            cameraZoom,
+            focusPoint,
             scopeCenterPx,
+            elevationStartPx,
+            elevationEndPx,
+            windageStartPx,
+            windageEndPx,
             pxPerUnitX,
             pxPerUnitY,
             calibratedAt: Date.now(),
@@ -330,6 +382,8 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             savedResult: result,
             pendingOrientation: "portrait",
             mountOrientation: "portrait",
+            cameraZoom: 0,
+            focusPoint: null,
             scopeCenterPx: null,
             elevationStartPx: null,
             elevationEndPx: null,
@@ -353,6 +407,8 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             pendingOrientation: "portrait",
             scopeUnit: "MOA",
             clickSize: 0.25,
+            cameraZoom: 0,
+            focusPoint: null,
             scopeCenterPx: null,
             elevationStartPx: null,
             elevationEndPx: null,
@@ -378,7 +434,13 @@ export const selectMountOrientation = (s: CalibrationStore) => s.mountOrientatio
 export const selectPendingOrientation = (s: CalibrationStore) => s.pendingOrientation;
 export const selectScopeUnit = (s: CalibrationStore) => s.scopeUnit;
 export const selectClickSize = (s: CalibrationStore) => s.clickSize;
+export const selectCameraZoom = (s: CalibrationStore) => s.cameraZoom;
+export const selectFocusPoint = (s: CalibrationStore) => s.focusPoint;
 export const selectScopeCenterPx = (s: CalibrationStore) => s.scopeCenterPx;
+export const selectElevationStartPx = (s: CalibrationStore) => s.elevationStartPx;
+export const selectElevationEndPx = (s: CalibrationStore) => s.elevationEndPx;
+export const selectWindageStartPx = (s: CalibrationStore) => s.windageStartPx;
+export const selectWindageEndPx = (s: CalibrationStore) => s.windageEndPx;
 export const selectPxPerUnitX = (s: CalibrationStore) => s.pxPerUnitX;
 export const selectPxPerUnitY = (s: CalibrationStore) => s.pxPerUnitY;
 export const selectRoll0 = (s: CalibrationStore) => s.roll0;

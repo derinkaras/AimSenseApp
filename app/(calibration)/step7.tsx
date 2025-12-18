@@ -1,16 +1,22 @@
 // ============================================================
-// step7.tsx - Confirm & Save
+// step7.tsx - Second Turret Calibration (Windage or Elevation)
 // ============================================================
-// Final review screen before saving calibration.
+// Two phases:
+// 1. Instruct user to dial turret any direction by X clicks
+// 2. User confirms new crosshair position
+//
+// If axesSwapped is true (user turned windage in step6), this step
+// calibrates ELEVATION instead. Otherwise calibrates WINDAGE.
 
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
     View,
     Text,
     Pressable,
     Image,
     StyleSheet,
-    ScrollView,
+    Modal,
+    GestureResponderEvent,
     useWindowDimensions,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
@@ -20,21 +26,28 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import {
     useCalibrationStore,
     selectMountOrientation,
+    selectClickSize,
     selectScopeUnit,
-    selectScopeCenterPx,
-    selectRoll0,
-    selectPitch0,
-    selectPxPerUnitX,
-    selectPxPerUnitY,
-    getOrientationLabel,
-    getUnitLabel,
+    selectAxesSwapped,
+    selectCameraZoom,
+    selectFocusPoint,
     isLandscape,
+    CALIBRATION_CLICK_COUNT,
+    ScopeCenterPx,
+    getClickSizeLabel,
 } from "@/app/calibration/exports";
 import icons from "@/app/constants/icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import { useCameraContext } from "./_layout";
 
 const SCREEN_ID = "step7";
+
+type Phase = "instruction" | "confirm";
+type StepSize = 1 | 5 | 10;
+type Direction = "up" | "down" | "left" | "right";
+
+const clamp = (v: number, min: number, max: number) =>
+    Math.max(min, Math.min(max, v));
 
 export default function Step7() {
     const [permission] = useCameraPermissions();
@@ -44,6 +57,7 @@ export default function Step7() {
 
     useFocusEffect(
         useCallback(() => {
+            console.log(SCREEN_ID);
             setActiveScreen(SCREEN_ID);
             return () => {};
         }, [setActiveScreen])
@@ -53,32 +67,137 @@ export default function Step7() {
 
     const insets = useSafeAreaInsets();
     const navigation = useNavigation();
-    const { width } = useWindowDimensions();
+    const { width, height } = useWindowDimensions();
 
     const mountOrientation = useCalibrationStore(selectMountOrientation);
+    const clickSize = useCalibrationStore(selectClickSize);
     const scopeUnit = useCalibrationStore(selectScopeUnit);
-    const scopeCenterPx = useCalibrationStore(selectScopeCenterPx);
-    const roll0 = useCalibrationStore(selectRoll0);
-    const pitch0 = useCalibrationStore(selectPitch0);
-    const pxPerUnitX = useCalibrationStore(selectPxPerUnitX);
-    const pxPerUnitY = useCalibrationStore(selectPxPerUnitY);
+    const axesSwapped = useCalibrationStore(selectAxesSwapped);
+    const cameraZoom = useCalibrationStore(selectCameraZoom);
+    const focusPoint = useCalibrationStore(selectFocusPoint);
 
-    const finishCalibration = useCalibrationStore((s) => s.finishCalibration);
+    // Determine if focus is locked (autofocus should be off)
+    const focusLocked = focusPoint !== null;
+
+    // Normal flow (windage)
+    const setWindageEndPx = useCalibrationStore((s) => s.setWindageEndPx);
+    const calculateWindageScale = useCalibrationStore((s) => s.calculateWindageScale);
+
+    // Swapped flow (elevation)
+    const setElevationEndPx = useCalibrationStore((s) => s.setElevationEndPx);
+    const calculateElevationScale = useCalibrationStore((s) => s.calculateElevationScale);
+
     const reset = useCalibrationStore((s) => s.resetCalibration);
 
     const isLandscapeMode = isLandscape(mountOrientation);
 
-    const handleConfirm = async () => {
-        await finishCalibration();
-        navigation.dispatch(
-            CommonActions.reset({
-                index: 0,
-                routes: [{ name: "(tabs)" }],
-            })
-        );
+    // Determine what we're calibrating based on axesSwapped
+    const calibratingElevation = axesSwapped;
+    const turretName = calibratingElevation ? "ELEVATION" : "WINDAGE";
+    const expectedDirection = calibratingElevation ? "VERTICALLY" : "HORIZONTALLY";
+    const expectedDirectionDetail = calibratingElevation ? "up or down" : "left or right";
+    const turretLocation = calibratingElevation
+        ? "Elevation turret is usually on top of the scope"
+        : "Windage turret is usually on the side of the scope";
+    const icon = calibratingElevation ? icons.arrowUp : icons.arrowRight;
+
+    // Phase state
+    const [phase, setPhase] = useState<Phase>("instruction");
+
+    // Center point state (for confirm phase)
+    const [centerPoint, setCenterPoint] = useState<ScopeCenterPx | null>(null);
+    const [stepSize, setStepSize] = useState<StepSize>(1);
+    const [lastTapPoint, setLastTapPoint] = useState<ScopeCenterPx | null>(null);
+
+    // Modal state
+    const [showDialBackModal, setShowDialBackModal] = useState(false);
+
+    // Camera layout
+    const [cameraLayout, setCameraLayout] = useState({
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+    });
+
+    const safeAreaEdges: ("top" | "bottom" | "left" | "right")[] = ["top", "bottom"];
+    if (isLandscapeMode) safeAreaEdges.push("left", "right");
+
+    const bottomPadding = Math.max(insets.bottom, 8);
+
+    const handleCameraLayout = (event: any) => {
+        const { x, y, width, height } = event.nativeEvent.layout;
+        setCameraLayout({ x, y, width, height });
     };
 
-    const handleBack = () => router.back();
+    const handleTap = (event: GestureResponderEvent) => {
+        const { locationX, locationY } = event.nativeEvent;
+        const newPoint = { x: Math.round(locationX), y: Math.round(locationY) };
+        setCenterPoint(newPoint);
+        setLastTapPoint(newPoint);
+    };
+
+    const handleMicroAdjust = (direction: Direction) => {
+        if (!centerPoint) return;
+
+        const delta = stepSize;
+        let newPoint = { ...centerPoint };
+
+        switch (direction) {
+            case "up":
+                newPoint.y = Math.max(0, centerPoint.y - delta);
+                break;
+            case "down":
+                newPoint.y = Math.min(cameraLayout.height, centerPoint.y + delta);
+                break;
+            case "left":
+                newPoint.x = Math.max(0, centerPoint.x - delta);
+                break;
+            case "right":
+                newPoint.x = Math.min(cameraLayout.width, centerPoint.x + delta);
+                break;
+        }
+
+        setCenterPoint(newPoint);
+    };
+
+    const handleResetPosition = () => {
+        if (lastTapPoint) setCenterPoint(lastTapPoint);
+    };
+
+    // Phase transitions
+    const handleDialed = () => setPhase("confirm");
+
+    const handleConfirmPosition = () => {
+        if (!centerPoint) return;
+
+        if (calibratingElevation) {
+            // Swapped: save as elevation
+            setElevationEndPx(centerPoint);
+            calculateElevationScale();
+        } else {
+            // Normal: save as windage
+            setWindageEndPx(centerPoint);
+            calculateWindageScale();
+        }
+
+        // Show dial back confirmation modal
+        setShowDialBackModal(true);
+    };
+
+    const handleDialBackConfirmed = () => {
+        setShowDialBackModal(false);
+        router.push("/(calibration)/step8");
+    };
+
+    const handleBack = () => {
+        if (phase === "confirm") {
+            setPhase("instruction");
+            setCenterPoint(null);
+        } else {
+            router.back();
+        }
+    };
 
     const handleCancel = async () => {
         await reset();
@@ -90,254 +209,779 @@ export default function Step7() {
         );
     };
 
-    // Check if all required data is present
-    const hasScopeCenter = scopeCenterPx !== null;
-    const hasPixelScale = pxPerUnitX > 0 && pxPerUnitY > 0;
-    const hasReference = Number.isFinite(roll0) && Number.isFinite(pitch0);
-    const isComplete = hasScopeCenter && hasPixelScale && hasReference;
+    // Layout sizing
+    const SIDE_PANEL_W = useMemo(() => {
+        const w = Math.round(width * 0.34);
+        return clamp(w, 220, 280);
+    }, [width]);
 
-    // Layout adjustments
-    const headerPadding = isLandscapeMode ? "p-3" : "p-5";
-    const titleSize = isLandscapeMode ? "text-xl" : "text-2xl";
-    const subtitleSize = isLandscapeMode ? "text-sm" : "text-base";
-    const subtitleMargin = isLandscapeMode ? "mt-1" : "mt-2";
+    const MAGNIFIER_SIZE = useMemo(() => {
+        const base = width * 0.12;
+        return clamp(Math.round(base), 84, 120);
+    }, [width]);
 
-    const safeAreaEdges: ("top" | "bottom" | "left" | "right")[] = ["top", "bottom"];
-    if (isLandscapeMode) safeAreaEdges.push("left", "right");
+    const cameraInsets = useMemo(() => {
+        return { padRight: SIDE_PANEL_W, padBottom: 0 };
+    }, [SIDE_PANEL_W]);
 
-    const sideCtaWidth = isLandscapeMode
-        ? Math.min(320, Math.max(240, Math.floor(width * 0.34)))
-        : 0;
+    const magnifierPos = useMemo(() => {
+        const margin = 10;
+        const LEFT_SAFE_PAD = clamp(Math.round(width * 0.06), 24, 44);
 
-    const bottomPadding = Math.max(insets.bottom, 8);
+        const fallbackW = Math.max(0, width - cameraInsets.padRight);
+        const fallbackH = Math.max(0, height);
 
-    const SummaryCards = ({ compact = false }: { compact?: boolean }) => (
-        <View className={compact ? "gap-3" : "gap-4"}>
-            {/* Scope Center Card */}
-            <View className={`rounded-3xl bg-brand-greenDark/65 border border-brand-green/45 ${compact ? "p-4" : "p-5"}`}>
-                <View className="flex-row items-center">
-                    <View className="size-12 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-4">
-                        <Image source={icons.target} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
+        const containerW = cameraLayout.width > 0 ? cameraLayout.width : fallbackW;
+        const containerH = cameraLayout.height > 0 ? cameraLayout.height : fallbackH;
+
+        const leftMin = LEFT_SAFE_PAD;
+        const leftMax = Math.max(leftMin, containerW - MAGNIFIER_SIZE - margin);
+
+        const topMin = insets.top + margin;
+        const topMax = Math.max(topMin, containerH - MAGNIFIER_SIZE - margin);
+
+        return {
+            left: clamp(LEFT_SAFE_PAD, leftMin, leftMax),
+            top: clamp(insets.top + margin, topMin, topMax),
+        };
+    }, [
+        width,
+        height,
+        insets.top,
+        cameraInsets.padRight,
+        cameraLayout.width,
+        cameraLayout.height,
+        MAGNIFIER_SIZE,
+    ]);
+
+    const dpBtn = isLandscapeMode ? "size-9" : "size-10";
+    const dpIcon = isLandscapeMode ? "w-4 h-4" : "w-5 h-5";
+
+    // ============================================================
+    // Dial Back Modal
+    // ============================================================
+    const renderDialBackModal = () => (
+        <Modal
+            visible={showDialBackModal}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowDialBackModal(false)}
+            supportedOrientations={["portrait", "landscape"]}
+        >
+            <Pressable
+                style={styles.modalOverlay}
+                onPress={() => {}}
+            >
+                <View
+                    style={[
+                        styles.modalContent,
+                        isLandscapeMode && styles.modalContentLandscape,
+                    ]}
+                >
+                    <View style={styles.modalIconContainer}>
+                        <Image
+                            source={calibratingElevation ? icons.arrowUp : icons.arrowRight}
+                            style={{ width: 48, height: 48, transform: [{ rotate: calibratingElevation ? '180deg' : '180deg' }] }}
+                            resizeMode="contain"
+                            tintColor="#22c55e"
+                        />
                     </View>
-                    <View className="flex-1">
-                        <Text className="text-white/70 text-sm">Scope Center</Text>
-                        <Text className={`text-white ${compact ? "text-lg" : "text-xl"} font-semibold mt-1`}>
-                            {hasScopeCenter ? "Captured ✓" : "Not captured"}
-                        </Text>
-                    </View>
-                </View>
-            </View>
 
-            {/* Scope Adjustments Card */}
-            <View className={`rounded-3xl bg-brand-greenDark/65 border border-brand-green/45 ${compact ? "p-4" : "p-5"}`}>
-                <View className="flex-row items-center">
-                    <View className="size-12 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-4">
-                        <Image source={icons.scope} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
-                    </View>
-                    <View className="flex-1">
-                        <Text className="text-white/70 text-sm">Scope Adjustments</Text>
-                        <Text className={`text-white ${compact ? "text-lg" : "text-xl"} font-semibold mt-1`}>
-                            {hasPixelScale ? `Calibrated ✓ (${getUnitLabel(scopeUnit)})` : "Not calibrated"}
-                        </Text>
-                    </View>
-                </View>
-            </View>
+                    <Text style={styles.modalTitle}>Dial Back to Zero</Text>
 
-            {/* Reference Card */}
-            <View className={`rounded-3xl bg-brand-greenDark/65 border border-brand-green/45 ${compact ? "p-4" : "p-5"}`}>
-                <View className="flex-row items-center">
-                    <View className="size-12 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-4">
-                        <Image source={icons.compass} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
-                    </View>
-                    <View className="flex-1">
-                        <Text className="text-white/70 text-sm">Reference</Text>
-                        <Text className={`text-white ${compact ? "text-lg" : "text-xl"} font-semibold mt-1`}>
-                            {hasReference ? "Captured ✓" : "Not captured"}
-                        </Text>
-                    </View>
-                </View>
-            </View>
+                    <Text style={styles.modalSubtitle}>
+                        Before continuing, please dial the {calibratingElevation ? "elevation" : "windage"} turret back {CALIBRATION_CLICK_COUNT} clicks to return to your original zero position.
+                    </Text>
 
-            {/* Ready to Save Card */}
-            {isComplete && (
-                <View className="rounded-3xl bg-brand-greenLight/15 border border-brand-greenLight/50 px-4 py-4">
-                    <View className="flex-row items-start">
-                        <View className="size-10 rounded-2xl bg-brand-greenLight/20 border border-brand-greenLight/40 items-center justify-center mr-3">
-                            <Image source={icons.check} className="w-5 h-5" resizeMode="contain" tintColor="#22c55e" />
-                        </View>
-                        <View className="flex-1">
-                            <Text className="text-white font-semibold text-sm">Ready to save</Text>
-                            <Text className="text-white/70 mt-1 text-sm">
-                                All set. AimSense is ready when you are.
-                            </Text>
-                        </View>
-                    </View>
-                </View>
-            )}
-
-            {/* Incomplete Warning */}
-            {!isComplete && (
-                <View className="rounded-3xl bg-red-500/15 border border-red-500/30 px-4 py-4">
-                    <View className="flex-row items-start">
-                        <View className="size-10 rounded-2xl bg-red-500/20 border border-red-500/30 items-center justify-center mr-3">
-                            <Image source={icons.info} className="w-5 h-5" resizeMode="contain" tintColor="#ef4444" />
-                        </View>
-                        <View className="flex-1">
-                            <Text className="text-red-400 font-semibold text-sm">Calibration incomplete</Text>
-                            <Text className="text-white/70 mt-1 text-sm">
-                                Please go back and complete all steps before saving.
-                            </Text>
-                        </View>
+                    <View style={styles.modalButtonContainer}>
+                        <Pressable
+                            onPress={handleDialBackConfirmed}
+                            style={styles.modalPrimaryButton}
+                        >
+                            <Text style={styles.modalPrimaryButtonText}>I've Dialed Back</Text>
+                        </Pressable>
                     </View>
                 </View>
-            )}
-        </View>
+            </Pressable>
+        </Modal>
     );
 
-    return (
-        <View className="flex-1 bg-brand-black">
-            {shouldRenderCamera && <CameraView style={StyleSheet.absoluteFill} facing="back" />}
+    // ============================================================
+    // Instruction Phase
+    // ============================================================
+    if (phase === "instruction") {
+        return (
+            <View className="flex-1 bg-brand-black">
+                {shouldRenderCamera && <CameraView style={StyleSheet.absoluteFill} facing="back" zoom={cameraZoom} autofocus={focusLocked ? "off" : "on"} />}
 
-            <SafeAreaView className="flex-1" edges={safeAreaEdges}>
-                {!isLandscapeMode ? (
-                    <View className="flex-1 px-6 pt-4">
-                        <ScrollView
-                            className="flex-1"
-                            contentContainerStyle={{ paddingBottom: 170 + bottomPadding }}
-                            showsVerticalScrollIndicator={false}
-                            bounces={false}
-                        >
-                            <View className={`rounded-3xl ${headerPadding} bg-brand-greenDark/70 border border-brand-green/60`}>
-                                <View className="flex-row items-center">
-                                    <View className="size-11 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-3">
-                                        <Image source={icons.check} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
-                                    </View>
-                                    <View className="flex-1">
-                                        <Text className={`text-white ${titleSize} font-semibold`}>Confirm Calibration</Text>
-                                        <Text className={`text-white/80 ${subtitleMargin} ${subtitleSize}`}>
-                                            Review your setup before saving.
-                                        </Text>
-                                    </View>
-                                </View>
-                            </View>
-
-                            <View className="mt-6">
-                                <SummaryCards />
-                            </View>
-                        </ScrollView>
-
-                        <View style={{ paddingBottom: bottomPadding }} className="absolute bottom-0 left-0 right-0 px-6">
-                            <View className="bg-brand-black/55 border border-brand-green/20 rounded-3xl p-3">
-                                <Pressable
-                                    onPress={handleConfirm}
-                                    disabled={!isComplete}
-                                    className={[
-                                        "rounded-2xl items-center border py-5",
-                                        isComplete
-                                            ? "bg-brand-greenLight border-brand-green/60"
-                                            : "bg-brand-black/50 border-brand-green/30",
-                                    ].join(" ")}
-                                >
-                                    <Text className="text-white font-semibold text-xl">
-                                        {isComplete ? "Save Calibration" : "Complete all steps"}
-                                    </Text>
-                                </Pressable>
-
-                                <View className="flex-row mt-3 gap-3">
-                                    <Pressable
-                                        onPress={handleBack}
-                                        className="flex-1 rounded-2xl items-center border bg-brand-black/50 border-brand-green/35 py-4"
-                                    >
-                                        <Text className="text-white/90 font-semibold text-base">Back</Text>
-                                    </Pressable>
-
-                                    <Pressable
-                                        onPress={handleCancel}
-                                        className="flex-1 rounded-2xl items-center border bg-brand-black/50 border-brand-green/35 py-4"
-                                    >
-                                        <Text className="text-red-400 font-semibold text-base">Cancel</Text>
-                                    </Pressable>
-                                </View>
-                            </View>
-                        </View>
-                    </View>
-                ) : (
-                    <View className="flex-1 flex-row pt-3">
-                        <ScrollView
-                            className="flex-1"
-                            contentContainerStyle={{ paddingLeft: 16, paddingRight: 12, paddingTop: 8, paddingBottom: 16 }}
-                            showsVerticalScrollIndicator={false}
-                            bounces={false}
-                        >
-                            <View className={`rounded-3xl ${headerPadding} bg-brand-greenDark/70 border border-brand-green/60`}>
-                                <View className="flex-row items-center">
-                                    <View className="size-11 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-3">
-                                        <Image source={icons.check} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
-                                    </View>
-                                    <View className="flex-1">
-                                        <Text className={`text-white ${titleSize} font-semibold`}>Confirm Calibration</Text>
-                                        <Text className={`text-white/80 ${subtitleMargin} ${subtitleSize}`}>
-                                            Review your setup before saving.
-                                        </Text>
-                                    </View>
-                                </View>
-                            </View>
-
-                            <View className="mt-4">
-                                <SummaryCards compact />
-                            </View>
-                        </ScrollView>
-
+                <SafeAreaView className="flex-1" edges={safeAreaEdges}>
+                    <View className={`flex-1 ${isLandscapeMode ? "px-4" : "px-6"} pt-4 justify-center`}>
+                        {/* Main Instruction Card */}
                         <View
-                            style={{
-                                width: sideCtaWidth,
-                                paddingRight: 16,
-                                paddingLeft: 8,
-                                paddingBottom: bottomPadding,
-                            }}
+                            className={[
+                                "rounded-3xl bg-brand-greenDark/85 border border-brand-green/60",
+                                isLandscapeMode ? "p-4" : "p-6",
+                            ].join(" ")}
                         >
-                            <View className="bg-brand-black/55 border border-brand-green/20 rounded-3xl p-3">
-                                <Text className="text-white/70 text-xs mb-2">Actions</Text>
-
-                                <Pressable
-                                    onPress={handleConfirm}
-                                    disabled={!isComplete}
-                                    className={[
-                                        "rounded-2xl items-center border py-4",
-                                        isComplete
-                                            ? "bg-brand-greenLight border-brand-green/60"
-                                            : "bg-brand-black/50 border-brand-green/30",
-                                    ].join(" ")}
-                                >
-                                    <Text className="text-white font-semibold text-lg">
-                                        {isComplete ? "Save" : "Incomplete"}
+                            {/* --- PORTRAIT HEADER --- */}
+                            {!isLandscapeMode && (
+                                <View className="items-center mb-4">
+                                    <View className="size-16 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mb-3">
+                                        <Image source={icon} className="w-8 h-8" resizeMode="contain" tintColor="#22c55e" />
+                                    </View>
+                                    <Text className="text-white text-2xl font-bold text-center">
+                                        {calibratingElevation ? "Elevation" : "Windage"} Calibration
                                     </Text>
-                                </Pressable>
+                                </View>
+                            )}
 
+                            {/* --- LANDSCAPE: TWO-COLUMN --- */}
+                            {isLandscapeMode ? (
+                                <View className="flex-row gap-3">
+                                    <View className="flex-1">
+                                        <View className="flex-row items-center mb-2">
+                                            <View className="size-10 rounded-xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-2">
+                                                <Image source={icon} className="w-5 h-5" resizeMode="contain" tintColor="#22c55e" />
+                                            </View>
+                                            <Text className="text-white text-lg font-bold">
+                                                {calibratingElevation ? "Elevation" : "Windage"} Calibration
+                                            </Text>
+                                        </View>
+
+                                        <View className="bg-brand-black/40 rounded-2xl px-3 py-2 mb-2">
+                                            <Text className="text-white/80 text-center text-xs mb-1">
+                                                Turn the <Text className="text-white font-bold">{turretName}</Text> turret
+                                            </Text>
+
+                                            <View className="flex-row items-end justify-center">
+                                                <Text className="text-brand-greenLight text-xl font-extrabold mr-2">ANY DIRECTION</Text>
+                                            </View>
+
+                                            <View className="flex-row items-center justify-center mt-1">
+                                                <Text className="text-white text-2xl font-extrabold">{CALIBRATION_CLICK_COUNT}</Text>
+                                                <Text className="text-white/70 text-sm font-semibold ml-1">clicks</Text>
+                                            </View>
+
+                                            <Text className="text-white/50 text-center text-[10px] mt-1">
+                                                ({getClickSizeLabel(scopeUnit, clickSize)} per click)
+                                            </Text>
+
+                                            {/* Click accuracy + direction reminder */}
+                                            <Text className="text-white/70 text-center text-[10px] mt-2 leading-4">
+                                                Listen to each click carefully — going above or under reduces precision.{"\n"}
+                                                Remember the direction you turn — you’ll reverse the same clicks later.
+                                            </Text>
+                                        </View>
+
+                                        <View className="bg-yellow-500/20 rounded-xl px-3 py-2 border border-yellow-500/40">
+                                            <Text className="text-yellow-200 text-[11px] text-center leading-4">
+                                                {calibratingElevation ? "↕" : "↔"} Should move {expectedDirection} ({expectedDirectionDetail})
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View className="w-44 justify-between">
+                                        <View>
+                                            <Pressable
+                                                onPress={handleDialed}
+                                                className="rounded-2xl py-3 items-center bg-brand-greenLight border border-brand-green/60"
+                                            >
+                                                <Text className="text-white text-base font-semibold">I've dialed it</Text>
+                                            </Pressable>
+                                        </View>
+
+                                        <View className="gap-2 mt-2">
+                                            <Pressable
+                                                onPress={handleBack}
+                                                className="py-3 rounded-2xl items-center bg-brand-black/50 border border-brand-green/35"
+                                            >
+                                                <Text className="text-white/90 font-semibold text-sm">Back</Text>
+                                            </Pressable>
+
+                                            <Pressable
+                                                onPress={handleCancel}
+                                                className="py-3 rounded-2xl items-center bg-brand-black/50 border border-brand-green/35"
+                                            >
+                                                <Text className="text-white/90 font-semibold text-sm">Cancel</Text>
+                                            </Pressable>
+                                        </View>
+                                    </View>
+                                </View>
+                            ) : (
+                                /* --- PORTRAIT BODY --- */
+                                <>
+                                    <View className="bg-brand-black/40 rounded-2xl p-4 mb-4">
+                                        <Text className="text-white/80 text-center text-base mb-2">
+                                            Turn the <Text className="text-white font-bold">{turretName}</Text> turret
+                                        </Text>
+                                        <Text className="text-brand-greenLight text-center text-2xl font-bold mb-2">ANY DIRECTION</Text>
+                                        <Text className="text-white text-center text-3xl font-bold">
+                                            {CALIBRATION_CLICK_COUNT} clicks
+                                        </Text>
+                                        <Text className="text-white/50 text-center text-sm mt-2">
+                                            ({getClickSizeLabel(scopeUnit, clickSize)} per click)
+                                        </Text>
+
+                                        {/* Click accuracy + direction reminder */}
+                                        <Text className="text-white/70 text-center text-xs mt-3 leading-5">
+                                            Listen to each click carefully — going above or under reduces precision.{"\n"}
+                                            Remember the direction you turn — you’ll reverse the same clicks later.
+                                        </Text>
+                                    </View>
+
+                                    <View className="bg-yellow-500/20 rounded-xl px-4 py-3 mb-4 border border-yellow-500/40">
+                                        <Text className="text-yellow-200 text-sm text-center font-medium">
+                                            {`Crosshair should move ${expectedDirection} (${expectedDirectionDetail})`}
+                                        </Text>
+                                        <Text className="text-yellow-200/70 text-xs text-center mt-1">
+                                            {turretLocation}
+                                        </Text>
+                                    </View>
+
+                                    <Pressable
+                                        onPress={handleDialed}
+                                        className="rounded-2xl py-5 items-center bg-brand-greenLight border border-brand-green/60"
+                                    >
+                                        <Text className="text-white text-xl font-semibold">I've dialed it</Text>
+                                    </Pressable>
+                                </>
+                            )}
+                        </View>
+
+                        {/* Back / Cancel (PORTRAIT ONLY) */}
+                        {!isLandscapeMode && (
+                            <View className="flex-row mt-4 gap-3">
                                 <Pressable
                                     onPress={handleBack}
-                                    className="mt-3 rounded-2xl items-center border bg-brand-black/50 border-brand-green/35 py-3"
+                                    className="flex-1 py-4 rounded-2xl items-center bg-brand-black/50 border border-brand-green/35"
                                 >
-                                    <Text className="text-white/90 font-semibold text-sm">Back</Text>
+                                    <Text className="text-white/90 font-semibold text-base">Back</Text>
                                 </Pressable>
 
                                 <Pressable
                                     onPress={handleCancel}
-                                    className="mt-3 rounded-2xl items-center border bg-brand-black/50 border-brand-green/35 py-3"
+                                    className="flex-1 py-4 rounded-2xl items-center bg-brand-black/50 border border-brand-green/35"
                                 >
-                                    <Text className="text-red-400 font-semibold text-sm">Cancel</Text>
+                                    <Text className="text-white/90 font-semibold text-base">Cancel</Text>
                                 </Pressable>
+                            </View>
+                        )}
+                    </View>
+                </SafeAreaView>
 
-                                <View className="items-center">
-                                    <Text className="text-white/50 text-xs mt-3 text-center">
-                                        Tip: You can recalibrate anytime from settings.
+                {renderDialBackModal()}
+            </View>
+        );
+    }
+
+    // ============================================================
+    // Confirm Phase - LANDSCAPE
+    // ============================================================
+    if (isLandscapeMode) {
+        return (
+            <View className="flex-1 bg-brand-black">
+                <View
+                    onLayout={handleCameraLayout}
+                    style={[StyleSheet.absoluteFill, { right: cameraInsets.padRight, bottom: cameraInsets.padBottom }]}
+                >
+                    {shouldRenderCamera && (
+                        <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
+                            <CameraView style={StyleSheet.absoluteFill} facing="back" zoom={cameraZoom} autofocus={focusLocked ? "off" : "on"} />
+
+                            {centerPoint && (
+                                <View
+                                    style={[styles.crosshairContainer, { left: centerPoint.x - 30, top: centerPoint.y - 30 }]}
+                                    pointerEvents="none"
+                                >
+                                    <View style={styles.crosshairVertical} />
+                                    <View style={styles.crosshairHorizontal} />
+                                    <View style={styles.crosshairCenter} />
+                                </View>
+                            )}
+
+                            {!centerPoint && (
+                                <View style={styles.guideOverlay} pointerEvents="none">
+                                    <View style={styles.guideBox}>
+                                        <Text style={styles.guideText}>Tap the crosshair center</Text>
+                                    </View>
+                                </View>
+                            )}
+                        </Pressable>
+                    )}
+
+                    {centerPoint && (
+                        <View
+                            style={[
+                                styles.magnifier,
+                                {
+                                    width: MAGNIFIER_SIZE,
+                                    height: MAGNIFIER_SIZE,
+                                    left: magnifierPos.left,
+                                    top: magnifierPos.top,
+                                },
+                            ]}
+                            pointerEvents="none"
+                        >
+                            <View style={styles.magnifierInner}>
+                                <Text style={styles.magnifierLabel}>
+                                    {centerPoint.x}, {centerPoint.y}
+                                </Text>
+                                <View style={styles.magnifierCrosshair}>
+                                    <View style={styles.magnifierCrosshairV} />
+                                    <View style={styles.magnifierCrosshairH} />
+                                    <View style={styles.magnifierCrosshairDot} />
+                                </View>
+                            </View>
+                        </View>
+                    )}
+                </View>
+
+                <SafeAreaView
+                    className="absolute top-0 bottom-0 right-0"
+                    edges={["top", "bottom", "right"]}
+                    style={{ width: SIDE_PANEL_W }}
+                >
+                    <View className="flex-1 bg-brand-black/95 border-l border-brand-green/30">
+                        <View className="px-3 pt-3 pb-2">
+                            <View className="flex-row items-start">
+                                <View className="size-8 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
+                                    <Image source={icons.target} className="w-4 h-4" resizeMode="contain" tintColor="#0b7f4f" />
+                                </View>
+                                <View className="flex-1">
+                                    <Text className="text-white font-semibold text-sm">Confirm New Position</Text>
+                                    <Text className="text-white/60 text-[11px]">Tap, then fine-tune.</Text>
+                                </View>
+                            </View>
+                        </View>
+
+                        <View className="flex-1 px-3">
+                            {!centerPoint ? (
+                                <View className="mt-2 p-3 rounded-2xl bg-brand-black/40 border border-brand-green/25">
+                                    <Text className="text-white/70 text-[12px] leading-4">
+                                        Tap where the crosshair moved to after dialing.
                                     </Text>
                                 </View>
+                            ) : (
+                                <>
+                                    <View className="mt-1">
+                                        <Text className="text-white/50 text-[11px] mb-1">Step</Text>
+                                        <View className="flex-row gap-1">
+                                            {([1, 5, 10] as StepSize[]).map((size) => (
+                                                <Pressable
+                                                    key={size}
+                                                    onPress={() => setStepSize(size)}
+                                                    className={[
+                                                        "flex-1 py-2 rounded-xl border items-center",
+                                                        stepSize === size
+                                                            ? "bg-brand-greenLight/20 border-brand-greenLight"
+                                                            : "bg-brand-black/40 border-brand-green/30",
+                                                    ].join(" ")}
+                                                >
+                                                    <Text
+                                                        className={[
+                                                            "text-[12px] font-semibold",
+                                                            stepSize === size ? "text-white" : "text-white/60",
+                                                        ].join(" ")}
+                                                    >
+                                                        {size}px
+                                                    </Text>
+                                                </Pressable>
+                                            ))}
+                                        </View>
+                                    </View>
+
+                                    <View className="mt-3 items-center">
+                                        <Pressable
+                                            onPress={() => handleMicroAdjust("up")}
+                                            className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mb-1`}
+                                        >
+                                            <Image source={icons.chevronUp} className={dpIcon} resizeMode="contain" tintColor="#0b7f4f" />
+                                        </Pressable>
+
+                                        <View className="flex-row items-center gap-1">
+                                            <Pressable
+                                                onPress={() => handleMicroAdjust("left")}
+                                                className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center`}
+                                            >
+                                                <Image source={icons.chevronLeft} className={dpIcon} resizeMode="contain" tintColor="#0b7f4f" />
+                                            </Pressable>
+
+                                            <View className={`${dpBtn} rounded-xl bg-brand-black/50 border border-brand-green/20 items-center justify-center`}>
+                                                <Text className="text-white/50 text-[11px] font-mono">{stepSize}px</Text>
+                                            </View>
+
+                                            <Pressable
+                                                onPress={() => handleMicroAdjust("right")}
+                                                className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center`}
+                                            >
+                                                <Image source={icons.chevronRight} className={dpIcon} resizeMode="contain" tintColor="#0b7f4f" />
+                                            </Pressable>
+                                        </View>
+
+                                        <Pressable
+                                            onPress={() => handleMicroAdjust("down")}
+                                            className={`${dpBtn} rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mt-1`}
+                                        >
+                                            <Image source={icons.chevronDown} className={dpIcon} resizeMode="contain" tintColor="#0b7f4f" />
+                                        </Pressable>
+                                    </View>
+
+                                    <Pressable
+                                        onPress={handleResetPosition}
+                                        className="mt-3 py-2 rounded-xl bg-brand-black/40 border border-brand-green/30 items-center"
+                                    >
+                                        <Text className="text-white/75 text-[12px] font-semibold">Reset to tap</Text>
+                                    </Pressable>
+
+                                    <Pressable
+                                        onPress={handleConfirmPosition}
+                                        className="mt-3 w-full py-3 rounded-2xl bg-brand-greenLight border border-brand-green/60 items-center"
+                                    >
+                                        <Text className="text-white font-semibold text-sm">Confirm Position</Text>
+                                    </Pressable>
+                                </>
+                            )}
+                        </View>
+
+                        <View className="px-3 pb-3">
+                            <View className="flex-row mt-2 gap-2">
+                                <Pressable
+                                    onPress={handleBack}
+                                    className="flex-1 py-2 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
+                                >
+                                    <Text className="text-white/90 font-semibold text-[12px]">Back</Text>
+                                </Pressable>
+
+                                <Pressable
+                                    onPress={handleCancel}
+                                    className="flex-1 py-2 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
+                                >
+                                    <Text className="text-white/90 font-semibold text-[12px]">Cancel</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+                    </View>
+                </SafeAreaView>
+
+                {renderDialBackModal()}
+            </View>
+        );
+    }
+
+    // ============================================================
+    // Confirm Phase - PORTRAIT
+    // ============================================================
+    const controlPanelHeight = 240;
+
+    return (
+        <View className="flex-1 bg-brand-black">
+            <View onLayout={handleCameraLayout} style={[StyleSheet.absoluteFill, { bottom: controlPanelHeight + bottomPadding }]}>
+                {shouldRenderCamera && (
+                    <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
+                        <CameraView style={StyleSheet.absoluteFill} facing="back" zoom={cameraZoom} autofocus={focusLocked ? "off" : "on"} />
+
+                        {centerPoint && (
+                            <View style={[styles.crosshairContainer, { left: centerPoint.x - 30, top: centerPoint.y - 30 }]} pointerEvents="none">
+                                <View style={styles.crosshairVertical} />
+                                <View style={styles.crosshairHorizontal} />
+                                <View style={styles.crosshairCenter} />
+                            </View>
+                        )}
+
+                        {!centerPoint && (
+                            <View style={styles.guideOverlay}>
+                                <View style={styles.guideBox}>
+                                    <Text style={styles.guideText}>Tap the crosshair center</Text>
+                                </View>
+                            </View>
+                        )}
+                    </Pressable>
+                )}
+
+                {centerPoint && (
+                    <View
+                        style={[styles.magnifier, { top: insets.top + 10, right: 10, width: 120, height: 120 }]}
+                        pointerEvents="none"
+                    >
+                        <View style={styles.magnifierInner}>
+                            <Text style={styles.magnifierLabel}>
+                                {centerPoint.x}, {centerPoint.y}
+                            </Text>
+                            <View style={styles.magnifierCrosshair}>
+                                <View style={styles.magnifierCrosshairV} />
+                                <View style={styles.magnifierCrosshairH} />
+                                <View style={styles.magnifierCrosshairDot} />
                             </View>
                         </View>
                     </View>
                 )}
+            </View>
+
+            <SafeAreaView className="absolute bottom-0 left-0 right-0" edges={["bottom"]}>
+                <View style={{ paddingBottom: bottomPadding }} className="bg-brand-black/95 border-t border-brand-green/30 px-4 pt-4">
+                    <View className="flex-row items-center mb-3">
+                        <View className="size-9 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
+                            <Image source={icons.target} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
+                        </View>
+                        <View className="flex-1">
+                            <Text className="text-white font-semibold text-base">{`Confirm New Crosshair ${ axesSwapped ? "Elevation" : "Windage"} Position`}</Text>
+                            <Text className="text-white/60 text-xs">Tap the crosshair center, then fine-tune.</Text>
+                        </View>
+                    </View>
+
+                    {centerPoint ? (
+                        <View className="flex-row gap-3">
+                            <View className="flex-1 items-center">
+                                <View className="items-center">
+                                    <Pressable
+                                        onPress={() => handleMicroAdjust("up")}
+                                        className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mb-1"
+                                    >
+                                        <Image source={icons.chevronUp} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
+                                    </Pressable>
+
+                                    <View className="flex-row items-center gap-1">
+                                        <Pressable
+                                            onPress={() => handleMicroAdjust("left")}
+                                            className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center"
+                                        >
+                                            <Image source={icons.chevronLeft} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
+                                        </Pressable>
+
+                                        <View className="size-10 rounded-xl bg-brand-black/50 border border-brand-green/20 items-center justify-center">
+                                            <Text className="text-white/50 text-xs font-mono">{stepSize}px</Text>
+                                        </View>
+
+                                        <Pressable
+                                            onPress={() => handleMicroAdjust("right")}
+                                            className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center"
+                                        >
+                                            <Image source={icons.chevronRight} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
+                                        </Pressable>
+                                    </View>
+
+                                    <Pressable
+                                        onPress={() => handleMicroAdjust("down")}
+                                        className="size-10 rounded-xl bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mt-1"
+                                    >
+                                        <Image source={icons.chevronDown} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
+                                    </Pressable>
+                                </View>
+                            </View>
+
+                            <View className="justify-center gap-2">
+                                <Text className="text-white/50 text-xs text-center">Step</Text>
+                                <View className="flex-row gap-1">
+                                    {([1, 5, 10] as StepSize[]).map((size) => (
+                                        <Pressable
+                                            key={size}
+                                            onPress={() => setStepSize(size)}
+                                            className={[
+                                                "px-3 py-2 rounded-lg border",
+                                                stepSize === size
+                                                    ? "bg-brand-greenLight/20 border-brand-greenLight"
+                                                    : "bg-brand-black/40 border-brand-green/30",
+                                            ].join(" ")}
+                                        >
+                                            <Text className={["text-xs font-semibold", stepSize === size ? "text-white" : "text-white/60"].join(" ")}>
+                                                {size}px
+                                            </Text>
+                                        </Pressable>
+                                    ))}
+                                </View>
+
+                                <Pressable
+                                    onPress={handleResetPosition}
+                                    className="px-3 py-2 rounded-lg bg-brand-black/40 border border-brand-green/30 items-center"
+                                >
+                                    <Text className="text-white/70 text-xs font-semibold">Reset</Text>
+                                </Pressable>
+                            </View>
+
+                            <View className="justify-center">
+                                <Pressable
+                                    onPress={handleConfirmPosition}
+                                    className="px-5 py-4 rounded-2xl bg-brand-greenLight border border-brand-green/60 items-center justify-center"
+                                >
+                                    <Text className="text-white font-semibold text-sm">Confirm</Text>
+                                    <Text className="text-white font-semibold text-sm">Position</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+                    ) : (
+                        <View className="py-4">
+                            <Text className="text-white/60 text-center text-sm">Tap where the crosshair moved to after dialing.</Text>
+                        </View>
+                    )}
+
+                    <View className="flex-row mt-3 gap-3">
+                        <Pressable
+                            onPress={handleBack}
+                            className="flex-1 py-3 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
+                        >
+                            <Text className="text-white/90 font-semibold text-sm">Back</Text>
+                        </Pressable>
+
+                        <Pressable
+                            onPress={handleCancel}
+                            className="flex-1 py-3 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
+                        >
+                            <Text className="text-white/90 font-semibold text-sm">Cancel</Text>
+                        </Pressable>
+                    </View>
+                </View>
             </SafeAreaView>
+
+            {renderDialBackModal()}
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    crosshairContainer: {
+        position: "absolute",
+        width: 60,
+        height: 60,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    crosshairVertical: {
+        position: "absolute",
+        width: 2,
+        height: 60,
+        backgroundColor: "#0b7f4f",
+    },
+    crosshairHorizontal: {
+        position: "absolute",
+        width: 60,
+        height: 2,
+        backgroundColor: "#0b7f4f",
+    },
+    crosshairCenter: {
+        position: "absolute",
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: "#22c55e",
+        borderWidth: 1,
+        borderColor: "#0b7f4f",
+    },
+    guideOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    guideBox: {
+        backgroundColor: "rgba(0, 0, 0, 0.7)",
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "rgba(11, 127, 79, 0.4)",
+    },
+    guideText: {
+        color: "white",
+        fontSize: 16,
+        fontWeight: "600",
+    },
+    magnifier: {
+        position: "absolute",
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: "#0b7f4f",
+        backgroundColor: "rgba(0, 0, 0, 0.8)",
+        overflow: "hidden",
+    },
+    magnifierInner: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    magnifierLabel: {
+        position: "absolute",
+        bottom: 4,
+        color: "#0b7f4f",
+        fontSize: 10,
+        fontFamily: "monospace",
+    },
+    magnifierCrosshair: {
+        width: 40,
+        height: 40,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    magnifierCrosshairV: {
+        position: "absolute",
+        width: 1,
+        height: 40,
+        backgroundColor: "#22c55e",
+    },
+    magnifierCrosshairH: {
+        position: "absolute",
+        width: 40,
+        height: 1,
+        backgroundColor: "#22c55e",
+    },
+    magnifierCrosshairDot: {
+        position: "absolute",
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: "#22c55e",
+    },
+    // Modal styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0, 0, 0, 0.85)",
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 24,
+    },
+    modalContent: {
+        backgroundColor: "#0a0a0a",
+        borderRadius: 24,
+        borderWidth: 1,
+        borderColor: "rgba(11, 127, 79, 0.4)",
+        padding: 24,
+        width: "100%",
+        maxWidth: 340,
+    },
+    modalContentLandscape: {
+        maxWidth: 420,
+        paddingVertical: 20,
+        paddingHorizontal: 28,
+    },
+    modalIconContainer: {
+        alignItems: "center",
+        marginBottom: 16,
+    },
+    modalTitle: {
+        color: "white",
+        fontSize: 20,
+        fontWeight: "bold",
+        textAlign: "center",
+        marginBottom: 8,
+    },
+    modalSubtitle: {
+        color: "rgba(255, 255, 255, 0.7)",
+        fontSize: 14,
+        textAlign: "center",
+        marginBottom: 20,
+        lineHeight: 20,
+    },
+    modalButtonContainer: {
+        gap: 12,
+    },
+    modalPrimaryButton: {
+        paddingVertical: 16,
+        borderRadius: 16,
+        alignItems: "center",
+        backgroundColor: "#0b7f4f",
+        marginTop: 8,
+    },
+    modalPrimaryButtonText: {
+        color: "white",
+        fontSize: 18,
+        fontWeight: "600",
+    },
+});
