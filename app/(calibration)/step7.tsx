@@ -7,6 +7,7 @@
 //
 // If axesSwapped is true (user turned windage in step6), this step
 // calibrates ELEVATION instead. Otherwise calibrates WINDAGE.
+// ⚠️ CRITICAL: Uses camera layout from store (set in step4)
 
 import React, { useCallback, useMemo, useState } from "react";
 import {
@@ -32,10 +33,15 @@ import {
     selectCameraZoom,
     selectFocusPoint,
     selectScreenRotation,
+    selectScopeCenterPx,
+    selectCameraLayout,
     isLandscape,
     CALIBRATION_CLICK_COUNT,
     ScopeCenterPx,
     getClickSizeLabel,
+    getCameraLayoutConfig,
+    getMagnifierPosition,
+    clampValue,
 } from "@/app/calibration/exports";
 import icons from "@/app/constants/icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
@@ -43,12 +49,9 @@ import { useCameraContext } from "./_layout";
 
 const SCREEN_ID = "step7";
 
-type Phase = "instruction" | "confirm";
+type Phase = "instruction" | "confirm" | "verify";
 type StepSize = 1 | 5 | 10;
 type Direction = "up" | "down" | "left" | "right";
-
-const clamp = (v: number, min: number, max: number) =>
-    Math.max(min, Math.min(max, v));
 
 export default function Step7() {
     const [permission] = useCameraPermissions();
@@ -77,6 +80,7 @@ export default function Step7() {
     const cameraZoom = useCalibrationStore(selectCameraZoom);
     const focusPoint = useCalibrationStore(selectFocusPoint);
     const screenRotation = useCalibrationStore(selectScreenRotation);
+    const scopeCenterPx = useCalibrationStore(selectScopeCenterPx);
 
     // Determine if focus is locked (autofocus should be off)
     const focusLocked = focusPoint !== null;
@@ -93,6 +97,7 @@ export default function Step7() {
     const calculateElevationScale = useCalibrationStore((s) => s.calculateElevationScale);
 
     const reset = useCalibrationStore((s) => s.resetCalibration);
+    const storedCameraLayout = useCalibrationStore(selectCameraLayout); // ⚠️ Read from store
 
     const isLandscapeMode = isLandscape(mountOrientation);
 
@@ -128,7 +133,15 @@ export default function Step7() {
     const safeAreaEdges: ("top" | "bottom" | "left" | "right")[] = ["top", "bottom"];
     if (isLandscapeMode) safeAreaEdges.push("left", "right");
 
-    const bottomPadding = Math.max(insets.bottom, 8);
+    // ⚠️ CRITICAL: Use layout from store (set in step4), fallback to local calculation
+    const layoutConfig = useMemo(() => {
+        if (storedCameraLayout) {
+            return storedCameraLayout;
+        }
+        // Fallback if store not yet populated (shouldn't happen in normal flow)
+        console.warn("⚠️ Step7: Camera layout not in store, using local calculation");
+        return getCameraLayoutConfig(width, height, isLandscapeMode, insets.bottom);
+    }, [storedCameraLayout, width, height, isLandscapeMode, insets.bottom]);
 
     const handleCameraLayout = (event: any) => {
         const { x, y, width, height } = event.nativeEvent.layout;
@@ -176,12 +189,19 @@ export default function Step7() {
     const handleConfirmPosition = () => {
         if (!centerPoint) return;
 
+        console.log("📍 Step7 handleConfirmPosition:", {
+            calibratingElevation,
+            centerPoint
+        });
+
         if (calibratingElevation) {
             // Swapped: save as elevation
+            console.log("📍 Setting elevationEndPx:", centerPoint);
             setElevationEndPx(centerPoint);
             calculateElevationScale();
         } else {
             // Normal: save as windage
+            console.log("📍 Setting windageEndPx:", centerPoint);
             setWindageEndPx(centerPoint);
             calculateWindageScale();
         }
@@ -192,11 +212,19 @@ export default function Step7() {
 
     const handleDialBackConfirmed = () => {
         setShowDialBackModal(false);
+        // Go to verification phase - show scope center for visual confirmation
+        setPhase("verify");
+    };
+
+    const handleVerifyConfirm = () => {
         router.push("/(calibration)/step8");
     };
 
     const handleBack = () => {
-        if (phase === "confirm") {
+        if (phase === "verify") {
+            // Go back to confirm phase
+            setPhase("confirm");
+        } else if (phase === "confirm") {
             setPhase("instruction");
             setCenterPoint(null);
         } else {
@@ -214,49 +242,34 @@ export default function Step7() {
         );
     };
 
-    // Layout sizing
-    const SIDE_PANEL_W = useMemo(() => {
-        const w = Math.round(width * 0.34);
-        return clamp(w, 220, 280);
-    }, [width]);
-
-    const MAGNIFIER_SIZE = useMemo(() => {
-        const base = width * 0.12;
-        return clamp(Math.round(base), 84, 120);
-    }, [width]);
-
-    const cameraInsets = useMemo(() => {
-        return { padRight: SIDE_PANEL_W, padBottom: 0 };
-    }, [SIDE_PANEL_W]);
-
+    // ------------------------------------------------------------
+    // Magnifier position using centralized layout config
+    // ------------------------------------------------------------
     const magnifierPos = useMemo(() => {
-        const margin = 10;
-        const LEFT_SAFE_PAD = clamp(Math.round(width * 0.06), 24, 44);
-
-        const fallbackW = Math.max(0, width - cameraInsets.padRight);
-        const fallbackH = Math.max(0, height);
-
+        const fallbackW = Math.max(0, width - layoutConfig.cameraInsets.padRight);
+        const fallbackH = Math.max(0, height - layoutConfig.cameraInsets.padBottom);
         const containerW = cameraLayout.width > 0 ? cameraLayout.width : fallbackW;
         const containerH = cameraLayout.height > 0 ? cameraLayout.height : fallbackH;
 
-        const leftMin = LEFT_SAFE_PAD;
-        const leftMax = Math.max(leftMin, containerW - MAGNIFIER_SIZE - margin);
-
-        const topMin = insets.top + margin;
-        const topMax = Math.max(topMin, containerH - MAGNIFIER_SIZE - margin);
-
-        return {
-            left: clamp(LEFT_SAFE_PAD, leftMin, leftMax),
-            top: clamp(insets.top + margin, topMin, topMax),
-        };
+        // Default position in top-left area
+        return getMagnifierPosition(
+            layoutConfig.magnifierSize / 2 + 50,
+            layoutConfig.magnifierSize / 2 + insets.top + 20,
+            containerW,
+            containerH,
+            layoutConfig.magnifierSize,
+            width,
+            insets.top
+        );
     }, [
         width,
         height,
         insets.top,
-        cameraInsets.padRight,
+        layoutConfig.cameraInsets.padRight,
+        layoutConfig.cameraInsets.padBottom,
+        layoutConfig.magnifierSize,
         cameraLayout.width,
         cameraLayout.height,
-        MAGNIFIER_SIZE,
     ]);
 
     const dpBtn = isLandscapeMode ? "size-9" : "size-10";
@@ -476,6 +489,188 @@ export default function Step7() {
     }
 
     // ============================================================
+    // Verify Phase - Show scope center for visual confirmation
+    // ============================================================
+    if (phase === "verify") {
+        return (
+            <View className="flex-1 bg-brand-black">
+                {/* Camera with scope center marker - MUST use same insets as step5 */}
+                <View
+                    onLayout={handleCameraLayout}
+                    style={[StyleSheet.absoluteFill, { right: layoutConfig.cameraInsets.padRight, bottom: layoutConfig.cameraInsets.padBottom }]}
+                >
+                    {shouldRenderCamera && (
+                        <View style={StyleSheet.absoluteFill}>
+                            <View style={[StyleSheet.absoluteFill, rotationTransform]}>
+                                <CameraView style={StyleSheet.absoluteFill} facing="back" zoom={cameraZoom} autofocus={focusLocked ? "off" : "on"} />
+                            </View>
+
+                            {/* Scope center marker - this is where crosshair should be */}
+                            {scopeCenterPx && (
+                                <>
+                                    <View
+                                        style={[
+                                            styles.crosshairContainer,
+                                            {
+                                                left: scopeCenterPx.x - 30,
+                                                top: scopeCenterPx.y - 30,
+                                            },
+                                        ]}
+                                        pointerEvents="none"
+                                    >
+                                        <View style={styles.crosshairVertical} />
+                                        <View style={styles.crosshairHorizontal} />
+                                        <View style={styles.crosshairCenter} />
+                                    </View>
+
+                                    {/* Coordinate label below crosshair */}
+                                    <View
+                                        style={{
+                                            position: "absolute",
+                                            left: scopeCenterPx.x - 40,
+                                            top: scopeCenterPx.y + 35,
+                                            backgroundColor: "rgba(0, 0, 0, 0.75)",
+                                            paddingHorizontal: 8,
+                                            paddingVertical: 4,
+                                            borderRadius: 6,
+                                            borderWidth: 1,
+                                            borderColor: "rgba(11, 127, 79, 0.5)",
+                                        }}
+                                        pointerEvents="none"
+                                    >
+                                        <Text style={{ color: "#22c55e", fontSize: 11, fontFamily: "monospace", fontWeight: "600" }}>
+                                            ({scopeCenterPx.x}, {scopeCenterPx.y})
+                                        </Text>
+                                    </View>
+                                </>
+                            )}
+                        </View>
+                    )}
+                </View>
+
+                {/* Control panel - MUST use same dimensions as step5 */}
+                <SafeAreaView
+                    className="flex-1"
+                    edges={safeAreaEdges}
+                    style={isLandscapeMode
+                        ? { position: "absolute", right: 0, top: 0, bottom: 0, width: layoutConfig.sidePanelWidth }
+                        : { position: "absolute", left: 0, right: 0, bottom: 0, height: layoutConfig.bottomPanelTotalHeight }
+                    }
+                >
+                    {isLandscapeMode ? (
+                        /* ==================== LANDSCAPE VERIFY ==================== */
+                        <View className="flex-1 bg-brand-black py-6">
+                            {/* Icon */}
+                            <View className="items-center mb-2">
+                                <View className="size-14 rounded-2xl bg-brand-greenDark/60 border border-brand-green/50 items-center justify-center">
+                                    <Image source={icons.target} className="w-7 h-7" resizeMode="contain" tintColor="#22c55e" />
+                                </View>
+                            </View>
+
+                            {/* Title */}
+                            <Text className="text-white text-lg font-bold text-center mb-1">Verify Position</Text>
+
+                            {/* Subtitle */}
+                            <Text className="text-white/60 text-sm text-center mb-4">Confirm marker aligns with crosshair</Text>
+
+                            {/* Spacer */}
+                            <View className="flex-1 justify-center items-center">
+                                {/* Position Box */}
+                                {scopeCenterPx && (
+                                    <View className="rounded-2xl p-4 bg-brand-greenDark/40 border border-brand-green/40 mb-4">
+                                        <Text className="text-white/50 text-xs text-center mb-2">Original Position</Text>
+                                        <Text className="text-brand-greenLight font-mono text-2xl font-bold text-center">
+                                            ({scopeCenterPx.x}, {scopeCenterPx.y})
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
+
+                            {/* Main Button */}
+                            <Pressable
+                                onPress={handleVerifyConfirm}
+                                className="rounded-2xl py-3 mb-2 items-center bg-brand-greenLight border border-brand-green/60"
+                            >
+                                <Text className="text-white font-bold text-sm">Finish Calibration</Text>
+                            </Pressable>
+
+                            {/* Secondary Buttons */}
+                            <View className="flex-row gap-2">
+                                <Pressable
+                                    onPress={handleBack}
+                                    className="flex-1 rounded-2xl py-2.5 items-center bg-brand-black/60 border border-brand-green/30"
+                                >
+                                    <Text className="text-white/80 font-semibold text-xs">Back</Text>
+                                </Pressable>
+                                <Pressable
+                                    onPress={handleCancel}
+                                    className="flex-1 rounded-2xl py-2.5 items-center bg-brand-black/60 border border-brand-green/30"
+                                >
+                                    <Text className="text-white/80 font-semibold text-xs">Cancel</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+                    ) : (
+                        /* ==================== PORTRAIT VERIFY ==================== */
+                        <View className="flex-1 bg-brand-black px-5">
+                            {/* Header Row */}
+                            <View className="flex-row items-center mb-4">
+                                {/* Icon */}
+                                <View className="size-12 rounded-2xl bg-brand-greenDark/60 border border-brand-green/50 items-center justify-center mr-3">
+                                    <Image source={icons.target} className="w-6 h-6" resizeMode="contain" tintColor="#22c55e" />
+                                </View>
+
+                                {/* Title + Subtitle */}
+                                <View className="flex-1">
+                                    <Text className="text-white text-xl font-bold">Verify Position</Text>
+                                    <Text className="text-white/60 text-sm">Confirm marker aligns with crosshair</Text>
+                                </View>
+
+                                {/* Position Box */}
+                                {scopeCenterPx && (
+                                    <View className="bg-brand-greenDark/50 border border-brand-green/40 rounded-xl px-3 py-2">
+                                        <Text className="text-white/50 text-[10px]">Position</Text>
+                                        <Text className="text-brand-greenLight font-mono text-base font-bold">
+                                            ({scopeCenterPx.x}, {scopeCenterPx.y})
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
+
+                            {/* Spacer */}
+                            <View className="flex-1" />
+
+                            {/* Main Button */}
+                            <Pressable
+                                onPress={handleVerifyConfirm}
+                                className="rounded-2xl py-4 mb-3 items-center bg-brand-greenLight border border-brand-green/60"
+                            >
+                                <Text className="text-white font-bold text-lg">Finish Calibration</Text>
+                            </Pressable>
+
+                            {/* Secondary Buttons */}
+                            <View className="flex-row gap-3">
+                                <Pressable
+                                    onPress={handleBack}
+                                    className="flex-1 rounded-2xl py-3 items-center bg-brand-black/60 border border-brand-green/30"
+                                >
+                                    <Text className="text-white/80 font-semibold text-sm">Back</Text>
+                                </Pressable>
+                                <Pressable
+                                    onPress={handleCancel}
+                                    className="flex-1 rounded-2xl py-3 items-center bg-brand-black/60 border border-brand-green/30"
+                                >
+                                    <Text className="text-white/80 font-semibold text-sm">Cancel</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+                    )}
+                </SafeAreaView>
+            </View>
+        );
+    }
+
+    // ============================================================
     // Confirm Phase - LANDSCAPE
     // ============================================================
     if (isLandscapeMode) {
@@ -483,7 +678,7 @@ export default function Step7() {
             <View className="flex-1 bg-brand-black">
                 <View
                     onLayout={handleCameraLayout}
-                    style={[StyleSheet.absoluteFill, { right: cameraInsets.padRight, bottom: cameraInsets.padBottom }]}
+                    style={[StyleSheet.absoluteFill, { right: layoutConfig.cameraInsets.padRight, bottom: layoutConfig.cameraInsets.padBottom }]}
                 >
                     {shouldRenderCamera && (
                         <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
@@ -517,8 +712,8 @@ export default function Step7() {
                             style={[
                                 styles.magnifier,
                                 {
-                                    width: MAGNIFIER_SIZE,
-                                    height: MAGNIFIER_SIZE,
+                                    width: layoutConfig.magnifierSize,
+                                    height: layoutConfig.magnifierSize,
                                     left: magnifierPos.left,
                                     top: magnifierPos.top,
                                 },
@@ -542,7 +737,7 @@ export default function Step7() {
                 <SafeAreaView
                     className="absolute top-0 bottom-0 right-0"
                     edges={["top", "bottom", "right"]}
-                    style={{ width: SIDE_PANEL_W }}
+                    style={{ width: layoutConfig.sidePanelWidth }}
                 >
                     <View className="flex-1 bg-brand-black/95 border-l border-brand-green/30">
                         <View className="px-3 pt-3 pb-2">
@@ -678,7 +873,7 @@ export default function Step7() {
 
     return (
         <View className="flex-1 bg-brand-black">
-            <View onLayout={handleCameraLayout} style={[StyleSheet.absoluteFill, { bottom: controlPanelHeight + bottomPadding }]}>
+            <View onLayout={handleCameraLayout} style={[StyleSheet.absoluteFill, { bottom: controlPanelHeight + layoutConfig.bottomPadding }]}>
                 {shouldRenderCamera && (
                     <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
                         <View style={[StyleSheet.absoluteFill, rotationTransform]}>
@@ -723,7 +918,7 @@ export default function Step7() {
             </View>
 
             <SafeAreaView className="absolute bottom-0 left-0 right-0" edges={["bottom"]}>
-                <View style={{ paddingBottom: bottomPadding }} className="bg-brand-black/95 border-t border-brand-green/30 px-4 pt-4">
+                <View style={{ paddingBottom: layoutConfig.bottomPadding }} className="bg-brand-black/95 border-t border-brand-green/30 px-4 pt-4">
                     <View className="flex-row items-center mb-3">
                         <View className="size-9 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
                             <Image source={icons.target} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />

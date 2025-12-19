@@ -5,6 +5,7 @@
 // - PORTRAIT: keep your original UI (bottom panel) unchanged
 // - LANDSCAPE: Step5-style (camera left + flush right panel)
 // - Magnifier: responsive size + clamped inside visible camera + pushed from left
+// ⚠️ CRITICAL: Uses camera layout from store (set in step4)
 
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
@@ -28,8 +29,12 @@ import {
     selectCameraZoom,
     selectFocusPoint,
     selectScreenRotation,
+    selectCameraLayout,
     isLandscape,
     ScopeCenterPx,
+    getCameraLayoutConfig,
+    getMagnifierPosition,
+    clampValue,
 } from "@/app/calibration/exports";
 import icons from "@/app/constants/icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
@@ -41,9 +46,6 @@ type StepSize = 1 | 5 | 10;
 // Rotation range in degrees
 const MAX_ROTATION = 45;
 const MIN_ROTATION = -45;
-
-const clamp = (v: number, min: number, max: number) =>
-    Math.max(min, Math.min(max, v));
 
 export default function Step5() {
     const [permission] = useCameraPermissions();
@@ -74,6 +76,7 @@ export default function Step5() {
     const setElevationStartPx = useCalibrationStore((s) => s.setElevationStartPx);
     const setStoreRotation = useCalibrationStore((s) => s.setScreenRotation);
     const reset = useCalibrationStore((s) => s.resetCalibration);
+    const storedCameraLayout = useCalibrationStore(selectCameraLayout); // ⚠️ Read from store
 
     const isLandscapeMode = isLandscape(mountOrientation);
 
@@ -103,64 +106,42 @@ export default function Step5() {
     const safeAreaEdges: ("top" | "bottom" | "left" | "right")[] = ["top", "bottom"];
     if (isLandscapeMode) safeAreaEdges.push("left", "right");
 
-    const bottomPadding = Math.max(insets.bottom, 8);
-
-    // ---------------------------
-    // Responsive sizing (landscape)
-    // ---------------------------
-    const SIDE_PANEL_W = useMemo(() => {
-        const w = Math.round(width * 0.34);
-        return clamp(w, 220, 280);
-    }, [width]);
-
-    const MAGNIFIER_SIZE = useMemo(() => {
-        const base = isLandscapeMode ? width * 0.12 : width * 0.22;
-        return clamp(Math.round(base), isLandscapeMode ? 84 : 100, isLandscapeMode ? 120 : 140);
-    }, [width, isLandscapeMode]);
-
-    const bottomPanelHeight = 240;
-
-    const cameraInsets = useMemo(() => {
-        if (isLandscapeMode) {
-            return { padRight: SIDE_PANEL_W, padBottom: 0 };
+    // ⚠️ CRITICAL: Use layout from store (set in step4), fallback to local calculation
+    const layoutConfig = useMemo(() => {
+        if (storedCameraLayout) {
+            return storedCameraLayout;
         }
-        return { padRight: 0, padBottom: bottomPanelHeight + bottomPadding };
-    }, [isLandscapeMode, SIDE_PANEL_W, bottomPanelHeight, bottomPadding]);
+        // Fallback if store not yet populated (shouldn't happen in normal flow)
+        console.warn("⚠️ Step5: Camera layout not in store, using local calculation");
+        return getCameraLayoutConfig(width, height, isLandscapeMode, insets.bottom);
+    }, [storedCameraLayout, width, height, isLandscapeMode, insets.bottom]);
 
-    // Magnifier clamped to visible camera area.
-    // Also "push farther from left" to avoid edge hugs and small-phone clipping.
+    // Magnifier position using centralized function
     const magnifierPos = useMemo(() => {
-        const margin = 10;
-
-        // stronger push from left (scales with device; clamps)
-        const LEFT_SAFE_PAD = clamp(Math.round(width * 0.06), 24, 44);
-
-        const fallbackW = Math.max(0, width - cameraInsets.padRight);
-        const fallbackH = Math.max(0, height - cameraInsets.padBottom);
-
-        // Prefer measured camera layout, fallback to effective screen region.
+        const fallbackW = Math.max(0, width - layoutConfig.cameraInsets.padRight);
+        const fallbackH = Math.max(0, height - layoutConfig.cameraInsets.padBottom);
         const containerW = cameraLayout.width > 0 ? cameraLayout.width : fallbackW;
         const containerH = cameraLayout.height > 0 ? cameraLayout.height : fallbackH;
 
-        const leftMin = LEFT_SAFE_PAD;
-        const leftMax = Math.max(leftMin, containerW - MAGNIFIER_SIZE - margin);
-
-        const topMin = insets.top + margin;
-        const topMax = Math.max(topMin, containerH - MAGNIFIER_SIZE - margin);
-
-        return {
-            left: clamp(LEFT_SAFE_PAD, leftMin, leftMax),
-            top: clamp(insets.top + margin, topMin, topMax),
-        };
+        // Default position in top-left area
+        return getMagnifierPosition(
+            layoutConfig.magnifierSize / 2 + 50,
+            layoutConfig.magnifierSize / 2 + insets.top + 20,
+            containerW,
+            containerH,
+            layoutConfig.magnifierSize,
+            width,
+            insets.top
+        );
     }, [
         width,
         height,
         insets.top,
-        cameraInsets.padRight,
-        cameraInsets.padBottom,
+        layoutConfig.cameraInsets.padRight,
+        layoutConfig.cameraInsets.padBottom,
+        layoutConfig.magnifierSize,
         cameraLayout.width,
         cameraLayout.height,
-        MAGNIFIER_SIZE,
     ]);
 
     const handleCameraLayout = (event: any) => {
@@ -247,7 +228,7 @@ export default function Step5() {
                     onLayout={handleCameraLayout}
                     style={[
                         StyleSheet.absoluteFill,
-                        { right: cameraInsets.padRight, bottom: cameraInsets.padBottom },
+                        { right: layoutConfig.cameraInsets.padRight, bottom: layoutConfig.cameraInsets.padBottom },
                     ]}
                 >
                     {shouldRenderCamera && (
@@ -291,8 +272,8 @@ export default function Step5() {
                             style={[
                                 styles.magnifier,
                                 {
-                                    width: MAGNIFIER_SIZE,
-                                    height: MAGNIFIER_SIZE,
+                                    width: layoutConfig.magnifierSize,
+                                    height: layoutConfig.magnifierSize,
                                     left: magnifierPos.left,
                                     top: magnifierPos.top,
                                 },
@@ -317,7 +298,7 @@ export default function Step5() {
                 <SafeAreaView
                     className="absolute top-0 bottom-0 right-0"
                     edges={["top", "bottom", "right"]}
-                    style={{ width: SIDE_PANEL_W }}
+                    style={{ width: layoutConfig.sidePanelWidth }}
                 >
                     <View className="flex-1 bg-brand-black/95 border-l border-brand-green/30">
                         {/* Header - Fixed at top */}
@@ -525,7 +506,7 @@ export default function Step5() {
             <View
                 ref={cameraViewRef}
                 onLayout={handleCameraLayout}
-                style={[StyleSheet.absoluteFill, { bottom: controlPanelHeight + bottomPadding }]}
+                style={[StyleSheet.absoluteFill, { bottom: controlPanelHeight + layoutConfig.bottomPadding }]}
             >
                 {shouldRenderCamera && (
                     <Pressable onPress={handleTap} style={StyleSheet.absoluteFill}>
@@ -590,7 +571,7 @@ export default function Step5() {
             {/* Control Panel (portrait original) */}
             <SafeAreaView className="absolute bottom-0 left-0 right-0" edges={["bottom"]} style={{ maxHeight: height * 0.6 }}>
                 <View
-                    style={{ paddingBottom: bottomPadding }}
+                    style={{ paddingBottom: layoutConfig.bottomPadding }}
                     className="bg-brand-black/95 border-t border-brand-green/30"
                 >
                     {/* Scrollable Content */}

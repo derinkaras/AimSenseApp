@@ -4,6 +4,7 @@
 // User sets zoom level, tap-to-focus point, and screen rotation
 // to align the camera view with their scope's crosshair.
 // These settings persist through all subsequent calibration steps.
+// ⚠️ CRITICAL: This step STORES the camera layout config for all subsequent steps.
 
 import React, { useCallback, useRef, useState, useMemo, useEffect } from "react";
 import {
@@ -28,15 +29,15 @@ import {
   selectScreenRotation,
   isLandscape,
   FocusPoint,
+  getCameraLayoutConfig,
+  clampValue,
+  CameraLayoutConfig,
 } from "@/app/calibration/exports";
 import icons from "@/app/constants/icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import { useCameraContext } from "./_layout";
 
 const SCREEN_ID = "step4";
-
-const clamp = (v: number, min: number, max: number) =>
-    Math.max(min, Math.min(max, v));
 
 // Rotation range in degrees
 const MAX_ROTATION = 45;
@@ -70,6 +71,7 @@ export default function Step4() {
   const setCameraZoom = useCalibrationStore((s) => s.setCameraZoom);
   const setStoreFocusPoint = useCalibrationStore((s) => s.setFocusPoint);
   const setStoreRotation = useCalibrationStore((s) => s.setScreenRotation);
+  const setCameraLayoutStore = useCalibrationStore((s) => s.setCameraLayout); // ⚠️ Store layout for all steps
   const reset = useCalibrationStore((s) => s.resetCalibration);
 
   const isLandscapeMode = isLandscape(mountOrientation);
@@ -96,20 +98,18 @@ export default function Step4() {
   const safeAreaEdges: ("top" | "bottom" | "left" | "right")[] = ["top", "bottom"];
   if (isLandscapeMode) safeAreaEdges.push("left", "right");
 
-  const bottomPadding = Math.max(insets.bottom, 8);
+  // ⚠️ CRITICAL: Calculate and STORE camera layout config for ALL subsequent steps
+  const layoutConfig = useMemo(
+      () => getCameraLayoutConfig(width, height, isLandscapeMode, insets.bottom),
+      [width, height, isLandscapeMode, insets.bottom]
+  );
 
-  // Layout sizing
-  const SIDE_PANEL_W = useMemo(() => {
-    const w = Math.round(width * 0.38);
-    return clamp(w, 260, 320);
-  }, [width]);
-
-  const cameraInsets = useMemo(() => {
-    if (isLandscapeMode) {
-      return { padRight: SIDE_PANEL_W, padBottom: 0 };
+  // Store the layout config whenever it changes (ensures all steps use same values)
+  useEffect(() => {
+    if (width > 0 && height > 0) {
+      setCameraLayoutStore(layoutConfig);
     }
-    return { padRight: 0, padBottom: 340 + bottomPadding };
-  }, [isLandscapeMode, SIDE_PANEL_W, bottomPadding]);
+  }, [layoutConfig, setCameraLayoutStore, width, height]);
 
   const handleCameraLayout = (event: any) => {
     const { x, y, width, height } = event.nativeEvent.layout;
@@ -152,8 +152,8 @@ export default function Step4() {
     const { locationX, locationY } = event.nativeEvent;
 
     // Calculate normalized coordinates (0-1) for camera API
-    const normalizedX = clamp(locationX / cameraLayout.width, 0, 1);
-    const normalizedY = clamp(locationY / cameraLayout.height, 0, 1);
+    const normalizedX = clampValue(locationX / cameraLayout.width, 0, 1);
+    const normalizedY = clampValue(locationY / cameraLayout.height, 0, 1);
 
     const point: FocusPoint = {
       x: Math.round(locationX),
@@ -240,7 +240,7 @@ export default function Step4() {
               onLayout={handleCameraLayout}
               style={[
                 StyleSheet.absoluteFill,
-                { right: cameraInsets.padRight, bottom: cameraInsets.padBottom },
+                { right: layoutConfig.cameraInsets.padRight, bottom: layoutConfig.cameraInsets.padBottom },
               ]}
           >
             {shouldRenderCamera && (
@@ -303,7 +303,7 @@ export default function Step4() {
           {/* Side Panel */}
           <SafeAreaView
               className="absolute right-0 top-0 bottom-0 bg-brand-black/95 border-l border-brand-green/30"
-              style={{ width: SIDE_PANEL_W }}
+              style={{ width: layoutConfig.sidePanelWidth }}
               edges={["top", "bottom", "right"]}
           >
             <View className="flex-1 p-3">
@@ -432,7 +432,7 @@ export default function Step4() {
         {/* Camera Feed with rotation */}
         <View
             onLayout={handleCameraLayout}
-            style={[StyleSheet.absoluteFill, { bottom: cameraInsets.padBottom }]}
+            style={[StyleSheet.absoluteFill, { bottom: layoutConfig.cameraInsets.padBottom }]}
         >
           {shouldRenderCamera && (
               <Pressable onPress={handleTapToFocus} style={StyleSheet.absoluteFill}>
@@ -497,7 +497,7 @@ export default function Step4() {
 
           <View
               className="bg-brand-black/95 border-t border-brand-green/30 px-5 pt-4"
-              style={{ paddingBottom: bottomPadding }}
+              style={{ paddingBottom: layoutConfig.bottomPadding }}
           >
             {/* Header */}
             <View className="rounded-2xl p-3 bg-brand-greenDark/70 border border-brand-green/60 mb-3">
