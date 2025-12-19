@@ -156,13 +156,30 @@ export default function Step3() {
 
         const { locationX, locationY } = event.nativeEvent;
 
-        // Calculate normalized coordinates (0-1) for camera API
-        const normalizedX = clampValue(locationX / cameraLayout.width, 0, 1);
-        const normalizedY = clampValue(locationY / cameraLayout.height, 0, 1);
+        // The tap position is where the user tapped on screen (for the indicator)
+        const tapX = locationX;
+        const tapY = locationY;
 
+        // When rotation is applied, we need to transform tap coordinates to get
+        // the corresponding point on the un-rotated camera for focus calculation
+        const centerX = cameraLayout.width / 2;
+        const centerY = cameraLayout.height / 2;
+        const angleRad = (-rotation * Math.PI) / 180; // Inverse rotation in radians
+
+        // Translate to center, rotate inversely, translate back
+        const dx = tapX - centerX;
+        const dy = tapY - centerY;
+        const cameraX = centerX + dx * Math.cos(angleRad) - dy * Math.sin(angleRad);
+        const cameraY = centerY + dx * Math.sin(angleRad) + dy * Math.cos(angleRad);
+
+        // Calculate normalized coordinates (0-1) for camera API using rotated coordinates
+        const normalizedX = clampValue(cameraX / cameraLayout.width, 0, 1);
+        const normalizedY = clampValue(cameraY / cameraLayout.height, 0, 1);
+
+        // Store the screen tap position for the indicator, but camera coordinates for focus
         const point: FocusPoint = {
-            x: Math.round(locationX),
-            y: Math.round(locationY),
+            x: Math.round(tapX),
+            y: Math.round(tapY),
             normalizedX,
             normalizedY,
         };
@@ -173,7 +190,7 @@ export default function Step3() {
         setFocusLocked(false);
         focusAppliedRef.current = false;
 
-        // Apply focus to camera
+        // Apply focus to camera using transformed coordinates
         await applyFocus(normalizedX, normalizedY);
 
         // Animate focus indicator
@@ -400,7 +417,7 @@ export default function Step3() {
 
                             {/* Guide overlay */}
                             {!focusPoint && (
-                                <View style={styles.guideOverlay}>
+                                <View style={styles.guideOverlay} pointerEvents="none">
                                     <View style={styles.guideBox}>
                                         <Text style={styles.guideText}>Tap to lock focus</Text>
                                         <Text style={styles.guideSubtext}>Use rotation to align crosshair</Text>
@@ -604,7 +621,7 @@ export default function Step3() {
 
                         {/* Guide overlay */}
                         {!focusPoint && (
-                            <View style={styles.guideOverlay}>
+                            <View style={styles.guideOverlay} pointerEvents="none">
                                 <View style={styles.guideBox}>
                                     <Text style={styles.guideText}>Tap to lock focus</Text>
                                     <Text style={styles.guideSubtext}>Use rotation to align crosshair</Text>

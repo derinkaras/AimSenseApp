@@ -33,7 +33,6 @@ export default function Step4() {
   useFocusEffect(
       useCallback(() => {
         console.log(SCREEN_ID);
-
         setActiveScreen(SCREEN_ID);
         return () => {};
       }, [setActiveScreen])
@@ -42,7 +41,6 @@ export default function Step4() {
   const shouldRenderCamera = cameraEnabled && activeScreen === SCREEN_ID;
 
   const insets = useSafeAreaInsets();
-  // const bottomPadding = Math.max(insets.bottom, 8);
   const wasLevel = useRef(false);
 
   const timeouts = useRef<Array<ReturnType<typeof setTimeout>>>([]);
@@ -118,15 +116,15 @@ export default function Step4() {
   const containerPadding = isLandscapeMode ? "p-4" : "p-6";
   const headerPadding = isLandscapeMode ? "p-3" : "p-5";
   const headerMargin = isLandscapeMode ? "mt-3" : "mt-6";
-  const scrollPadding = isLandscapeMode ? 120 : 240; // tighter in landscape
-  const titleSize = isLandscapeMode ? "text-xl" : "text-2xl";
-  const subtitleSize = isLandscapeMode ? "text-xs" : "text-base"; // tighter in landscape
+  const scrollPadding = isLandscapeMode ? 120 : 240;
 
-  // Header chip sizing (landscape = compact)
+  const titleSize = isLandscapeMode ? "text-xl" : "text-2xl";
+  const subtitleSize = isLandscapeMode ? "text-xs" : "text-base";
+
+  // Chip sizing (landscape = compact)
   const chipPad = isLandscapeMode ? "px-3 py-2" : "px-4 py-3";
-  const chipGapTop = isLandscapeMode ? "mt-2" : "mt-4";
-  const chipGapBetween = isLandscapeMode ? "mb-1" : "mb-2";
-  const chipIndent = isLandscapeMode ? "ml-[40px]" : "ml-[44px]";
+  const chipGapTop = isLandscapeMode ? "mt-3" : "mt-4";
+  const chipGapBetween = isLandscapeMode ? "mb-1.5" : "mb-2";
   const chipLeading = isLandscapeMode ? "leading-4" : "leading-5";
   const chipRadius = isLandscapeMode ? "rounded-xl" : "rounded-2xl";
 
@@ -143,7 +141,6 @@ export default function Step4() {
 
         <SafeAreaView className="flex-1" edges={safeAreaEdges}>
           <View className={`flex-1 ${isLandscapeMode ? "px-4" : "px-6"} pt-4`}>
-            {/* Level Display */}
             <ScrollView
                 className={headerMargin}
                 showsVerticalScrollIndicator={false}
@@ -151,7 +148,7 @@ export default function Step4() {
             >
               {/* Header */}
               <View className={`rounded-3xl ${headerPadding} bg-brand-greenDark/70 border border-brand-green/60 my-2`}>
-                {/* Row: icon + title ONLY */}
+                {/* Title row: icon + title (ONLY this row is horizontal) */}
                 <View className="flex-row items-center">
                   <View className="size-11 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center">
                     <Image
@@ -167,24 +164,24 @@ export default function Step4() {
                   </Text>
                 </View>
 
-                {/* Content below title (no icon involvement) */}
-                <View className={`${chipGapTop} ${chipIndent}`}>
-                  {/* Chip 1 */}
+                {/* Everything below is full-width (no indent, no columns) */}
+                <View className={chipGapTop}>
                   <View className={`${chipRadius} bg-brand-black/40 border border-brand-green/30 ${chipPad} ${chipGapBetween}`}>
                     <Text className={`text-white/90 ${subtitleSize} ${chipLeading}`}>
                       Hold the rifle in a normal shooting position and point it forward while leveling the reference.
                     </Text>
                   </View>
 
-                  {/* Chip 2 */}
                   <View className={`${chipRadius} bg-brand-greenDark/40 border border-brand-green/25 ${chipPad}`}>
                     <Text className={`text-white/70 ${subtitleSize} ${chipLeading}`}>
-                      It's okay if the phone is slightly tilted in the scope adapter. This step records your setup's alignment
-                      and uses it as the baseline for tracking.
+                      It’s okay if the phone is slightly tilted in the scope adapter — this step records your setup’s alignment.
+                      After this, AimSense tracks changes relative to this baseline, so movement and tilt are expected.
                     </Text>
                   </View>
                 </View>
               </View>
+
+              {/* Level Card */}
               <View
                   className={[
                     "rounded-3xl border bg-brand-greenDark/65",
@@ -195,7 +192,9 @@ export default function Step4() {
                 <View className="flex-row items-center justify-between">
                   <View>
                     <Text className="text-white/70 text-sm">Level Offset</Text>
-                    <Text className={`text-white font-bold ${angleFontSize} mt-2`}>{safe.toFixed(1)}°</Text>
+                    <Text className={`text-white font-bold ${angleFontSize} mt-2`}>
+                      {safe.toFixed(1)}°
+                    </Text>
                   </View>
 
                   <View
@@ -224,13 +223,13 @@ export default function Step4() {
                     ].join(" ")}
                 >
                   <Text className={`text-white font-semibold ${isLandscapeMode ? "text-base" : "text-lg"}`}>
-                    {isLevel ? "Reference locked — tap Continue" : "Align to set reference"}
+                    {isLevel ? "Reference locked — tap Continue" : "Level the rifle to set your baseline"}
                   </Text>
 
                   <Text className="text-white/70 mt-1 text-sm">
                     {isLevel
-                        ? "This sets the baseline for accurate cant and pitch tracking during the hunt."
-                        : "This position becomes the zero reference. Make small adjustments and hold steady once level."}
+                        ? "Baseline captured. You don’t need to hold this exact angle afterward."
+                        : "Make small adjustments and hold steady once it reads level."}
                   </Text>
                 </View>
 
@@ -240,7 +239,7 @@ export default function Step4() {
                         <Image source={icons.info} className="w-5 h-5" resizeMode="contain" tintColor="#9ca3af" />
                       </View>
                       <Text className="flex-1 text-white/65 text-sm">
-                        Almost there — keep the rifle upright, make small adjustments, then hold steady.
+                        Almost there — keep the rifle upright, adjust slowly, then pause once it reads level.
                       </Text>
                     </View>
                 )}
@@ -260,9 +259,16 @@ export default function Step4() {
                 <Pressable
                     onPress={handleCapture}
                     disabled={!isLevel}
-                    className={`${buttonSize} rounded-xl items-center justify-center border ${isLevel ? "bg-brand-greenLight border-brand-green/60" : "bg-brand-black/30 border-brand-green/30"}`}
+                    className={`${buttonSize} rounded-xl items-center justify-center border ${
+                        isLevel ? "bg-brand-greenLight border-brand-green/60" : "bg-brand-black/30 border-brand-green/30"
+                    }`}
                 >
-                  <Image source={icons.chevronRight} className={iconSize} resizeMode="contain" tintColor={isLevel ? "#ffffff" : "#666666"} />
+                  <Image
+                      source={icons.chevronRight}
+                      className={iconSize}
+                      resizeMode="contain"
+                      tintColor={isLevel ? "#ffffff" : "#666666"}
+                  />
                 </Pressable>
 
                 <Pressable
@@ -273,7 +279,6 @@ export default function Step4() {
                 </Pressable>
               </View>
 
-              {/* Status text below buttons when not level */}
               {!isLevel && (
                   <Text className="text-white/50 text-center text-sm mt-3">
                     Level the rifle to continue
