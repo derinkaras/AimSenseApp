@@ -96,59 +96,66 @@ export default function Home() {
 
                             {/* ===================== PRE-HUNT STEPS ===================== */}
                             <View className="mt-5 gap-4">
+                                {/* Header */}
+                                <Text className="text-white/80 text-lg font-semibold">
+                                    Before you begin:
+                                </Text>
+
                                 {/* Step 1 */}
-                                <View className="flex-row items-center">
-                                    <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3 mt-0.5">
+                                <View className="flex-row">
+                                    <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3">
                                         <Text className="text-brand-greenLight text-sm font-bold">
                                             1
                                         </Text>
                                     </View>
-                                    <Text className="text-white/90 text-base flex-1">
+                                    <Text className="text-white/90 text-base flex-1 mr-11">
                                         Make sure the profile for the gun you want to use is ready.
                                     </Text>
                                 </View>
 
-                                {/* Step 2 - Calibration */}
-                                <View>
-                                    <View className="flex-row items-center">
-                                        <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3 mt-0.5">
-                                            <Text className="text-brand-greenLight text-sm font-bold">
-                                                2
-                                            </Text>
-                                        </View>
-                                        <Text className="text-white/90 text-base flex-1">
-                                            Calibration
+                                {/* Step 2 - Clamping */}
+                                <View className="flex-row">
+                                    <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3">
+                                        <Text className="text-brand-greenLight text-sm font-bold">
+                                            2
                                         </Text>
                                     </View>
-
-                                    {/* Sub-steps */}
-                                    <View className="ml-11 mt-2 gap-2">
-                                        <DotStep text="Set phone orientation" />
-                                        <DotStep text="Level the mount on your scope as much as possible" />
-                                        <DotStep text="Phone to scope reference" />
-                                    </View>
+                                    <Text className="text-white/90 text-base flex-1 mr-11">
+                                        Make sure the phone is securely clamped on both ends of the adapter and that the adapter itself is clamped onto the scope.
+                                    </Text>
                                 </View>
 
-                                {/* Step 3 */}
-                                <View className="flex-row items-center">
-                                    <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3 mt-0.5">
+                                {/* Step 3 - Calibration */}
+                                <View>
+                                    <View className="flex-row">
+                                        <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3">
+                                            <Text className="text-brand-greenLight text-sm font-bold">
+                                                3
+                                            </Text>
+                                        </View>
+                                        <View className="flex-row justify-center items-center gap-2">
+                                            <Text className="text-white/90 text-base">
+                                                Calibration
+                                            </Text>
+                                            {/* Sub-step */}
+                                            <Text className="text-white/70 text-sm text-center">(takes ~2 minutes)</Text>
+
+                                        </View>
+                                    </View>
+
+                                </View>
+
+                                {/* Step 4 */}
+                                <View className="flex-row">
+                                    <View className="size-8 rounded-full bg-brand-greenLight/20 border border-brand-green/40 items-center justify-center mr-3">
                                         <Text className="text-brand-greenLight text-sm font-bold">
-                                            3
+                                            4
                                         </Text>
                                     </View>
-                                    <Text className="text-white/90 text-base flex-1">
+                                    <Text className="text-white/90 text-base flex-1 mr-11">
                                         Choose a rifle profile & begin your hunt
                                     </Text>
                                 </View>
-                            </View>
-
-                            {/* ===================== FOOTER NOTE ===================== */}
-                            <View className="mt-4 rounded-2xl bg-brand-black/35 border border-brand-green/25 px-4 py-3">
-                                <Text className="text-white/70 text-sm text-center">
-                                    Before you begin, make sure the phone is level and flush against the mount’s clamp
-                                    wall. Verify that the scope clamp is fully seated in the adapter’s divots and
-                                    securely tightened to the scope using the split-collar clamp.
-                                </Text>
                             </View>
                         </View>
 
@@ -166,17 +173,6 @@ export default function Home() {
                     </View>
                 )}
             </SafeAreaView>
-        </View>
-    );
-}
-
-/* ===================== DOT SUB-STEP ===================== */
-
-function DotStep({ text }: { text: string }) {
-    return (
-        <View className="flex-row items-center">
-            <View className="w-1.5 h-1.5 rounded-full bg-brand-greenLight/70 mr-3" />
-            <Text className="text-white/70 text-sm flex-1">{text}</Text>
         </View>
     );
 }

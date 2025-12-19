@@ -587,36 +587,12 @@ export default function Step7() {
                                     </View>
                                 )}
                             </View>
-
-                            {/* Main Button */}
-                            <Pressable
-                                onPress={handleVerifyConfirm}
-                                className="rounded-2xl py-3 mb-2 items-center bg-brand-greenLight border border-brand-green/60"
-                            >
-                                <Text className="text-white font-bold text-sm">Finish Calibration</Text>
-                            </Pressable>
-
-                            {/* Secondary Buttons */}
-                            <View className="flex-row gap-2">
-                                <Pressable
-                                    onPress={handleBack}
-                                    className="flex-1 rounded-2xl py-2.5 items-center bg-brand-black/60 border border-brand-green/30"
-                                >
-                                    <Text className="text-white/80 font-semibold text-xs">Back</Text>
-                                </Pressable>
-                                <Pressable
-                                    onPress={handleCancel}
-                                    className="flex-1 rounded-2xl py-2.5 items-center bg-brand-black/60 border border-brand-green/30"
-                                >
-                                    <Text className="text-white/80 font-semibold text-xs">Cancel</Text>
-                                </Pressable>
-                            </View>
                         </View>
                     ) : (
                         /* ==================== PORTRAIT VERIFY ==================== */
-                        <View className="flex-1 bg-brand-black px-5">
+                        <View className="flex-1 bg-brand-black px-5 justify-between">
                             {/* Header Row */}
-                            <View className="flex-row items-center mb-4">
+                            <View className="flex-row items-center">
                                 {/* Icon */}
                                 <View className="size-12 rounded-2xl bg-brand-greenDark/60 border border-brand-green/50 items-center justify-center mr-3">
                                     <Image source={icons.target} className="w-6 h-6" resizeMode="contain" tintColor="#22c55e" />
@@ -639,35 +615,64 @@ export default function Step7() {
                                 )}
                             </View>
 
-                            {/* Spacer */}
-                            <View className="flex-1" />
-
-                            {/* Main Button */}
-                            <Pressable
-                                onPress={handleVerifyConfirm}
-                                className="rounded-2xl py-4 mb-3 items-center bg-brand-greenLight border border-brand-green/60"
-                            >
-                                <Text className="text-white font-bold text-lg">Finish Calibration</Text>
-                            </Pressable>
-
-                            {/* Secondary Buttons */}
-                            <View className="flex-row gap-3">
+                            {/* Icon Buttons */}
+                            <View className="flex-row items-center justify-center gap-4 mb-3">
                                 <Pressable
                                     onPress={handleBack}
-                                    className="flex-1 rounded-2xl py-3 items-center bg-brand-black/60 border border-brand-green/30"
+                                    className="size-14 rounded-xl items-center justify-center bg-brand-black/50 border border-brand-green/35"
                                 >
-                                    <Text className="text-white/80 font-semibold text-sm">Back</Text>
+                                    <Image source={icons.chevronLeft} className="w-6 h-6" resizeMode="contain" tintColor="#e5e5e5" />
                                 </Pressable>
+
+                                <Pressable
+                                    onPress={handleVerifyConfirm}
+                                    className="size-14 rounded-xl items-center justify-center bg-brand-greenLight border border-brand-green/60"
+                                >
+                                    <Image source={icons.chevronRight} className="w-6 h-6" resizeMode="contain" tintColor="#ffffff" />
+                                </Pressable>
+
                                 <Pressable
                                     onPress={handleCancel}
-                                    className="flex-1 rounded-2xl py-3 items-center bg-brand-black/60 border border-brand-green/30"
+                                    className="size-14 rounded-xl items-center justify-center bg-brand-black/50 border border-brand-green/35"
                                 >
-                                    <Text className="text-white/80 font-semibold text-sm">Cancel</Text>
+                                    <Image source={icons.cancel} className="w-6 h-6" resizeMode="contain" tintColor="#e5e5e5" />
                                 </Pressable>
                             </View>
                         </View>
                     )}
                 </SafeAreaView>
+
+                {/* Floating CTAs for Landscape - Bottom center over camera */}
+                {isLandscapeMode && (
+                    <View
+                        className="absolute bottom-0 left-0 items-center pb-4 px-4"
+                        style={{ right: layoutConfig.sidePanelWidth }}
+                        pointerEvents="box-none"
+                    >
+                        <View className="flex-row items-center gap-3 bg-brand-black/80 rounded-2xl p-2 border border-brand-green/40">
+                            <Pressable
+                                onPress={handleBack}
+                                className="size-11 rounded-xl items-center justify-center bg-brand-black/60 border border-brand-green/35"
+                            >
+                                <Image source={icons.chevronLeft} className="w-5 h-5" resizeMode="contain" tintColor="#e5e5e5" />
+                            </Pressable>
+
+                            <Pressable
+                                onPress={handleVerifyConfirm}
+                                className="size-11 rounded-xl items-center justify-center bg-brand-greenLight border border-brand-green/60"
+                            >
+                                <Image source={icons.chevronRight} className="w-5 h-5" resizeMode="contain" tintColor="#ffffff" />
+                            </Pressable>
+
+                            <Pressable
+                                onPress={handleCancel}
+                                className="size-11 rounded-xl items-center justify-center bg-brand-black/60 border border-brand-green/35"
+                            >
+                                <Image source={icons.cancel} className="w-5 h-5" resizeMode="contain" tintColor="#e5e5e5" />
+                            </Pressable>
+                        </View>
+                    </View>
+                )}
             </View>
         );
     }
@@ -834,36 +839,42 @@ export default function Step7() {
                                     >
                                         <Text className="text-white/75 text-[12px] font-semibold">Reset to tap</Text>
                                     </Pressable>
-
-                                    <Pressable
-                                        onPress={handleConfirmPosition}
-                                        className="mt-3 w-full py-3 rounded-2xl bg-brand-greenLight border border-brand-green/60 items-center"
-                                    >
-                                        <Text className="text-white font-semibold text-sm">Confirm Position</Text>
-                                    </Pressable>
                                 </>
                             )}
                         </View>
-
-                        <View className="px-3 pb-3">
-                            <View className="flex-row mt-2 gap-2">
-                                <Pressable
-                                    onPress={handleBack}
-                                    className="flex-1 py-2 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
-                                >
-                                    <Text className="text-white/90 font-semibold text-[12px]">Back</Text>
-                                </Pressable>
-
-                                <Pressable
-                                    onPress={handleCancel}
-                                    className="flex-1 py-2 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
-                                >
-                                    <Text className="text-white/90 font-semibold text-[12px]">Cancel</Text>
-                                </Pressable>
-                            </View>
-                        </View>
                     </View>
                 </SafeAreaView>
+
+                {/* Floating CTAs - Bottom center over camera */}
+                <View
+                    className="absolute bottom-0 left-0 items-center pb-4 px-4"
+                    style={{ right: layoutConfig.sidePanelWidth }}
+                    pointerEvents="box-none"
+                >
+                    <View className="flex-row items-center gap-3 bg-brand-black/80 rounded-2xl p-2 border border-brand-green/40">
+                        <Pressable
+                            onPress={handleBack}
+                            className="size-11 rounded-xl items-center justify-center bg-brand-black/60 border border-brand-green/35"
+                        >
+                            <Image source={icons.chevronLeft} className="w-5 h-5" resizeMode="contain" tintColor="#e5e5e5" />
+                        </Pressable>
+
+                        <Pressable
+                            onPress={handleConfirmPosition}
+                            disabled={!centerPoint}
+                            className={`size-11 rounded-xl items-center justify-center border ${centerPoint ? "bg-brand-greenLight border-brand-green/60" : "bg-brand-black/30 border-brand-green/30"}`}
+                        >
+                            <Image source={icons.chevronRight} className="w-5 h-5" resizeMode="contain" tintColor={centerPoint ? "#ffffff" : "#666666"} />
+                        </Pressable>
+
+                        <Pressable
+                            onPress={handleCancel}
+                            className="size-11 rounded-xl items-center justify-center bg-brand-black/60 border border-brand-green/35"
+                        >
+                            <Image source={icons.cancel} className="w-5 h-5" resizeMode="contain" tintColor="#e5e5e5" />
+                        </Pressable>
+                    </View>
+                </View>
 
                 {renderDialBackModal()}
             </View>
@@ -924,8 +935,8 @@ export default function Step7() {
             </View>
 
             <SafeAreaView className="absolute bottom-0 left-0 right-0" edges={["bottom"]}>
-                <View style={{ paddingBottom: layoutConfig.bottomPadding }} className="bg-brand-black/95 border-t border-brand-green/30 px-4 pt-4">
-                    <View className="flex-row items-center mb-3">
+                <View style={{ paddingBottom: layoutConfig.bottomPadding }} className="bg-brand-black/95 border-t border-brand-green/30 px-4 pt-2">
+                    <View className="flex-row items-center mb-2">
                         <View className="size-9 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
                             <Image source={icons.target} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
                         </View>
@@ -936,8 +947,8 @@ export default function Step7() {
                     </View>
 
                     {centerPoint ? (
-                        <View className="flex-row gap-3">
-                            <View className="flex-1 items-center">
+                        <View className="flex-row gap-6 justify-center items-center">
+                            <View className="items-center">
                                 <View className="items-center">
                                     <Pressable
                                         onPress={() => handleMicroAdjust("up")}
@@ -975,7 +986,7 @@ export default function Step7() {
                                 </View>
                             </View>
 
-                            <View className="justify-center gap-2">
+                            <View className="items-center gap-2">
                                 <Text className="text-white/50 text-xs text-center">Step</Text>
                                 <View className="flex-row gap-1">
                                     {([1, 5, 10] as StepSize[]).map((size) => (
@@ -1003,16 +1014,6 @@ export default function Step7() {
                                     <Text className="text-white/70 text-xs font-semibold">Reset</Text>
                                 </Pressable>
                             </View>
-
-                            <View className="justify-center">
-                                <Pressable
-                                    onPress={handleConfirmPosition}
-                                    className="px-5 py-4 rounded-2xl bg-brand-greenLight border border-brand-green/60 items-center justify-center"
-                                >
-                                    <Text className="text-white font-semibold text-sm">Confirm</Text>
-                                    <Text className="text-white font-semibold text-sm">Position</Text>
-                                </Pressable>
-                            </View>
                         </View>
                     ) : (
                         <View className="py-4">
@@ -1020,19 +1021,28 @@ export default function Step7() {
                         </View>
                     )}
 
-                    <View className="flex-row mt-3 gap-3">
+                    {/* CTAs - Icon Buttons */}
+                    <View className="flex-row mt-3 items-center justify-center gap-4">
                         <Pressable
                             onPress={handleBack}
-                            className="flex-1 py-3 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
+                            className="size-14 rounded-xl items-center justify-center bg-brand-black/50 border border-brand-green/35"
                         >
-                            <Text className="text-white/90 font-semibold text-sm">Back</Text>
+                            <Image source={icons.chevronLeft} className="w-6 h-6" resizeMode="contain" tintColor="#e5e5e5" />
+                        </Pressable>
+
+                        <Pressable
+                            onPress={handleConfirmPosition}
+                            disabled={!centerPoint}
+                            className={`size-14 rounded-xl items-center justify-center border ${centerPoint ? "bg-brand-greenLight border-brand-green/60" : "bg-brand-black/30 border-brand-green/30"}`}
+                        >
+                            <Image source={icons.chevronRight} className="w-6 h-6" resizeMode="contain" tintColor={centerPoint ? "#ffffff" : "#666666"} />
                         </Pressable>
 
                         <Pressable
                             onPress={handleCancel}
-                            className="flex-1 py-3 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
+                            className="size-14 rounded-xl items-center justify-center bg-brand-black/50 border border-brand-green/35"
                         >
-                            <Text className="text-white/90 font-semibold text-sm">Cancel</Text>
+                            <Image source={icons.cancel} className="w-6 h-6" resizeMode="contain" tintColor="#e5e5e5" />
                         </Pressable>
                     </View>
                 </View>

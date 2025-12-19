@@ -460,37 +460,42 @@ export default function Step5() {
                                             Reset to tap
                                         </Text>
                                     </Pressable>
-
-                                    <Pressable
-                                        onPress={handleNext}
-                                        className="mt-3 w-full py-3 rounded-2xl bg-brand-greenLight border border-brand-green/60 items-center"
-                                    >
-                                        <Text className="text-white font-semibold text-sm">Save Center</Text>
-                                    </Pressable>
                                 </>
                             )}
                         </ScrollView>
-
-                        {/* Back / Cancel - Fixed at bottom */}
-                        <View className="px-3 pb-3">
-                            <View className="flex-row mt-2 gap-2">
-                                <Pressable
-                                    onPress={handleBack}
-                                    className="flex-1 py-2 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
-                                >
-                                    <Text className="text-white/90 font-semibold text-[12px]">Back</Text>
-                                </Pressable>
-
-                                <Pressable
-                                    onPress={handleCancel}
-                                    className="flex-1 py-2 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
-                                >
-                                    <Text className="text-white/90 font-semibold text-[12px]">Cancel</Text>
-                                </Pressable>
-                            </View>
-                        </View>
                     </View>
                 </SafeAreaView>
+
+                {/* Floating CTAs - Bottom center over camera */}
+                <View
+                    className="absolute bottom-0 left-0 items-center pb-4 px-4"
+                    style={{ right: layoutConfig.sidePanelWidth }}
+                    pointerEvents="box-none"
+                >
+                    <View className="flex-row items-center gap-3 bg-brand-black/80 rounded-2xl p-2 border border-brand-green/40">
+                        <Pressable
+                            onPress={handleBack}
+                            className="size-11 rounded-xl items-center justify-center bg-brand-black/60 border border-brand-green/35"
+                        >
+                            <Image source={icons.chevronLeft} className="w-5 h-5" resizeMode="contain" tintColor="#e5e5e5" />
+                        </Pressable>
+
+                        <Pressable
+                            onPress={handleNext}
+                            disabled={!centerPoint}
+                            className={`size-11 rounded-xl items-center justify-center border ${centerPoint ? "bg-brand-greenLight border-brand-green/60" : "bg-brand-black/30 border-brand-green/30"}`}
+                        >
+                            <Image source={icons.chevronRight} className="w-5 h-5" resizeMode="contain" tintColor={centerPoint ? "#ffffff" : "#666666"} />
+                        </Pressable>
+
+                        <Pressable
+                            onPress={handleCancel}
+                            className="size-11 rounded-xl items-center justify-center bg-brand-black/60 border border-brand-green/35"
+                        >
+                            <Image source={icons.cancel} className="w-5 h-5" resizeMode="contain" tintColor="#e5e5e5" />
+                        </Pressable>
+                    </View>
+                </View>
             </View>
         );
     }
@@ -631,9 +636,9 @@ export default function Step5() {
                         {centerPoint ? (
                             <>
                                 {/* Micro Adjust Controls */}
-                                <View className="flex-row gap-3 pb-2">
+                                <View className="flex-row gap-6 pb-2 justify-center items-center">
                                     {/* D-Pad */}
-                                    <View className="flex-1 items-center">
+                                    <View className="items-center">
                                         <View className="items-center">
                                             {/* Up */}
                                             <Pressable
@@ -695,7 +700,7 @@ export default function Step5() {
                                     </View>
 
                                     {/* Step Size + Reset */}
-                                    <View className="justify-center gap-2">
+                                    <View className="items-center gap-2">
                                         <Text className="text-white/50 text-xs text-center">Step</Text>
                                         <View className="flex-row gap-1">
                                             {([1, 5, 10] as StepSize[]).map((size) => (
@@ -728,17 +733,6 @@ export default function Step5() {
                                             <Text className="text-white/70 text-xs font-semibold">Reset</Text>
                                         </Pressable>
                                     </View>
-
-                                    {/* Save Center Button */}
-                                    <View className="justify-center">
-                                        <Pressable
-                                            onPress={handleNext}
-                                            className="px-5 py-4 rounded-2xl bg-brand-greenLight border border-brand-green/60 items-center justify-center"
-                                        >
-                                            <Text className="text-white font-semibold text-sm">Save</Text>
-                                            <Text className="text-white font-semibold text-sm">Center</Text>
-                                        </Pressable>
-                                    </View>
                                 </View>
                             </>
                         ) : (
@@ -750,20 +744,28 @@ export default function Step5() {
                         )}
                     </ScrollView>
 
-                    {/* Back / Cancel - Fixed at bottom, outside ScrollView */}
-                    <View className="flex-row px-4 pt-3 gap-3">
+                    {/* CTAs - Icon Buttons */}
+                    <View className="flex-row px-4 pt-3 items-center justify-center gap-4">
                         <Pressable
                             onPress={handleBack}
-                            className="flex-1 py-3 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
+                            className="size-14 rounded-xl items-center justify-center bg-brand-black/50 border border-brand-green/35"
                         >
-                            <Text className="text-white/90 font-semibold text-sm">Back</Text>
+                            <Image source={icons.chevronLeft} className="w-6 h-6" resizeMode="contain" tintColor="#e5e5e5" />
+                        </Pressable>
+
+                        <Pressable
+                            onPress={handleNext}
+                            disabled={!centerPoint}
+                            className={`size-14 rounded-xl items-center justify-center border ${centerPoint ? "bg-brand-greenLight border-brand-green/60" : "bg-brand-black/30 border-brand-green/30"}`}
+                        >
+                            <Image source={icons.chevronRight} className="w-6 h-6" resizeMode="contain" tintColor={centerPoint ? "#ffffff" : "#666666"} />
                         </Pressable>
 
                         <Pressable
                             onPress={handleCancel}
-                            className="flex-1 py-3 rounded-xl items-center bg-brand-black/50 border border-brand-green/35"
+                            className="size-14 rounded-xl items-center justify-center bg-brand-black/50 border border-brand-green/35"
                         >
-                            <Text className="text-white/90 font-semibold text-sm">Cancel</Text>
+                            <Image source={icons.cancel} className="w-6 h-6" resizeMode="contain" tintColor="#e5e5e5" />
                         </Pressable>
                     </View>
                 </View>
