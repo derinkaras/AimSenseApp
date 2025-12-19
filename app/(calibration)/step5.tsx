@@ -246,12 +246,14 @@ export default function Step5() {
                                 <View
                                     style={[
                                         styles.crosshairContainer,
-                                        { left: centerPoint.x - 30, top: centerPoint.y - 30 },
+                                        { left: centerPoint.x - 40, top: centerPoint.y - 40 },
                                     ]}
                                     pointerEvents="none"
                                 >
-                                    <View style={styles.crosshairVertical} />
-                                    <View style={styles.crosshairHorizontal} />
+                                    <View style={styles.crosshairTop} />
+                                    <View style={styles.crosshairBottom} />
+                                    <View style={styles.crosshairLeft} />
+                                    <View style={styles.crosshairRight} />
                                     <View style={styles.crosshairCenter} />
                                 </View>
                             )}
@@ -524,12 +526,14 @@ export default function Step5() {
                             <View
                                 style={[
                                     styles.crosshairContainer,
-                                    { left: centerPoint.x - 30, top: centerPoint.y - 30 },
+                                    { left: centerPoint.x - 40, top: centerPoint.y - 40 },
                                 ]}
                                 pointerEvents="none"
                             >
-                                <View style={styles.crosshairVertical} />
-                                <View style={styles.crosshairHorizontal} />
+                                <View style={styles.crosshairTop} />
+                                <View style={styles.crosshairBottom} />
+                                <View style={styles.crosshairLeft} />
+                                <View style={styles.crosshairRight} />
                                 <View style={styles.crosshairCenter} />
                             </View>
                         )}
@@ -771,31 +775,78 @@ export default function Step5() {
 const styles = StyleSheet.create({
     crosshairContainer: {
         position: "absolute",
-        width: 60,
-        height: 60,
+        width: 80,
+        height: 80,
         alignItems: "center",
         justifyContent: "center",
     },
-    crosshairVertical: {
+    // Open center design - 4 line segments with gap
+    crosshairTop: {
         position: "absolute",
         width: 2,
-        height: 60,
-        backgroundColor: "#0b7f4f",
+        height: 32,
+        top: 0,
+        backgroundColor: "#22c55e",
+        borderRadius: 1,
+        // Shadow for visibility on any background
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.9,
+        shadowRadius: 2,
+        elevation: 3,
     },
-    crosshairHorizontal: {
+    crosshairBottom: {
         position: "absolute",
-        width: 60,
+        width: 2,
+        height: 32,
+        bottom: 0,
+        backgroundColor: "#22c55e",
+        borderRadius: 1,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.9,
+        shadowRadius: 2,
+        elevation: 3,
+    },
+    crosshairLeft: {
+        position: "absolute",
+        width: 32,
         height: 2,
-        backgroundColor: "#0b7f4f",
+        left: 0,
+        backgroundColor: "#22c55e",
+        borderRadius: 1,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.9,
+        shadowRadius: 2,
+        elevation: 3,
+    },
+    crosshairRight: {
+        position: "absolute",
+        width: 32,
+        height: 2,
+        right: 0,
+        backgroundColor: "#22c55e",
+        borderRadius: 1,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.9,
+        shadowRadius: 2,
+        elevation: 3,
     },
     crosshairCenter: {
         position: "absolute",
-        width: 8,
-        height: 8,
-        borderRadius: 4,
+        width: 6,
+        height: 6,
+        borderRadius: 3,
         backgroundColor: "#22c55e",
-        borderWidth: 1,
-        borderColor: "#0b7f4f",
+        borderWidth: 1.5,
+        borderColor: "rgba(0, 0, 0, 0.6)",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.9,
+        shadowRadius: 2,
+        elevation: 3,
     },
     guideOverlay: {
         ...StyleSheet.absoluteFillObject,
