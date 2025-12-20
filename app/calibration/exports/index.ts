@@ -27,7 +27,36 @@ export const MIL_CLICK_OPTIONS: ClickSizeOption[] = [
     { label: "0.05 mil", value: 0.05 },
 ];
 
-// Default calibration click count (how many clicks we ask user to dial)
+// ==================== CALIBRATION CLICK COUNT ====================
+// Target angular movement for calibration
+export const TARGET_MOA_MOVEMENT = 4;  // 4 MOA total movement for MOA scopes
+export const TARGET_MIL_MOVEMENT = 1;  // 1 MIL total movement for MIL scopes
+
+/**
+ * Calculate how many clicks to request based on scope unit and click size.
+ * This ensures the target angular movement (4 MOA or 1 MIL) is achieved.
+ *
+ * Examples:
+ * - ¼ MOA (0.25): 4 / 0.25 = 16 clicks
+ * - ½ MOA (0.5): 4 / 0.5 = 8 clicks
+ * - ⅛ MOA (0.125): 4 / 0.125 = 32 clicks
+ * - 0.1 MIL: 1 / 0.1 = 10 clicks
+ * - 0.2 MIL: 1 / 0.2 = 5 clicks
+ * - 0.05 MIL: 1 / 0.05 = 20 clicks
+ */
+export function getCalibrationClickCount(scopeUnit: ScopeUnit, clickSize: number): number {
+    const targetMovement = scopeUnit === "MOA" ? TARGET_MOA_MOVEMENT : TARGET_MIL_MOVEMENT;
+    return Math.round(targetMovement / clickSize);
+}
+
+/**
+ * Get the target movement string for display
+ */
+export function getTargetMovementLabel(scopeUnit: ScopeUnit): string {
+    return scopeUnit === "MOA" ? `${TARGET_MOA_MOVEMENT} MOA` : `${TARGET_MIL_MOVEMENT} MIL`;
+}
+
+// Legacy constant - kept for backward compatibility but should use getCalibrationClickCount()
 export const CALIBRATION_CLICK_COUNT = 20;
 
 export interface ScopeCenterPx {
@@ -205,211 +234,186 @@ const LAYOUT_CONSTANTS = {
 
 /**
  * Get camera layout configuration - MUST be called with same params in ALL steps
- * This is the ONLY function that should be used for layout calculations.
- *
- * @param screenWidth - Screen width from useWindowDimensions
- * @param screenHeight - Screen height from useWindowDimensions (unused but kept for future)
- * @param isLandscapeMode - Whether device is in landscape orientation
- * @param bottomSafeArea - Bottom safe area inset (insets.bottom)
+ * to ensure consistent positioning across calibration flow.
  */
 export function getCameraLayoutConfig(
     screenWidth: number,
-    _screenHeight: number,
+    screenHeight: number,
     isLandscapeMode: boolean,
-    bottomSafeArea: number
+    safeAreaBottom: number
 ): CameraLayoutConfig {
-    const C = LAYOUT_CONSTANTS;
+    const bottomPadding = Math.max(safeAreaBottom, LAYOUT_CONSTANTS.MIN_BOTTOM_PADDING);
 
-    // Bottom padding with minimum
-    const bottomPadding = Math.max(bottomSafeArea, C.MIN_BOTTOM_PADDING);
+    if (isLandscapeMode) {
+        // Landscape: side panel on right
+        const sidePanelWidth = clampValue(
+            screenWidth * LAYOUT_CONSTANTS.SIDE_PANEL_WIDTH_PERCENT,
+            LAYOUT_CONSTANTS.SIDE_PANEL_WIDTH_MIN,
+            LAYOUT_CONSTANTS.SIDE_PANEL_WIDTH_MAX
+        );
 
-    // Side panel width for landscape
-    const sidePanelWidth = clampValue(
-        Math.round(screenWidth * C.SIDE_PANEL_WIDTH_PERCENT),
-        C.SIDE_PANEL_WIDTH_MIN,
-        C.SIDE_PANEL_WIDTH_MAX
-    );
+        const magnifierSize = clampValue(
+            screenHeight * LAYOUT_CONSTANTS.MAGNIFIER_LANDSCAPE_PERCENT,
+            LAYOUT_CONSTANTS.MAGNIFIER_LANDSCAPE_MIN,
+            LAYOUT_CONSTANTS.MAGNIFIER_LANDSCAPE_MAX
+        );
 
-    // Bottom panel heights for portrait
-    const bottomPanelHeight = C.BOTTOM_PANEL_HEIGHT;
-    const bottomPanelTotalHeight = bottomPanelHeight + bottomPadding;
+        return {
+            sidePanelWidth,
+            bottomPanelHeight: 0,
+            bottomPanelTotalHeight: 0,
+            bottomPadding,
+            cameraInsets: {
+                padRight: sidePanelWidth,
+                padBottom: 0,
+            },
+            magnifierSize,
+            isLandscapeMode: true,
+        };
+    } else {
+        // Portrait: bottom panel
+        const bottomPanelHeight = LAYOUT_CONSTANTS.BOTTOM_PANEL_HEIGHT;
+        const bottomPanelTotalHeight = bottomPanelHeight + bottomPadding;
 
-    // Camera insets depend on orientation
-    const cameraInsets = isLandscapeMode
-        ? { padRight: sidePanelWidth, padBottom: 0 }
-        : { padRight: 0, padBottom: bottomPanelTotalHeight };
+        const magnifierSize = clampValue(
+            screenWidth * LAYOUT_CONSTANTS.MAGNIFIER_PORTRAIT_PERCENT,
+            LAYOUT_CONSTANTS.MAGNIFIER_PORTRAIT_MIN,
+            LAYOUT_CONSTANTS.MAGNIFIER_PORTRAIT_MAX
+        );
 
-    // Magnifier size (scales with screen, different ranges for landscape/portrait)
-    const magnifierBase = isLandscapeMode
-        ? screenWidth * C.MAGNIFIER_LANDSCAPE_PERCENT
-        : screenWidth * C.MAGNIFIER_PORTRAIT_PERCENT;
-    const magnifierSize = clampValue(
-        Math.round(magnifierBase),
-        isLandscapeMode ? C.MAGNIFIER_LANDSCAPE_MIN : C.MAGNIFIER_PORTRAIT_MIN,
-        isLandscapeMode ? C.MAGNIFIER_LANDSCAPE_MAX : C.MAGNIFIER_PORTRAIT_MAX
-    );
-
-    return {
-        sidePanelWidth,
-        bottomPanelHeight,
-        bottomPanelTotalHeight,
-        bottomPadding,
-        cameraInsets,
-        magnifierSize,
-        isLandscapeMode,
-    };
+        return {
+            sidePanelWidth: 0,
+            bottomPanelHeight,
+            bottomPanelTotalHeight,
+            bottomPadding,
+            cameraInsets: {
+                padRight: 0,
+                padBottom: bottomPanelTotalHeight,
+            },
+            magnifierSize,
+            isLandscapeMode: false,
+        };
+    }
 }
 
 /**
- * Get magnifier position within camera bounds
- * Uses centralized constants for consistent positioning.
+ * Calculate magnifier position that stays within camera bounds
+ * and respects safe areas.
  */
 export function getMagnifierPosition(
-    crosshairX: number,
-    crosshairY: number,
-    cameraWidth: number,
-    cameraHeight: number,
+    tapX: number,
+    tapY: number,
+    containerWidth: number,
+    containerHeight: number,
     magnifierSize: number,
     screenWidth: number,
-    topInset: number
-): { left: number; top: number } {
-    const C = LAYOUT_CONSTANTS;
+    safeAreaTop: number
+): { x: number; y: number } {
+    const halfMag = magnifierSize / 2;
+    const margin = LAYOUT_CONSTANTS.MAGNIFIER_MARGIN;
+    const offset = LAYOUT_CONSTANTS.MAGNIFIER_OFFSET;
 
-    // Safe padding from left edge (scales with device)
+    // Calculate left safe padding
     const leftSafePad = clampValue(
-        Math.round(screenWidth * C.LEFT_SAFE_PAD_PERCENT),
-        C.LEFT_SAFE_PAD_MIN,
-        C.LEFT_SAFE_PAD_MAX
+        screenWidth * LAYOUT_CONSTANTS.LEFT_SAFE_PAD_PERCENT,
+        LAYOUT_CONSTANTS.LEFT_SAFE_PAD_MIN,
+        LAYOUT_CONSTANTS.LEFT_SAFE_PAD_MAX
     );
 
-    // Default position: above and centered on crosshair
-    let left = crosshairX - magnifierSize / 2;
-    let top = crosshairY - magnifierSize - C.MAGNIFIER_OFFSET;
+    // Default: offset from tap position
+    let magX = tapX + offset;
+    let magY = tapY - offset;
 
-    // If too high, flip to below crosshair
-    if (top < topInset + C.MAGNIFIER_MARGIN) {
-        top = crosshairY + C.MAGNIFIER_OFFSET;
+    // Flip horizontally if would go off right edge
+    if (magX + halfMag + margin > containerWidth) {
+        magX = tapX - offset - magnifierSize;
     }
 
-    // Clamp horizontal position
-    const leftMin = leftSafePad;
-    const leftMax = Math.max(leftMin, cameraWidth - magnifierSize - C.MAGNIFIER_MARGIN);
-    left = clampValue(left, leftMin, leftMax);
-
-    // Clamp vertical position
-    const topMin = topInset + C.MAGNIFIER_MARGIN;
-    const topMax = Math.max(topMin, cameraHeight - magnifierSize - C.MAGNIFIER_MARGIN);
-    top = clampValue(top, topMin, topMax);
-
-    return { left, top };
-}
-
-/**
- * React hook for camera layout - convenience wrapper
- * Use this in components to get consistent layout config.
- *
- * Usage:
- * const { width, height } = useWindowDimensions();
- * const insets = useSafeAreaInsets();
- * const layoutConfig = useCameraLayout(width, height, isLandscapeMode, insets.bottom);
- */
-export function createCameraLayoutConfig(
-    width: number,
-    height: number,
-    isLandscapeMode: boolean,
-    bottomInset: number
-): CameraLayoutConfig {
-    return getCameraLayoutConfig(width, height, isLandscapeMode, bottomInset);
-}
-
-// ==================== ORIENTATION SERVICES ====================
-const ORIENTATION_LOCKS: Record<MountOrientation, ScreenOrientation.OrientationLock> = {
-    portrait: ScreenOrientation.OrientationLock.PORTRAIT_UP,
-    "landscape-left": ScreenOrientation.OrientationLock.LANDSCAPE_LEFT,
-    "landscape-right": ScreenOrientation.OrientationLock.LANDSCAPE_RIGHT,
-    "portrait-upside-down": ScreenOrientation.OrientationLock.PORTRAIT_UP,
-};
-
-export async function lockOrientation(orientation: MountOrientation): Promise<void> {
-    try {
-        await ScreenOrientation.lockAsync(ORIENTATION_LOCKS[orientation]);
-    } catch (err) {
-        console.warn(`Failed to lock to ${orientation}:`, err);
+    // Ensure minimum left padding
+    if (magX - halfMag < leftSafePad) {
+        magX = leftSafePad + halfMag + margin;
     }
+
+    // Clamp to container bounds
+    magX = clampValue(magX, halfMag + margin, containerWidth - halfMag - margin);
+    magY = clampValue(magY, safeAreaTop + halfMag + margin, containerHeight - halfMag - margin);
+
+    return { x: magX, y: magY };
 }
 
-export async function lockToPortrait(): Promise<void> {
-    try {
-        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-    } catch (err) {
-        console.warn("Failed to lock to portrait:", err);
-    }
+// ==================== ORIENTATION LOCKING ====================
+export async function lockOrientation(orientation: MountOrientation) {
+    const lockMap: Record<MountOrientation, ScreenOrientation.OrientationLock> = {
+        portrait: ScreenOrientation.OrientationLock.PORTRAIT_UP,
+        "landscape-left": ScreenOrientation.OrientationLock.LANDSCAPE_LEFT,
+        "landscape-right": ScreenOrientation.OrientationLock.LANDSCAPE_RIGHT,
+        "portrait-upside-down": ScreenOrientation.OrientationLock.PORTRAIT_DOWN,
+    };
+    await ScreenOrientation.lockAsync(lockMap[orientation]);
 }
 
-// ==================== STORE (SESSION-ONLY) ====================
+export async function lockToPortrait() {
+    await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+}
+
+// ==================== STORE ====================
 interface CalibrationState {
-    // Step 1: Phone orientation
+    // Mount orientation
     mountOrientation: MountOrientation;
     pendingOrientation: MountOrientation;
 
-    // Step 2: Reference (baseline IMU)
-    roll0: number;
-    pitch0: number;
-
-    // Step 3: Scope setup
+    // Scope settings
     scopeUnit: ScopeUnit;
     clickSize: number;
 
-    // Step 4: Camera zoom, focus, and LAYOUT (captured once, used everywhere)
+    // Camera settings
     cameraZoom: number;
     focusPoint: FocusPoint | null;
-    screenRotation: number; // Degrees to rotate camera view
-    cameraLayout: CameraLayoutConfig | null; // ⚠️ CRITICAL: Set once in step4, read in all subsequent steps
+    screenRotation: number;
+    cameraLayout: CameraLayoutConfig | null;
 
-    // Step 5: Scope center alignment
+    // Calibration points
     scopeCenterPx: ScopeCenterPx | null;
-
-    // Step 6: Elevation calibration
     elevationStartPx: ScopeCenterPx | null;
     elevationEndPx: ScopeCenterPx | null;
-
-    // Step 7: Windage calibration
     windageStartPx: ScopeCenterPx | null;
     windageEndPx: ScopeCenterPx | null;
 
-    // Axes swapped: true if user turned wrong turret in step6
-    // (turned windage when asked for elevation)
-    // Step 7 will then calibrate elevation instead of windage
+    // Axes swap flag (if user turned wrong turret in step6)
     axesSwapped: boolean;
 
-    // Computed pixel scales
+    // Computed scales
     pxPerUnitX: number;
     pxPerUnitY: number;
+
+    // IMU baseline
+    roll0: number;
+    pitch0: number;
 
     // Saved result
     savedResult: CalibrationResult | null;
 }
 
 interface CalibrationActions {
-    // Step 1: Phone orientation
-    setPendingOrientation: (o: MountOrientation) => void;
+    // Step 1: Orientation
+    setPendingOrientation: (orientation: MountOrientation) => void;
     confirmOrientation: () => Promise<void>;
 
-    // Step 2: Reference capture
-    captureBaseline: (roll0: number, pitch0: number) => void;
-
-    // Step 3: Scope setup
+    // Step 2: Scope settings
     setScopeUnit: (unit: ScopeUnit) => void;
     setClickSize: (size: number) => void;
 
-    // Step 4: Camera zoom, focus, and layout
+    // Step 3: Camera settings
     setCameraZoom: (zoom: number) => void;
     setFocusPoint: (point: FocusPoint | null) => void;
-    setScreenRotation: (degrees: number) => void;
-    setCameraLayout: (config: CameraLayoutConfig) => void; // ⚠️ Set once, read everywhere
 
-    // Step 5: Scope center
-    setScopeCenterPx: (center: ScopeCenterPx) => void;
+    // Step 4: IMU baseline + Camera layout
+    captureBaseline: (roll: number, pitch: number) => void;
+    setCameraLayout: (layout: CameraLayoutConfig) => void;
+
+    // Step 5: Scope center + rotation
+    setScopeCenterPx: (pos: ScopeCenterPx) => void;
+    setScreenRotation: (degrees: number) => void;
 
     // Step 6: Elevation calibration
     setElevationStartPx: (pos: ScopeCenterPx) => void;
@@ -424,9 +428,9 @@ interface CalibrationActions {
     // Axes swap handling
     setAxesSwapped: (swapped: boolean) => void;
 
-    // Finish & reset
+    // Finish calibration
     finishCalibration: () => Promise<CalibrationResult>;
-    beginHunt: () => Promise<CalibrationResult>; // NEW: Save calibration and transition to hunt mode
+    beginHunt: () => Promise<CalibrationResult>;
     resetCalibration: () => Promise<void>;
     clearSavedCalibration: () => Promise<void>;
 }
@@ -437,14 +441,12 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
     // Initial state
     mountOrientation: "portrait",
     pendingOrientation: "portrait",
-    roll0: 0,
-    pitch0: 0,
     scopeUnit: "MOA",
-    clickSize: 0.25, // Default ¼ MOA
+    clickSize: 0.25,
     cameraZoom: 0,
     focusPoint: null,
     screenRotation: 0,
-    cameraLayout: null, // ⚠️ Set once in step4, read everywhere
+    cameraLayout: null,
     scopeCenterPx: null,
     elevationStartPx: null,
     elevationEndPx: null,
@@ -453,10 +455,12 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
     axesSwapped: false,
     pxPerUnitX: 0,
     pxPerUnitY: 0,
+    roll0: 0,
+    pitch0: 0,
     savedResult: null,
 
-    // Step 1: Phone orientation
-    setPendingOrientation: (o) => set({ pendingOrientation: o }),
+    // Step 1: Orientation
+    setPendingOrientation: (orientation) => set({ pendingOrientation: orientation }),
 
     confirmOrientation: async () => {
         const { pendingOrientation } = get();
@@ -464,29 +468,29 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
         set({ mountOrientation: pendingOrientation });
     },
 
-    // Step 2: Reference capture
-    captureBaseline: (roll0, pitch0) => set({ roll0, pitch0 }),
-
-    // Step 3: Scope setup
+    // Step 2: Scope settings
     setScopeUnit: (unit) => {
-        // Reset click size to default when unit changes
+        // Reset click size to default for the new unit
         const defaultClickSize = unit === "MOA" ? 0.25 : 0.1;
         set({ scopeUnit: unit, clickSize: defaultClickSize });
     },
 
     setClickSize: (size) => set({ clickSize: size }),
 
-    // Step 4: Camera zoom, focus, and layout
+    // Step 3: Camera settings
     setCameraZoom: (zoom) => set({ cameraZoom: zoom }),
-    setFocusPoint: (point) => set({ focusPoint: point }),
-    setScreenRotation: (degrees) => set({ screenRotation: degrees }),
-    setCameraLayout: (config) => {
-        console.log("📐 Camera layout stored:", config);
-        set({ cameraLayout: config });
-    },
 
-    // Step 5: Scope center
-    setScopeCenterPx: (center) => set({ scopeCenterPx: center }),
+    setFocusPoint: (point) => set({ focusPoint: point }),
+
+    // Step 4: IMU baseline + Camera layout
+    captureBaseline: (roll, pitch) => set({ roll0: roll, pitch0: pitch }),
+
+    setCameraLayout: (layout) => set({ cameraLayout: layout }),
+
+    // Step 5: Scope center + rotation
+    setScopeCenterPx: (pos) => set({ scopeCenterPx: pos }),
+
+    setScreenRotation: (degrees) => set({ screenRotation: degrees }),
 
     // Step 6: Elevation calibration
     setElevationStartPx: (pos) => set({ elevationStartPx: pos }),
@@ -494,7 +498,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
     setElevationEndPx: (pos) => set({ elevationEndPx: pos }),
 
     calculateElevationScale: () => {
-        const { elevationStartPx, elevationEndPx, clickSize, scopeCenterPx } = get();
+        const { elevationStartPx, elevationEndPx, clickSize, scopeUnit, scopeCenterPx } = get();
         if (!elevationStartPx || !elevationEndPx) {
             console.warn("⚠️ calculateElevationScale: Missing data", {
                 elevationStartPx,
@@ -504,13 +508,18 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             return;
         }
 
+        // Get dynamic click count based on scope unit and click size
+        const clickCount = getCalibrationClickCount(scopeUnit, clickSize);
+
         // Calculate vertical pixel movement from scope center (the true zero)
         const deltaPxY = elevationEndPx.y - scopeCenterPx!.y;
-        const pxPerUnitY = calculatePxPerUnit(deltaPxY, CALIBRATION_CLICK_COUNT, clickSize);
+        const pxPerUnitY = calculatePxPerUnit(deltaPxY, clickCount, clickSize);
         console.log("📐 Elevation scale calculated:", {
             scopeCenter: scopeCenterPx,
             elevationEnd: elevationEndPx,
             deltaPxY,
+            clickCount,
+            clickSize,
             pxPerUnitY
         });
         set({ pxPerUnitY });
@@ -522,7 +531,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
     setWindageEndPx: (pos) => set({ windageEndPx: pos }),
 
     calculateWindageScale: () => {
-        const { windageStartPx, windageEndPx, clickSize, scopeCenterPx } = get();
+        const { windageStartPx, windageEndPx, clickSize, scopeUnit, scopeCenterPx } = get();
         if (!windageStartPx || !windageEndPx) {
             console.warn("⚠️ calculateWindageScale: Missing data", {
                 windageStartPx,
@@ -532,13 +541,18 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             return;
         }
 
+        // Get dynamic click count based on scope unit and click size
+        const clickCount = getCalibrationClickCount(scopeUnit, clickSize);
+
         // Calculate horizontal pixel movement from scope center (the true zero)
         const deltaPxX = windageEndPx.x - scopeCenterPx!.x;
-        const pxPerUnitX = calculatePxPerUnit(deltaPxX, CALIBRATION_CLICK_COUNT, clickSize);
+        const pxPerUnitX = calculatePxPerUnit(deltaPxX, clickCount, clickSize);
         console.log("📐 Windage scale calculated:", {
             scopeCenter: scopeCenterPx,
             windageEnd: windageEndPx,
             deltaPxX,
+            clickCount,
+            clickSize,
             pxPerUnitX
         });
         set({ pxPerUnitX });
@@ -618,7 +632,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
         });
 
         // Format readable calibration summary
-        const totalClicks = CALIBRATION_CLICK_COUNT;
+        const totalClicks = getCalibrationClickCount(result.scopeUnit, result.clickSize);
         const totalUnits = totalClicks * result.clickSize;
 
         // Both elevation and windage are measured from scope center
@@ -719,7 +733,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
         set({ savedResult: result });
 
         // Format readable calibration summary
-        const totalClicks = CALIBRATION_CLICK_COUNT;
+        const totalClicks = getCalibrationClickCount(result.scopeUnit, result.clickSize);
         const totalUnits = totalClicks * result.clickSize;
 
         const elevDeltaX = result.elevationEndPx.x - result.scopeCenterPx.x;

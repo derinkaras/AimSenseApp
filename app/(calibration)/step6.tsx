@@ -37,7 +37,8 @@ import {
     selectScopeCenterPx,
     selectCameraLayout,
     isLandscape,
-    CALIBRATION_CLICK_COUNT,
+    getCalibrationClickCount,
+    getTargetMovementLabel,
     ScopeCenterPx,
     getClickSizeLabel,
     getCameraLayoutConfig,
@@ -106,6 +107,10 @@ export default function Step6() {
     const storedCameraLayout = useCalibrationStore(selectCameraLayout); // ⚠️ Read from store
 
     const isLandscapeMode = isLandscape(mountOrientation);
+
+    // Calculate click count based on scope unit and click size
+    const calibrationClickCount = getCalibrationClickCount(scopeUnit, clickSize);
+    const targetMovement = getTargetMovementLabel(scopeUnit);
 
     // Phase state
     const [phase, setPhase] = useState<Phase>("instruction");
@@ -437,7 +442,7 @@ export default function Step6() {
                     <Text style={styles.modalTitle}>Dial Back to Zero</Text>
 
                     <Text style={styles.modalSubtitle}>
-                        Before continuing, please dial the {axesSwapped ? "windage" : "elevation"} turret back {CALIBRATION_CLICK_COUNT} clicks to return to your original zero position.
+                        Before continuing, please dial the {axesSwapped ? "windage" : "elevation"} turret back {calibrationClickCount} clicks to return to your original zero position.
                     </Text>
 
                     <View style={styles.modalButtonContainer}>
@@ -506,8 +511,9 @@ export default function Step6() {
                                             </View>
 
                                             <View className="flex-row items-center justify-center mt-1">
-                                                <Text className="text-white text-2xl font-extrabold">{CALIBRATION_CLICK_COUNT}</Text>
+                                                <Text className="text-white text-2xl font-extrabold">{calibrationClickCount}</Text>
                                                 <Text className="text-white/70 text-sm font-semibold ml-1">clicks</Text>
+                                                <Text className="text-brand-greenLight text-sm font-bold ml-1">= {targetMovement}</Text>
                                             </View>
 
                                             <Text className="text-white/50 text-center text-[10px] mt-1">
@@ -569,7 +575,10 @@ export default function Step6() {
                                         </Text>
                                         <Text className="text-brand-greenLight text-center text-2xl font-bold mb-2">ANY DIRECTION</Text>
                                         <Text className="text-white text-center text-3xl font-bold">
-                                            {CALIBRATION_CLICK_COUNT} clicks
+                                            {calibrationClickCount} clicks
+                                        </Text>
+                                        <Text className="text-brand-greenLight text-center text-xl font-bold">
+                                            = {targetMovement}
                                         </Text>
                                         <Text className="text-white/50 text-center text-sm mt-2">
                                             ({getClickSizeLabel(scopeUnit, clickSize)} per click)
