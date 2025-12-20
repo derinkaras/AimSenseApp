@@ -19,6 +19,7 @@ import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import { CommonActions, useNavigation } from "@react-navigation/native";
 
 import { gunProfileApi } from "@/app/api/gunProfile";
 import { useApi } from "@/app/hooks/useApi";
@@ -28,13 +29,12 @@ import {
     selectCalibrationResult,
     selectCanStartHunt,
 } from "@/app/hunt/store";
-import {isLandscape, useCalibrationStore} from "@/app/calibration/exports";
+import { useCalibrationStore, isLandscape } from "@/app/calibration/exports";
 import { OfflineBanner } from "@/app/components/OfflineBanner";
 import icons from "@/app/constants/icons";
 import type { GunProfile } from "@/app/types/apiTypes";
 import { useCameraContext } from "./_layout";
 import * as ScreenOrientation from "expo-screen-orientation";
-
 const SCREEN_ID = "select-gun";
 
 export default function SelectGun() {
@@ -43,16 +43,20 @@ export default function SelectGun() {
 
     const { activeScreen, setActiveScreen } = useCameraContext();
     const insets = useSafeAreaInsets();
+    const navigation = useNavigation();
 
     const [detailGun, setDetailGun] = useState<GunProfile | null>(null);
     const [showDetail, setShowDetail] = useState(false);
 
+    // Hunt store
     const selectedGun = useHuntStore(selectSelectedGun);
     const calibrationResult = useHuntStore(selectCalibrationResult);
     const canStartHunt = useHuntStore(selectCanStartHunt);
     const selectGunProfile = useHuntStore((s) => s.selectGunProfile);
     const startHunt = useHuntStore((s) => s.startHunt);
     const endHunt = useHuntStore((s) => s.endHunt);
+
+    // Calibration store
     const resetCalibration = useCalibrationStore((s) => s.resetCalibration);
 
     const { data: gunProfiles, loading, error, refetch } = useApi<GunProfile[]>(
@@ -125,15 +129,20 @@ export default function SelectGun() {
         router.push("/(hunt)/active");
     };
 
-
-
     const handleCancel = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         endHunt();
+        await resetCalibration();
 
+        // Explicitly unlock and lock to portrait
         await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-        resetCalibration();
-        router.replace("/(tabs)/Home");
+
+        navigation.dispatch(
+            CommonActions.reset({
+                index: 0,
+                routes: [{ name: "(tabs)" }],
+            })
+        );
     };
 
     const headerPadding = isLandscapeMode ? "p-3" : "p-4";

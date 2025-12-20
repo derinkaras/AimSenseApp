@@ -17,21 +17,22 @@ import {
     Animated,
     Easing,
 } from "react-native";
-import { useFocusEffect, router } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
-import { useCalibrationStore } from "@/app/calibration/exports";
+import { CommonActions, useNavigation } from "@react-navigation/native";
+import * as ScreenOrientation from "expo-screen-orientation";
+import { useCalibrationStore, isLandscape } from "@/app/calibration/exports";
 import {
     useHuntStore,
     selectSelectedGun,
     selectCalibrationResult,
     selectIsHuntActive,
 } from "@/app/hunt/store";
-import { isLandscape } from "@/app/calibration/exports";
 import icons from "@/app/constants/icons";
 import { useCameraContext } from "./_layout";
-import * as ScreenOrientation from "expo-screen-orientation";
+
 const SCREEN_ID = "active";
 
 export default function ActiveHunt() {
@@ -40,12 +41,13 @@ export default function ActiveHunt() {
 
     const { activeScreen, setActiveScreen } = useCameraContext();
     const insets = useSafeAreaInsets();
+    const navigation = useNavigation();
 
     // UI State
     const [showEndConfirm, setShowEndConfirm] = useState(false);
     const [showCrosshair, setShowCrosshair] = useState(false);
     const crosshairOpacity = useRef(new Animated.Value(0)).current;
-    
+
     // Pulsing animation for Live indicator
     const pulseAnim = useRef(new Animated.Value(1)).current;
     const pulseOpacity = useRef(new Animated.Value(1)).current;
@@ -55,7 +57,10 @@ export default function ActiveHunt() {
     const calibrationResult = useHuntStore(selectCalibrationResult);
     const isHuntActive = useHuntStore(selectIsHuntActive);
     const endHunt = useHuntStore((s) => s.endHunt);
+
+    // Calibration store
     const resetCalibration = useCalibrationStore((s) => s.resetCalibration);
+
     useFocusEffect(
         useCallback(() => {
             console.log(SCREEN_ID);
@@ -98,9 +103,9 @@ export default function ActiveHunt() {
                 ]),
             ])
         );
-        
+
         pulseAnimation.start();
-        
+
         return () => pulseAnimation.stop();
     }, []);
 
@@ -148,15 +153,19 @@ export default function ActiveHunt() {
     const handleConfirmEndHunt = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         setShowEndConfirm(false);
-        endHunt();
-        resetCalibration();
 
-        // Unlock orientation before navigating back
+        endHunt();
+        await resetCalibration();
+
+        // Explicitly unlock and lock to portrait
         await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
 
-        setTimeout(() => {
-            router.replace("/(tabs)/Home");
-        }, 100);
+        navigation.dispatch(
+            CommonActions.reset({
+                index: 0,
+                routes: [{ name: "(tabs)" }],
+            })
+        );
     };
 
     const handleCancelEndHunt = () => {
@@ -401,7 +410,7 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 8,
     },
-    
+
     // Pulsing indicator styles
     liveIndicatorRow: {
         flexDirection: "row",
