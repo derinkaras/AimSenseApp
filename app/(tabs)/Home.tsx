@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { View, Text, Image, StyleSheet } from "react-native";
 import { router, useFocusEffect } from "expo-router";
-import { CameraView, useCameraPermissions } from "expo-camera";
+import { CameraView, useCameraPermissions, Camera } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useIsFocused } from "@react-navigation/native";
@@ -13,8 +13,8 @@ import icons from "@/app/constants/icons";
 import { SlideToStartCalibration } from "@/app/components/SlideToStartCalibration";
 
 export default function Home() {
-    const [permission] = useCameraPermissions();
-    const cameraEnabled = !!permission?.granted;
+    const [permission, requestPermission] = useCameraPermissions();
+    const [cameraEnabled, setCameraEnabled] = useState(!!permission?.granted);
 
     // ============================================================
     // KEY OPTIMIZATION: Track if this screen is focused
@@ -28,11 +28,31 @@ export default function Home() {
     // Key to force slider reset when returning to this screen
     const [sliderKey, setSliderKey] = useState(0);
 
-    // Reset slider whenever screen comes into focus
+    // Key to force camera remount when permission changes
+    const [cameraKey, setCameraKey] = useState(0);
+
+    // Update cameraEnabled when permission changes
+    useEffect(() => {
+        setCameraEnabled(!!permission?.granted);
+        if (permission?.granted) {
+            setCameraKey(prev => prev + 1);
+        }
+    }, [permission?.granted]);
+
+    // Re-check permissions when screen comes into focus
+    // This handles the case where user grants permission in system settings
     useFocusEffect(
         useCallback(() => {
+            const checkPermission = async () => {
+                const { granted } = await Camera.getCameraPermissionsAsync();
+                if (granted && !cameraEnabled) {
+                    setCameraEnabled(true);
+                    setCameraKey(prev => prev + 1);
+                }
+            };
+            checkPermission();
             setSliderKey((prev) => prev + 1);
-        }, [])
+        }, [cameraEnabled])
     );
 
     // Lock to portrait on mount
@@ -63,6 +83,7 @@ export default function Home() {
           ============================================================ */}
             {cameraEnabled && (
                 <CameraView
+                    key={`camera-${cameraKey}`}
                     style={StyleSheet.absoluteFill}
                     facing="back"
                     active={isFocused}  // ← PAUSES when tab switches!

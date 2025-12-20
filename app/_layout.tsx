@@ -110,6 +110,12 @@ export default function RootLayout() {
                                 headerShown: false,
                             }}
                         />
+                        <Stack.Screen
+                            name="(hunt)"
+                            options={{
+                                headerShown: false,
+                            }}
+                        />
                     </Stack>
 
                     <Toast

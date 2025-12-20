@@ -1,7 +1,8 @@
 // ============================================================
-// step8.tsx - Confirm & Save
+// step8.tsx - Confirm & Begin Hunting
 // ============================================================
-// Final review screen before saving calibration.
+// Final review screen before transitioning to Hunt Mode.
+// Changed from "Save Calibration" to "Begin Hunting".
 
 import React, { useCallback } from "react";
 import {
@@ -16,6 +17,7 @@ import {
 import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
 
 import {
     useCalibrationStore,
@@ -75,24 +77,35 @@ export default function Step8() {
     // Rotation transform style
     const rotationTransform = { transform: [{ rotate: `${screenRotation}deg` }] };
 
-    const finishCalibration = useCalibrationStore((s) => s.finishCalibration);
+    // Store actions
+    const beginHunt = useCalibrationStore((s) => s.beginHunt);
     const reset = useCalibrationStore((s) => s.resetCalibration);
 
     const isLandscapeMode = isLandscape(mountOrientation);
 
-    const handleConfirm = async () => {
-        await finishCalibration();
-        navigation.dispatch(
-            CommonActions.reset({
-                index: 0,
-                routes: [{ name: "(tabs)" }],
-            })
-        );
+    // ═══════════════════════════════════════════════════════════
+    // HANDLERS
+    // ═══════════════════════════════════════════════════════════
+
+    const handleBeginHunting = async () => {
+        try {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+            // Save calibration (preserves camera settings for hunt mode)
+            await beginHunt();
+
+            // Navigate to hunt mode
+            router.replace("/(hunt)/select-gun");
+        } catch (error) {
+            console.error("Failed to begin hunting:", error);
+            // TODO: Show error toast
+        }
     };
 
     const handleBack = () => router.back();
 
     const handleCancel = async () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         await reset();
         navigation.dispatch(
             CommonActions.reset({
@@ -122,6 +135,10 @@ export default function Step8() {
         : 0;
 
     const bottomPadding = Math.max(insets.bottom, 8);
+
+    // ═══════════════════════════════════════════════════════════
+    // SUMMARY CARDS COMPONENT
+    // ═══════════════════════════════════════════════════════════
 
     const SummaryCards = ({ compact = false }: { compact?: boolean }) => (
         <View className={compact ? "gap-3" : "gap-4"}>
@@ -162,42 +179,43 @@ export default function Step8() {
                         <Image source={icons.compass} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
                     </View>
                     <View className="flex-1">
-                        <Text className="text-white/70 text-sm">Reference</Text>
+                        <Text className="text-white/70 text-sm">Reference Baseline</Text>
                         <Text className={`text-white ${compact ? "text-lg" : "text-xl"} font-semibold mt-1`}>
-                            {hasReference ? "Captured ✓" : "Not captured"}
+                            {hasReference ? "Set ✓" : "Not set"}
                         </Text>
                     </View>
                 </View>
             </View>
 
-            {/* Ready to Save Card */}
-            {isComplete && (
-                <View className="rounded-3xl bg-brand-greenLight/15 border border-brand-greenLight/50 px-4 py-4">
-                    <View className="flex-row items-start">
-                        <View className="size-10 rounded-2xl bg-brand-greenLight/20 border border-brand-greenLight/40 items-center justify-center mr-3">
-                            <Image source={icons.check} className="w-5 h-5" resizeMode="contain" tintColor="#22c55e" />
-                        </View>
-                        <View className="flex-1">
-                            <Text className="text-white font-semibold text-sm">Ready to save</Text>
-                            <Text className="text-white/70 mt-1 text-sm">
-                                All set. AimSense is ready when you are.
-                            </Text>
-                        </View>
+            {/* Camera Settings Card */}
+            <View className={`rounded-3xl bg-brand-greenDark/65 border border-brand-green/45 ${compact ? "p-4" : "p-5"}`}>
+                <View className="flex-row items-center">
+                    <View className="size-12 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-4">
+                        <Image source={icons.camera} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
+                    </View>
+                    <View className="flex-1">
+                        <Text className="text-white/70 text-sm">Camera Setup</Text>
+                        <Text className={`text-white ${compact ? "text-lg" : "text-xl"} font-semibold mt-1`}>
+                            Ready ✓
+                        </Text>
+                        <Text className="text-white/50 text-xs mt-1">
+                            {getOrientationLabel(mountOrientation)} • {(cameraZoom * 100).toFixed(0)}% zoom
+                        </Text>
                     </View>
                 </View>
-            )}
+            </View>
 
-            {/* Incomplete Warning */}
+            {/* Warning if incomplete */}
             {!isComplete && (
-                <View className="rounded-3xl bg-red-500/15 border border-red-500/30 px-4 py-4">
+                <View className="rounded-3xl bg-amber-900/40 border border-amber-600/50 p-4">
                     <View className="flex-row items-start">
-                        <View className="size-10 rounded-2xl bg-red-500/20 border border-red-500/30 items-center justify-center mr-3">
-                            <Image source={icons.info} className="w-5 h-5" resizeMode="contain" tintColor="#ef4444" />
+                        <View className="size-10 rounded-2xl bg-amber-900/60 border border-amber-600/40 items-center justify-center mr-3">
+                            <Image source={icons.info} className="w-5 h-5" resizeMode="contain" tintColor="#fbbf24" />
                         </View>
                         <View className="flex-1">
-                            <Text className="text-red-400 font-semibold text-sm">Calibration incomplete</Text>
+                            <Text className="text-amber-200 font-semibold">Calibration Incomplete</Text>
                             <Text className="text-white/70 mt-1 text-sm">
-                                Please go back and complete all steps before saving.
+                                Please go back and complete all steps before hunting.
                             </Text>
                         </View>
                     </View>
@@ -205,6 +223,10 @@ export default function Step8() {
             )}
         </View>
     );
+
+    // ═══════════════════════════════════════════════════════════
+    // RENDER
+    // ═══════════════════════════════════════════════════════════
 
     return (
         <View className="flex-1 bg-brand-black">
@@ -216,6 +238,9 @@ export default function Step8() {
 
             <SafeAreaView className="flex-1" edges={safeAreaEdges}>
                 {!isLandscapeMode ? (
+                    // ═══════════════════════════════════════════════════════
+                    // PORTRAIT LAYOUT
+                    // ═══════════════════════════════════════════════════════
                     <View className="flex-1 px-6 pt-4">
                         <ScrollView
                             className="flex-1"
@@ -226,12 +251,12 @@ export default function Step8() {
                             <View className={`rounded-3xl ${headerPadding} bg-brand-greenDark/70 border border-brand-green/60`}>
                                 <View className="flex-row items-center">
                                     <View className="size-11 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-3">
-                                        <Image source={icons.check} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
+                                        <Image source={icons.target} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
                                     </View>
                                     <View className="flex-1">
-                                        <Text className={`text-white ${titleSize} font-semibold`}>Confirm Calibration</Text>
+                                        <Text className={`text-white ${titleSize} font-semibold`}>Ready to Hunt</Text>
                                         <Text className={`text-white/80 ${subtitleMargin} ${subtitleSize}`}>
-                                            Review your setup before saving.
+                                            Review your calibration, then begin.
                                         </Text>
                                     </View>
                                 </View>
@@ -242,10 +267,11 @@ export default function Step8() {
                             </View>
                         </ScrollView>
 
+                        {/* CTAs */}
                         <View style={{ paddingBottom: bottomPadding }} className="absolute bottom-0 left-0 right-0 px-6">
                             <View className="bg-brand-black/55 border border-brand-green/20 rounded-3xl p-3">
                                 <Pressable
-                                    onPress={handleConfirm}
+                                    onPress={handleBeginHunting}
                                     disabled={!isComplete}
                                     className={[
                                         "rounded-2xl items-center border py-5",
@@ -255,7 +281,7 @@ export default function Step8() {
                                     ].join(" ")}
                                 >
                                     <Text className="text-white font-semibold text-xl">
-                                        {isComplete ? "Save Calibration" : "Complete all steps"}
+                                        {isComplete ? "Begin Hunt" : "Complete all steps"}
                                     </Text>
                                 </Pressable>
 
@@ -278,6 +304,9 @@ export default function Step8() {
                         </View>
                     </View>
                 ) : (
+                    // ═══════════════════════════════════════════════════════
+                    // LANDSCAPE LAYOUT
+                    // ═══════════════════════════════════════════════════════
                     <View className="flex-1 flex-row pt-3">
                         <ScrollView
                             className="flex-1"
@@ -288,12 +317,12 @@ export default function Step8() {
                             <View className={`rounded-3xl ${headerPadding} bg-brand-greenDark/70 border border-brand-green/60`}>
                                 <View className="flex-row items-center">
                                     <View className="size-11 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-3">
-                                        <Image source={icons.check} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
+                                        <Image source={icons.target} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
                                     </View>
                                     <View className="flex-1">
-                                        <Text className={`text-white ${titleSize} font-semibold`}>Confirm Calibration</Text>
+                                        <Text className={`text-white ${titleSize} font-semibold`}>Ready to Hunt</Text>
                                         <Text className={`text-white/80 ${subtitleMargin} ${subtitleSize}`}>
-                                            Review your setup before saving.
+                                            Review your calibration, then begin.
                                         </Text>
                                     </View>
                                 </View>
@@ -304,6 +333,7 @@ export default function Step8() {
                             </View>
                         </ScrollView>
 
+                        {/* Side CTA Panel */}
                         <View
                             style={{
                                 width: sideCtaWidth,
@@ -316,7 +346,7 @@ export default function Step8() {
                                 <Text className="text-white/70 text-xs mb-2">Actions</Text>
 
                                 <Pressable
-                                    onPress={handleConfirm}
+                                    onPress={handleBeginHunting}
                                     disabled={!isComplete}
                                     className={[
                                         "rounded-2xl items-center border py-4",
@@ -326,7 +356,7 @@ export default function Step8() {
                                     ].join(" ")}
                                 >
                                     <Text className="text-white font-semibold text-lg">
-                                        {isComplete ? "Save" : "Incomplete"}
+                                        {isComplete ? "🎯 Begin" : "Incomplete"}
                                     </Text>
                                 </Pressable>
 
@@ -346,7 +376,7 @@ export default function Step8() {
 
                                 <View className="items-center">
                                     <Text className="text-white/50 text-xs mt-3 text-center">
-                                        Tip: You can recalibrate anytime from settings.
+                                        You can recalibrate anytime from settings.
                                     </Text>
                                 </View>
                             </View>

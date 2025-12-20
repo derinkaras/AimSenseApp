@@ -426,6 +426,7 @@ interface CalibrationActions {
 
     // Finish & reset
     finishCalibration: () => Promise<CalibrationResult>;
+    beginHunt: () => Promise<CalibrationResult>; // NEW: Save calibration and transition to hunt mode
     resetCalibration: () => Promise<void>;
     clearSavedCalibration: () => Promise<void>;
 }
@@ -546,7 +547,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
     // Axes swap handling
     setAxesSwapped: (swapped) => set({ axesSwapped: swapped }),
 
-    // Finish calibration
+    // Finish calibration (saves and resets camera settings - returns to tabs)
     finishCalibration: async () => {
         const {
             mountOrientation,
@@ -655,6 +656,106 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
     Pitch₀:             ${result.pitch0.toFixed(2)}°
 ══════════════════════════════════════════════════════════════
         `);
+        return result;
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // BEGIN HUNT - Save calibration but PRESERVE camera settings
+    // ═══════════════════════════════════════════════════════════════
+    // Unlike finishCalibration(), this does NOT reset camera settings.
+    // This allows Hunt Mode to use the exact same camera configuration
+    // that was established during calibration.
+    beginHunt: async () => {
+        const {
+            mountOrientation,
+            roll0,
+            pitch0,
+            scopeUnit,
+            clickSize,
+            cameraZoom,
+            focusPoint,
+            screenRotation,
+            scopeCenterPx,
+            elevationStartPx,
+            elevationEndPx,
+            windageStartPx,
+            windageEndPx,
+            pxPerUnitX,
+            pxPerUnitY,
+        } = get();
+
+        if (!scopeCenterPx) {
+            throw new Error("Scope center not calibrated");
+        }
+        if (!elevationStartPx || !elevationEndPx) {
+            throw new Error("Elevation not calibrated");
+        }
+        if (!windageStartPx || !windageEndPx) {
+            throw new Error("Windage not calibrated");
+        }
+
+        const result: CalibrationResult = {
+            mountOrientation,
+            roll0,
+            pitch0,
+            scopeUnit,
+            clickSize,
+            cameraZoom,
+            focusPoint,
+            screenRotation,
+            scopeCenterPx,
+            elevationStartPx,
+            elevationEndPx,
+            windageStartPx,
+            windageEndPx,
+            pxPerUnitX,
+            pxPerUnitY,
+            calibratedAt: Date.now(),
+        };
+
+        // ⚠️ CRITICAL DIFFERENCE FROM finishCalibration():
+        // We save the result but DO NOT reset camera settings or lock to portrait.
+        // This preserves camera config for Hunt Mode.
+        set({ savedResult: result });
+
+        // Format readable calibration summary
+        const totalClicks = CALIBRATION_CLICK_COUNT;
+        const totalUnits = totalClicks * result.clickSize;
+
+        const elevDeltaX = result.elevationEndPx.x - result.scopeCenterPx.x;
+        const elevDeltaY = result.elevationEndPx.y - result.scopeCenterPx.y;
+        const windDeltaX = result.windageEndPx.x - result.scopeCenterPx.x;
+        const windDeltaY = result.windageEndPx.y - result.scopeCenterPx.y;
+
+        console.log(`
+══════════════════════════════════════════════════════════════
+                CALIBRATION COMPLETE → HUNT MODE               
+══════════════════════════════════════════════════════════════
+  DEVICE SETUP (PRESERVED FOR HUNT)                            
+    Mount Orientation:  ${result.mountOrientation}
+    Screen Rotation:    ${result.screenRotation}°
+    Camera Zoom:        ${(result.cameraZoom * 100).toFixed(0)}%
+    Focus Point:        (${result.focusPoint?.x ?? 'N/A'}, ${result.focusPoint?.y ?? 'N/A'})
+──────────────────────────────────────────────────────────────
+  SCOPE SETTINGS                                               
+    Unit:               ${result.scopeUnit}
+    Click Size:         ${result.clickSize} ${result.scopeUnit}/click
+──────────────────────────────────────────────────────────────
+  CALIBRATION POINTS (from Scope Center)                       
+    Scope Center:       (${result.scopeCenterPx.x}, ${result.scopeCenterPx.y})
+    After ${totalClicks} Elev clicks:  (${result.elevationEndPx.x}, ${result.elevationEndPx.y})  Δ(${elevDeltaX}, ${elevDeltaY})
+    After ${totalClicks} Wind clicks:  (${result.windageEndPx.x}, ${result.windageEndPx.y})  Δ(${windDeltaX}, ${windDeltaY})
+──────────────────────────────────────────────────────────────
+  COMPUTED SCALE (${totalClicks} clicks = ${totalUnits} ${result.scopeUnit})
+    Pixels per ${result.scopeUnit} (X):  ${result.pxPerUnitX.toFixed(2)}
+    Pixels per ${result.scopeUnit} (Y):  ${result.pxPerUnitY.toFixed(2)}
+──────────────────────────────────────────────────────────────
+  IMU REFERENCE                                                
+    Roll₀:              ${result.roll0.toFixed(2)}°
+    Pitch₀:             ${result.pitch0.toFixed(2)}°
+══════════════════════════════════════════════════════════════
+        `);
+
         return result;
     },
 
