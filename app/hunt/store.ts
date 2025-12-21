@@ -6,11 +6,11 @@
 
 import { create } from "zustand";
 import type { GunProfile } from "@/app/types/apiTypes";
-import type { CalibrationResult, CameraResolution } from "@/app/calibration/exports";
+import type { CalibrationResult, CameraResolution, CameraLayoutConfig } from "@/app/calibration/exports";
 
 // ==================== TYPES ====================
 
-export type HuntSessionStatus = 
+export type HuntSessionStatus =
     | "idle"           // No active hunt
     | "selecting_gun"  // User is choosing a gun profile
     | "active"         // Hunt is active with selected gun
@@ -28,31 +28,34 @@ export interface HuntSession {
 interface HuntState {
     // Current session
     session: HuntSession;
-    
+
     // Camera invariants from calibration (must match during hunt) - spec 14.2
+    // ⚠️ CRITICAL: cameraLayout must be restored EXACTLY (zero tolerance)
+    // This ensures scopeCenterPx and all pixel coordinates map correctly
     cameraInvariants: {
         zoom: number;
         screenRotation: number;
         mountOrientation: string;
         cameraResolution: CameraResolution;
         cameraAspectRatio: number;
+        cameraLayout: CameraLayoutConfig;
     } | null;
 }
 
 interface HuntActions {
     // Initialize hunt with calibration data
     initializeHunt: (calibrationResult: CalibrationResult) => void;
-    
+
     // Gun selection
     selectGunProfile: (gun: GunProfile) => void;
     clearGunSelection: () => void;
-    
+
     // Session control
     startHunt: () => void;
     pauseHunt: () => void;
     resumeHunt: () => void;
     endHunt: () => void;
-    
+
     // Validation - now includes camera resolution (spec 14.2)
     validateCameraInvariants: (
         currentZoom: number,
@@ -60,7 +63,7 @@ interface HuntActions {
         currentOrientation: string,
         currentResolution?: CameraResolution
     ) => { valid: boolean; errors: string[] };
-    
+
     // Reset
     resetHuntStore: () => void;
 }
@@ -82,7 +85,7 @@ export const useHuntStore = create<HuntStore>((set, get) => ({
     // ═══════════════════════════════════════════════════════════
     // INITIALIZE HUNT
     // ═══════════════════════════════════════════════════════════
-    
+
     initializeHunt: (calibrationResult) => {
         console.log("🎯 Initializing hunt with calibration:", {
             orientation: calibrationResult.mountOrientation,
@@ -90,6 +93,7 @@ export const useHuntStore = create<HuntStore>((set, get) => ({
             rotation: calibrationResult.screenRotation,
             resolution: calibrationResult.cameraResolution,
             aspectRatio: calibrationResult.cameraAspectRatio,
+            cameraLayout: calibrationResult.cameraLayout,
             pxPerUnitX: calibrationResult.pxPerUnitX,
             pxPerUnitY: calibrationResult.pxPerUnitY,
         });
@@ -107,6 +111,7 @@ export const useHuntStore = create<HuntStore>((set, get) => ({
                 mountOrientation: calibrationResult.mountOrientation,
                 cameraResolution: calibrationResult.cameraResolution,
                 cameraAspectRatio: calibrationResult.cameraAspectRatio,
+                cameraLayout: calibrationResult.cameraLayout,
             },
         });
     },
@@ -114,10 +119,10 @@ export const useHuntStore = create<HuntStore>((set, get) => ({
     // ═══════════════════════════════════════════════════════════
     // GUN SELECTION
     // ═══════════════════════════════════════════════════════════
-    
+
     selectGunProfile: (gun) => {
         const { session } = get();
-        
+
         if (session.status !== "selecting_gun") {
             console.warn("⚠️ Cannot select gun outside of selection phase");
             return;
@@ -135,7 +140,7 @@ export const useHuntStore = create<HuntStore>((set, get) => ({
 
     clearGunSelection: () => {
         const { session } = get();
-        
+
         set({
             session: {
                 ...session,
@@ -148,7 +153,7 @@ export const useHuntStore = create<HuntStore>((set, get) => ({
     // ═══════════════════════════════════════════════════════════
     // SESSION CONTROL
     // ═══════════════════════════════════════════════════════════
-    
+
     startHunt: () => {
         const { session } = get();
 
@@ -175,7 +180,7 @@ export const useHuntStore = create<HuntStore>((set, get) => ({
 
     pauseHunt: () => {
         const { session } = get();
-        
+
         if (session.status !== "active") return;
 
         set({
@@ -188,7 +193,7 @@ export const useHuntStore = create<HuntStore>((set, get) => ({
 
     resumeHunt: () => {
         const { session } = get();
-        
+
         if (session.status !== "paused") return;
 
         set({
@@ -201,7 +206,7 @@ export const useHuntStore = create<HuntStore>((set, get) => ({
 
     endHunt: () => {
         console.log("🏁 Hunt ended");
-        
+
         set({
             session: { ...initialSession },
             cameraInvariants: null,
@@ -211,7 +216,7 @@ export const useHuntStore = create<HuntStore>((set, get) => ({
     // ═══════════════════════════════════════════════════════════
     // VALIDATION (spec 14.2)
     // ═══════════════════════════════════════════════════════════
-    
+
     validateCameraInvariants: (currentZoom, currentRotation, currentOrientation, currentResolution) => {
         const { cameraInvariants } = get();
         const errors: string[] = [];
@@ -248,7 +253,7 @@ export const useHuntStore = create<HuntStore>((set, get) => ({
             const resolutionTolerance = 2; // Allow 2px tolerance for rounding
             const widthDiff = Math.abs(currentResolution.width - cameraInvariants.cameraResolution.width);
             const heightDiff = Math.abs(currentResolution.height - cameraInvariants.cameraResolution.height);
-            
+
             if (widthDiff > resolutionTolerance || heightDiff > resolutionTolerance) {
                 errors.push(
                     `Resolution mismatch: expected ${cameraInvariants.cameraResolution.width}x${cameraInvariants.cameraResolution.height}, ` +
@@ -276,7 +281,7 @@ export const useHuntStore = create<HuntStore>((set, get) => ({
     // ═══════════════════════════════════════════════════════════
     // RESET
     // ═══════════════════════════════════════════════════════════
-    
+
     resetHuntStore: () => {
         set({
             session: { ...initialSession },
@@ -292,6 +297,7 @@ export const selectHuntStatus = (s: HuntStore) => s.session.status;
 export const selectSelectedGun = (s: HuntStore) => s.session.selectedGunProfile;
 export const selectCalibrationResult = (s: HuntStore) => s.session.calibrationResult;
 export const selectCameraInvariants = (s: HuntStore) => s.cameraInvariants;
+export const selectCameraLayout = (s: HuntStore) => s.cameraInvariants?.cameraLayout ?? null;
 export const selectIsHuntActive = (s: HuntStore) => s.session.status === "active";
-export const selectCanStartHunt = (s: HuntStore) => 
+export const selectCanStartHunt = (s: HuntStore) =>
     s.session.selectedGunProfile !== null && s.session.calibrationResult !== null;

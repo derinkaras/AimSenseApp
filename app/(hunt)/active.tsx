@@ -26,7 +26,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import * as Haptics from "expo-haptics";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import * as ScreenOrientation from "expo-screen-orientation";
-import { useCalibrationStore, isLandscape, getCameraLayoutConfig, lockOrientation } from "@/app/calibration/exports";
+import { useCalibrationStore, isLandscape, lockOrientation } from "@/app/calibration/exports";
 import {
     useHuntStore,
     selectSelectedGun,
@@ -79,12 +79,12 @@ export default function ActiveHunt() {
         useCallback(() => {
             console.log(SCREEN_ID);
             setActiveScreen(SCREEN_ID);
-            
+
             // Ensure orientation is still locked to calibrated orientation
             if (calibrationResult?.mountOrientation) {
                 lockOrientation(calibrationResult.mountOrientation);
             }
-            
+
             return () => {};
         }, [setActiveScreen, calibrationResult])
     );
@@ -96,17 +96,17 @@ export default function ActiveHunt() {
                 width: cameraLayout.width,
                 height: cameraLayout.height,
             };
-            
+
             const result = validateCameraInvariants(
                 calibrationResult.cameraZoom,
                 calibrationResult.screenRotation,
                 calibrationResult.mountOrientation,
                 currentResolution
             );
-            
+
             setCameraValidated(result.valid);
             setValidationErrors(result.errors);
-            
+
             if (!result.valid) {
                 console.warn("⚠️ Camera validation failed:", result.errors);
             }
@@ -177,8 +177,18 @@ export default function ActiveHunt() {
     const isLandscapeMode = isLandscape(mountOrientation);
     const rotationTransform = { transform: [{ rotate: `${screenRotation}deg` }] };
 
-    // CRITICAL: Use the EXACT same layout config as step6/step7
-    const layoutConfig = getCameraLayoutConfig(width, height, isLandscapeMode, insets.bottom);
+    // ⚠️ CRITICAL: Use the EXACT stored cameraLayout from calibration - ZERO TOLERANCE
+    // This ensures scopeCenterPx and all pixel coordinates map to the correct physical positions
+    // DO NOT recalculate with getCameraLayoutConfig() - that could produce different values
+    const layoutConfig = calibrationResult?.cameraLayout ?? {
+        sidePanelWidth: 0,
+        bottomPanelHeight: 240,
+        bottomPanelTotalHeight: 240,
+        bottomPadding: 0,
+        cameraInsets: { padRight: 0, padBottom: 240 },
+        magnifierSize: 100,
+        isLandscapeMode: false,
+    };
 
     // Handlers
     const handleToggleCrosshair = () => {
@@ -291,7 +301,7 @@ export default function ActiveHunt() {
                     onLayout={handleCameraLayout}
                     style={[
                         StyleSheet.absoluteFill,
-                        { right: layoutConfig.cameraInsets.padRight, bottom: layoutConfig.cameraInsets.padBottom }
+                        { right: layoutConfig.cameraInsets.padRight }
                     ]}
                     onStartShouldSetResponder={() => true}
                     onMoveShouldSetResponder={() => true}
@@ -419,7 +429,8 @@ export default function ActiveHunt() {
     // ============================================================
     // PORTRAIT LAYOUT - EXACT SAME AS STEP6/STEP7
     // ============================================================
-    const controlPanelHeight = 240; // EXACT same as step6/step7
+    // ⚠️ CRITICAL: Use layoutConfig.bottomPanelTotalHeight from stored calibration
+    // DO NOT use hardcoded values or recalculate
 
     return (
         <View className="flex-1 bg-brand-black">
@@ -429,7 +440,7 @@ export default function ActiveHunt() {
                 onLayout={handleCameraLayout}
                 style={[
                     StyleSheet.absoluteFill,
-                    { bottom: controlPanelHeight + layoutConfig.bottomPadding }
+                    { bottom: layoutConfig.bottomPanelTotalHeight }
                 ]}
                 onStartShouldSetResponder={() => true}
                 onMoveShouldSetResponder={() => true}

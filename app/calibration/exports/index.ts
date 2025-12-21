@@ -91,6 +91,9 @@ export interface CalibrationResult {
     // Camera invariants for validation (spec 14.2)
     cameraResolution: CameraResolution;
     cameraAspectRatio: number; // width / height
+    // Camera layout - MUST be restored exactly in hunt mode (zero tolerance)
+    // This defines the exact panel dimensions that determine camera view bounds
+    cameraLayout: CameraLayoutConfig;
     // Scope center
     scopeCenterPx: ScopeCenterPx;
     // Elevation calibration positions (for debugging/verification)
@@ -711,6 +714,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             focusPoint,
             screenRotation,
             cameraResolution,
+            cameraLayout,
             scopeCenterPx,
             elevationStartPx,
             elevationEndPx,
@@ -732,6 +736,9 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
         if (!cameraResolution) {
             throw new Error("Camera resolution not captured");
         }
+        if (!cameraLayout) {
+            throw new Error("Camera layout not captured - calibration incomplete");
+        }
 
         const result: CalibrationResult = {
             mountOrientation,
@@ -744,6 +751,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             screenRotation,
             cameraResolution,
             cameraAspectRatio: cameraResolution.width / cameraResolution.height,
+            cameraLayout,
             scopeCenterPx,
             elevationStartPx,
             elevationEndPx,
