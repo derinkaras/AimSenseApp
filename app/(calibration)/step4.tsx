@@ -2,6 +2,7 @@
 // step4.tsx - Set Reference (Level & Hold Steady)
 // ============================================================
 // Captures the baseline IMU reference for live cant/pitch tracking.
+// Responsive layout adapts to portrait/landscape and all device sizes.
 
 import React, { useCallback, useEffect, useRef } from "react";
 import { View, Text, Pressable, ScrollView, Image, StyleSheet } from "react-native";
@@ -9,6 +10,7 @@ import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import { CommonActions, useIsFocused, useNavigation } from "@react-navigation/native";
 
 import {
   useCalibrationStore,
@@ -18,61 +20,68 @@ import {
 } from "@/app/calibration/exports";
 import { useTiltLevel } from "@/app/hooks/useTiltLevel";
 import icons from "@/app/constants/icons";
-import { CommonActions, useIsFocused, useNavigation } from "@react-navigation/native";
 import { useCameraContext } from "./_layout";
+import { cn, getSafeAreaEdges } from "../calibration/exports/styles";
+import { HeaderCard, IconButton } from "../calibration/exports/components";
 
 const SCREEN_ID = "step4";
 
+// ==================== MAIN COMPONENT ====================
 export default function Step4() {
   const [permission] = useCameraPermissions();
   const cameraEnabled = !!permission?.granted;
 
   const { activeScreen, setActiveScreen } = useCameraContext();
   const isFocused = useIsFocused();
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
+  const wasLevel = useRef(false);
+  const timeouts = useRef<Array<ReturnType<typeof setTimeout>>>([]);
 
+  // Store selectors
+  const mountOrientation = useCalibrationStore(selectMountOrientation);
+  const captureBaseline = useCalibrationStore((s) => s.captureBaseline);
+  const reset = useCalibrationStore((s) => s.resetCalibration);
+
+  const isLandscapeMode = isLandscape(mountOrientation);
+  const safeEdges = getSafeAreaEdges(isLandscapeMode);
+  const compact = isLandscapeMode;
+
+  // Tilt level hook - only active when focused
+  const { levelDeg, isLevel, rollNow, pitchNow } = useTiltLevel(
+    mountOrientation,
+    DEFAULT_TILT_CONFIG,
+    { enabled: isFocused, updateIntervalMs: 60 }
+  );
+
+  const safe = Number.isFinite(levelDeg) ? levelDeg : 0;
+
+  // Focus effect
   useFocusEffect(
-      useCallback(() => {
-        console.log(SCREEN_ID);
-        setActiveScreen(SCREEN_ID);
-        return () => {};
-      }, [setActiveScreen])
+    useCallback(() => {
+      console.log(SCREEN_ID);
+      setActiveScreen(SCREEN_ID);
+      return () => {};
+    }, [setActiveScreen])
   );
 
   const shouldRenderCamera = cameraEnabled && activeScreen === SCREEN_ID;
 
-  const insets = useSafeAreaInsets();
-  const wasLevel = useRef(false);
-
-  const timeouts = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  // Clear haptic timers
   const clearHapticsTimers = useCallback(() => {
     timeouts.current.forEach((id) => clearTimeout(id));
     timeouts.current = [];
   }, []);
 
-  const mountOrientation = useCalibrationStore(selectMountOrientation);
-  const captureBaseline = useCalibrationStore((s) => s.captureBaseline);
-  const reset = useCalibrationStore((s) => s.resetCalibration);
-  const navigation = useNavigation();
-
-  // Sensor subscription stops when Step4 is not focused
-  const { levelDeg, isLevel, rollNow, pitchNow } = useTiltLevel(
-      mountOrientation,
-      DEFAULT_TILT_CONFIG,
-      { enabled: isFocused, updateIntervalMs: 60 }
-  );
-
-  const isLandscapeMode = isLandscape(mountOrientation);
-  const safe = Number.isFinite(levelDeg) ? levelDeg : 0;
-
-  // Ensure haptics never fire after leaving Step4
+  // Reset refs on focus change
   useFocusEffect(
-      useCallback(() => {
+    useCallback(() => {
+      wasLevel.current = false;
+      return () => {
         wasLevel.current = false;
-        return () => {
-          wasLevel.current = false;
-          clearHapticsTimers();
-        };
-      }, [clearHapticsTimers])
+        clearHapticsTimers();
+      };
+    }, [clearHapticsTimers])
   );
 
   // Haptic feedback when level is achieved
@@ -83,210 +92,211 @@ export default function Step4() {
     if (isLevel && !wasLevel.current) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       timeouts.current.push(
-          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 100)
+        setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 100)
       );
       timeouts.current.push(
-          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 200)
+        setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 200)
       );
     }
     wasLevel.current = isLevel;
   }, [isLevel, isFocused, clearHapticsTimers]);
 
+  // ==================== HANDLERS ====================
   const handleCapture = () => {
     captureBaseline(rollNow, pitchNow);
     router.push("/(calibration)/step5");
   };
 
-  const handleBack = () => {
-    router.back();
-  };
+  const handleBack = () => router.back();
 
   const handleCancel = async () => {
     await reset();
     navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{ name: "(tabs)" }],
-        })
+      CommonActions.reset({
+        index: 0,
+        routes: [{ name: "(tabs)" }],
+      })
     );
   };
 
-  // Layout tuning
-  const angleFontSize = isLandscapeMode ? "text-5xl" : "text-6xl";
-  const containerPadding = isLandscapeMode ? "p-4" : "p-6";
-  const headerPadding = isLandscapeMode ? "p-3" : "p-5";
-  const headerMargin = isLandscapeMode ? "mt-3" : "mt-6";
-  const scrollPadding = isLandscapeMode ? 120 : 240;
-
-  const titleSize = isLandscapeMode ? "text-xl" : "text-2xl";
-  const subtitleSize = isLandscapeMode ? "text-xs" : "text-base";
-
-  // Chip sizing (landscape = compact)
-  const chipPad = isLandscapeMode ? "px-3 py-2" : "px-4 py-3";
-  const chipGapTop = isLandscapeMode ? "mt-3" : "mt-4";
-  const chipGapBetween = isLandscapeMode ? "mb-1.5" : "mb-2";
-  const chipLeading = isLandscapeMode ? "leading-4" : "leading-5";
-  const chipRadius = isLandscapeMode ? "rounded-xl" : "rounded-2xl";
-
-  // Icon button sizes
-  const buttonSize = isLandscapeMode ? "size-11" : "size-14";
-  const iconSize = isLandscapeMode ? "w-5 h-5" : "w-6 h-6";
-
-  const safeAreaEdges: ("top" | "bottom" | "left" | "right")[] = ["top", "bottom"];
-  if (isLandscapeMode) safeAreaEdges.push("left", "right");
-
+  // ==================== RENDER ====================
   return (
-      <View className="flex-1 bg-brand-black">
-        {shouldRenderCamera && <CameraView style={StyleSheet.absoluteFill} facing="back" />}
+    <View className="flex-1 bg-brand-black">
+      {/* Camera Background */}
+      {shouldRenderCamera && (
+        <CameraView style={StyleSheet.absoluteFill} facing="back" />
+      )}
 
-        <SafeAreaView className="flex-1" edges={safeAreaEdges}>
-          <View className={`flex-1 ${isLandscapeMode ? "px-4" : "px-6"} pt-4`}>
-            <ScrollView
-                className={headerMargin}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ flexGrow: 1, paddingBottom: scrollPadding }}
+      <SafeAreaView className="flex-1" edges={safeEdges}>
+        <View className={cn("flex-1 pt-3", compact ? "px-4" : "px-5")}>
+          <ScrollView
+            className="flex-1"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{
+              gap: compact ? 12 : 16,
+              paddingBottom: compact ? 80 : 120,
+            }}
+          >
+            {/* Header */}
+            <HeaderCard
+              icon={icons.compass}
+              title="Set Reference"
+              compact={compact}
             >
-              {/* Header */}
-              <View className={`rounded-3xl ${headerPadding} bg-brand-greenDark/70 border border-brand-green/60 my-2`}>
-                {/* Title row: icon + title (ONLY this row is horizontal) */}
-                <View className="flex-row items-center">
-                  <View className="size-11 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center">
-                    <Image
-                        source={icons.compass}
-                        className="w-6 h-6"
-                        resizeMode="contain"
-                        tintColor="#0b7f4f"
-                    />
-                  </View>
-
-                  <Text className={`text-white ${titleSize} font-semibold ml-3`}>
-                    Set Reference
-                  </Text>
-                </View>
-
-                {/* Everything below is full-width (no indent, no columns) */}
-                <View className={chipGapTop}>
-                  <View className={`${chipRadius} bg-brand-black/40 border border-brand-green/30 ${chipPad} ${chipGapBetween}`}>
-                    <Text className={`text-white/90 ${subtitleSize} ${chipLeading}`}>
-                      Hold the rifle in a normal shooting position and point it forward while leveling the reference.
-                    </Text>
-                  </View>
-
-                  <View className={`${chipRadius} bg-brand-greenDark/40 border border-brand-green/25 ${chipPad}`}>
-                    <Text className={`text-white/70 ${subtitleSize} ${chipLeading}`}>
-                      It’s okay if the phone is slightly tilted in the scope adapter — this step records your setup’s alignment.
-                      After this, AimSense tracks changes relative to this baseline, so movement and tilt are expected.
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Level Card */}
-              <View
-                  className={[
-                    "rounded-3xl border bg-brand-greenDark/65",
-                    isLevel ? "border-brand-greenLight" : "border-brand-green/45",
-                    containerPadding,
-                  ].join(" ")}
-              >
-                <View className="flex-row items-center justify-between">
-                  <View>
-                    <Text className="text-white/70 text-sm">Level Offset</Text>
-                    <Text className={`text-white font-bold ${angleFontSize} mt-2`}>
-                      {safe.toFixed(1)}°
-                    </Text>
-                  </View>
-
-                  <View
-                      className={[
-                        "size-16 rounded-3xl items-center justify-center border",
-                        isLevel
-                            ? "bg-brand-greenLight/15 border-brand-greenLight"
-                            : "bg-brand-black/40 border-brand-green/35",
-                      ].join(" ")}
+              <View className={compact ? "gap-1.5" : "gap-2"}>
+                <View
+                  className={cn(
+                    "rounded-xl bg-brand-black/40 border border-brand-green/30",
+                    compact ? "p-2" : "p-3"
+                  )}
+                >
+                  <Text
+                    className={cn(
+                      "text-white/90",
+                      compact ? "text-[10px] leading-3.5" : "text-sm leading-5"
+                    )}
                   >
-                    <Image
-                        source={isLevel ? icons.level : icons.tilt}
-                        className="w-8 h-8"
-                        resizeMode="contain"
-                        tintColor={isLevel ? "#0b7f4f" : "#9ca3af"}
-                    />
-                  </View>
+                    Hold the rifle in a normal shooting position and point it forward while leveling the reference.
+                  </Text>
                 </View>
 
                 <View
-                    className={[
-                      "mt-5 px-4 py-3 rounded-2xl border",
-                      isLevel
-                          ? "bg-brand-greenLight/10 border-brand-greenLight/70"
-                          : "bg-brand-black/30 border-brand-green/30",
-                    ].join(" ")}
+                  className={cn(
+                    "rounded-xl bg-brand-greenDark/40 border border-brand-green/25",
+                    compact ? "p-2" : "p-3"
+                  )}
                 >
-                  <Text className={`text-white font-semibold ${isLandscapeMode ? "text-base" : "text-lg"}`}>
-                    {isLevel ? "Reference locked — tap Continue" : "Level the rifle to set your baseline"}
+                  <Text
+                    className={cn(
+                      "text-white/70",
+                      compact ? "text-[10px] leading-3.5" : "text-sm leading-5"
+                    )}
+                  >
+                    It's okay if the phone is slightly tilted in the scope adapter — this step records your setup's alignment.
                   </Text>
+                </View>
+              </View>
+            </HeaderCard>
 
-                  <Text className="text-white/70 mt-1 text-sm">
-                    {isLevel
-                        ? "Baseline captured. You don’t need to hold this exact angle afterward."
-                        : "Make small adjustments and hold steady once it reads level."}
+            {/* Level Card */}
+            <View
+              className={cn(
+                "rounded-3xl border bg-brand-greenDark/65",
+                isLevel ? "border-brand-greenLight" : "border-brand-green/45",
+                compact ? "p-4" : "p-5"
+              )}
+            >
+              <View className="flex-row items-center justify-between">
+                <View>
+                  <Text className="text-white/70 text-sm">Level Offset</Text>
+                  <Text
+                    className={cn(
+                      "text-white font-bold mt-2",
+                      compact ? "text-5xl" : "text-6xl"
+                    )}
+                  >
+                    {safe.toFixed(1)}°
                   </Text>
                 </View>
 
-                {!isLevel && Math.abs(safe) <= 5 && (
-                    <View className="mt-4 flex-row items-start">
-                      <View className="size-10 rounded-2xl bg-brand-black/40 border border-brand-green/35 items-center justify-center mr-3">
-                        <Image source={icons.info} className="w-5 h-5" resizeMode="contain" tintColor="#9ca3af" />
-                      </View>
-                      <Text className="flex-1 text-white/65 text-sm">
-                        Almost there — keep the rifle upright, adjust slowly, then pause once it reads level.
-                      </Text>
-                    </View>
-                )}
-              </View>
-            </ScrollView>
-
-            {/* CTAs - Icon Buttons */}
-            <View className="py-2">
-              <View className="flex-row items-center justify-center gap-4">
-                <Pressable
-                    onPress={handleBack}
-                    className={`${buttonSize} rounded-xl items-center justify-center bg-brand-black/50 border border-brand-green/35`}
-                >
-                  <Image source={icons.chevronLeft} className={iconSize} resizeMode="contain" tintColor="#e5e5e5" />
-                </Pressable>
-
-                <Pressable
-                    onPress={handleCapture}
-                    disabled={!isLevel}
-                    className={`${buttonSize} rounded-xl items-center justify-center border ${
-                        isLevel ? "bg-brand-greenLight border-brand-green/60" : "bg-brand-black/30 border-brand-green/30"
-                    }`}
+                <View
+                  className={cn(
+                    "w-16 h-16 rounded-3xl items-center justify-center border",
+                    isLevel
+                      ? "bg-brand-greenLight/15 border-brand-greenLight"
+                      : "bg-brand-black/40 border-brand-green/35"
+                  )}
                 >
                   <Image
-                      source={icons.chevronRight}
-                      className={iconSize}
-                      resizeMode="contain"
-                      tintColor={isLevel ? "#ffffff" : "#666666"}
+                    source={isLevel ? icons.level : icons.tilt}
+                    className="w-8 h-8"
+                    resizeMode="contain"
+                    style={{ tintColor: isLevel ? "#0b7f4f" : "#9ca3af" }}
                   />
-                </Pressable>
-
-                <Pressable
-                    onPress={handleCancel}
-                    className={`${buttonSize} rounded-xl items-center justify-center bg-brand-black/50 border border-brand-green/35`}
-                >
-                  <Image source={icons.cancel} className={iconSize} resizeMode="contain" tintColor="#e5e5e5" />
-                </Pressable>
+                </View>
               </View>
 
-              {!isLevel && (
-                  <Text className="text-white/50 text-center text-sm mt-3">
-                    Level the rifle to continue
+              {/* Status Message */}
+              <View
+                className={cn(
+                  "mt-4 px-4 py-3 rounded-2xl border",
+                  isLevel
+                    ? "bg-brand-greenLight/10 border-brand-greenLight/70"
+                    : "bg-brand-black/30 border-brand-green/30"
+                )}
+              >
+                <Text
+                  className={cn(
+                    "text-white font-semibold",
+                    compact ? "text-sm" : "text-base"
+                  )}
+                >
+                  {isLevel
+                    ? "Reference locked — tap Continue"
+                    : "Level the rifle to set your baseline"}
+                </Text>
+
+                <Text className="text-white/70 mt-1 text-sm">
+                  {isLevel
+                    ? "Baseline captured. You don't need to hold this exact angle afterward."
+                    : "Make small adjustments and hold steady once it reads level."}
+                </Text>
+              </View>
+
+              {/* Almost there hint */}
+              {!isLevel && Math.abs(safe) <= 5 && (
+                <View className="mt-4 flex-row items-start">
+                  <View className="w-10 h-10 rounded-2xl bg-brand-black/40 border border-brand-green/35 items-center justify-center mr-3">
+                    <Image
+                      source={icons.info}
+                      className="w-5 h-5"
+                      resizeMode="contain"
+                      style={{ tintColor: "#9ca3af" }}
+                    />
+                  </View>
+                  <Text className="flex-1 text-white/65 text-sm">
+                    Almost there — keep the rifle upright, adjust slowly, then pause once it reads level.
                   </Text>
+                </View>
               )}
             </View>
+          </ScrollView>
+
+          {/* Navigation CTAs */}
+          <View className={compact ? "py-2" : "py-3"}>
+            <View className="flex-row items-center justify-center gap-4">
+              <IconButton
+                icon={icons.chevronLeft}
+                onPress={handleBack}
+                size={compact ? "sm" : "md"}
+                variant="secondary"
+              />
+
+              <IconButton
+                icon={icons.chevronRight}
+                onPress={handleCapture}
+                disabled={!isLevel}
+                size={compact ? "sm" : "md"}
+                variant="primary"
+                tintColor="#ffffff"
+              />
+
+              <IconButton
+                icon={icons.cancel}
+                onPress={handleCancel}
+                size={compact ? "sm" : "md"}
+                variant="secondary"
+              />
+            </View>
+
+            {!isLevel && (
+              <Text className="text-white/50 text-center text-sm mt-3">
+                Level the rifle to continue
+              </Text>
+            )}
           </View>
-        </SafeAreaView>
-      </View>
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }

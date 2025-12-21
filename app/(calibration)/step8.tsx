@@ -2,388 +2,342 @@
 // step8.tsx - Confirm & Begin Hunting
 // ============================================================
 // Final review screen before transitioning to Hunt Mode.
-// Changed from "Save Calibration" to "Begin Hunting".
+// Shows calibration summary and allows user to start hunting.
 
 import React, { useCallback } from "react";
-import {
-    View,
-    Text,
-    Pressable,
-    Image,
-    StyleSheet,
-    ScrollView,
-    useWindowDimensions,
-} from "react-native";
+import { View, Text, Pressable, Image, StyleSheet, ScrollView, useWindowDimensions } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import { CommonActions, useNavigation } from "@react-navigation/native";
 
 import {
-    useCalibrationStore,
-    selectMountOrientation,
-    selectScopeUnit,
-    selectScopeCenterPx,
-    selectCameraZoom,
-    selectFocusPoint,
-    selectScreenRotation,
-    selectRoll0,
-    selectPitch0,
-    selectPxPerUnitX,
-    selectPxPerUnitY,
-    getOrientationLabel,
-    getUnitLabel,
-    isLandscape,
+  useCalibrationStore,
+  selectMountOrientation,
+  selectScopeUnit,
+  selectScopeCenterPx,
+  selectCameraZoom,
+  selectFocusPoint,
+  selectScreenRotation,
+  selectRoll0,
+  selectPitch0,
+  selectPxPerUnitX,
+  selectPxPerUnitY,
+  getOrientationLabel,
+  getUnitLabel,
+  isLandscape,
 } from "@/app/calibration/exports";
 import icons from "@/app/constants/icons";
-import { CommonActions, useNavigation } from "@react-navigation/native";
 import { useCameraContext } from "./_layout";
+import { cn, getSafeAreaEdges } from "../calibration/exports/styles";
+import { HeaderCard, IconButton, SectionCard } from "../calibration/exports/components";
 
 const SCREEN_ID = "step8";
 
+// ==================== SUMMARY CARD COMPONENT ====================
+interface SummaryItemProps {
+  icon: any;
+  label: string;
+  value: string;
+  success: boolean;
+  compact?: boolean;
+}
+
+function SummaryItem({ icon, label, value, success, compact = false }: SummaryItemProps) {
+  return (
+    <View
+      className={cn(
+        "rounded-2xl bg-brand-greenDark/65 border border-brand-green/45",
+        compact ? "p-3" : "p-4"
+      )}
+    >
+      <View className="flex-row items-center">
+        <View
+          className={cn(
+            "rounded-xl bg-brand-black/50 border border-brand-green/40 items-center justify-center",
+            compact ? "w-10 h-10 mr-3" : "w-12 h-12 mr-4"
+          )}
+        >
+          <Image
+            source={icon}
+            className={compact ? "w-5 h-5" : "w-6 h-6"}
+            resizeMode="contain"
+            style={{ tintColor: "#0b7f4f" }}
+          />
+        </View>
+        <View className="flex-1">
+          <Text className={cn("text-white/70", compact ? "text-xs" : "text-sm")}>
+            {label}
+          </Text>
+          <Text
+            className={cn(
+              "text-white font-semibold mt-0.5",
+              compact ? "text-base" : "text-lg"
+            )}
+          >
+            {value} {success && "✓"}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ==================== MAIN COMPONENT ====================
 export default function Step8() {
-    const [permission] = useCameraPermissions();
-    const cameraEnabled = !!permission?.granted;
+  const [permission] = useCameraPermissions();
+  const cameraEnabled = !!permission?.granted;
 
-    const { activeScreen, setActiveScreen } = useCameraContext();
+  const { activeScreen, setActiveScreen } = useCameraContext();
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
+  const { width } = useWindowDimensions();
 
-    useFocusEffect(
-        useCallback(() => {
-            setActiveScreen(SCREEN_ID);
-            return () => {};
-        }, [setActiveScreen])
+  // Store selectors
+  const mountOrientation = useCalibrationStore(selectMountOrientation);
+  const scopeUnit = useCalibrationStore(selectScopeUnit);
+  const scopeCenterPx = useCalibrationStore(selectScopeCenterPx);
+  const cameraZoom = useCalibrationStore(selectCameraZoom);
+  const focusPoint = useCalibrationStore(selectFocusPoint);
+  const screenRotation = useCalibrationStore(selectScreenRotation);
+  const roll0 = useCalibrationStore(selectRoll0);
+  const pitch0 = useCalibrationStore(selectPitch0);
+  const pxPerUnitX = useCalibrationStore(selectPxPerUnitX);
+  const pxPerUnitY = useCalibrationStore(selectPxPerUnitY);
+  const beginHunt = useCalibrationStore((s) => s.beginHunt);
+  const reset = useCalibrationStore((s) => s.resetCalibration);
+
+  const isLandscapeMode = isLandscape(mountOrientation);
+  const safeEdges = getSafeAreaEdges(isLandscapeMode);
+  const compact = isLandscapeMode;
+  const focusLocked = focusPoint !== null;
+  const rotationTransform = { transform: [{ rotate: `${screenRotation}deg` }] };
+
+  // Validation checks
+  const hasScopeCenter = scopeCenterPx !== null;
+  const hasPixelScale = pxPerUnitX > 0 && pxPerUnitY > 0;
+  const hasReference = Number.isFinite(roll0) && Number.isFinite(pitch0);
+  const isComplete = hasScopeCenter && hasPixelScale && hasReference;
+
+  // Focus effect
+  useFocusEffect(
+    useCallback(() => {
+      setActiveScreen(SCREEN_ID);
+      return () => {};
+    }, [setActiveScreen])
+  );
+
+  const shouldRenderCamera = cameraEnabled && activeScreen === SCREEN_ID;
+
+  // ==================== HANDLERS ====================
+  const handleBeginHunting = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await beginHunt();
+      router.replace("/(hunt)/select-gun");
+    } catch (error) {
+      console.error("Failed to begin hunting:", error);
+    }
+  };
+
+  const handleBack = () => router.back();
+
+  const handleCancel = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await reset();
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{ name: "(tabs)" }],
+      })
     );
+  };
 
-    const shouldRenderCamera = cameraEnabled && activeScreen === SCREEN_ID;
-
-    const insets = useSafeAreaInsets();
-    const navigation = useNavigation();
-    const { width } = useWindowDimensions();
-
-    const mountOrientation = useCalibrationStore(selectMountOrientation);
-    const scopeUnit = useCalibrationStore(selectScopeUnit);
-    const scopeCenterPx = useCalibrationStore(selectScopeCenterPx);
-    const cameraZoom = useCalibrationStore(selectCameraZoom);
-    const focusPoint = useCalibrationStore(selectFocusPoint);
-    const screenRotation = useCalibrationStore(selectScreenRotation);
-    const roll0 = useCalibrationStore(selectRoll0);
-    const pitch0 = useCalibrationStore(selectPitch0);
-    const pxPerUnitX = useCalibrationStore(selectPxPerUnitX);
-    const pxPerUnitY = useCalibrationStore(selectPxPerUnitY);
-
-    // Determine if focus is locked (autofocus should be off)
-    const focusLocked = focusPoint !== null;
-
-    // Rotation transform style
-    const rotationTransform = { transform: [{ rotate: `${screenRotation}deg` }] };
-
-    // Store actions
-    const beginHunt = useCalibrationStore((s) => s.beginHunt);
-    const reset = useCalibrationStore((s) => s.resetCalibration);
-
-    const isLandscapeMode = isLandscape(mountOrientation);
-
-    // ═══════════════════════════════════════════════════════════
-    // HANDLERS
-    // ═══════════════════════════════════════════════════════════
-
-    const handleBeginHunting = async () => {
-        try {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-            // Save calibration (preserves camera settings for hunt mode)
-            await beginHunt();
-
-            // Navigate to hunt mode
-            router.replace("/(hunt)/select-gun");
-        } catch (error) {
-            console.error("Failed to begin hunting:", error);
-            // TODO: Show error toast
-        }
-    };
-
-    const handleBack = () => router.back();
-
-    const handleCancel = async () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        await reset();
-        navigation.dispatch(
-            CommonActions.reset({
-                index: 0,
-                routes: [{ name: "(tabs)" }],
-            })
-        );
-    };
-
-    // Check if all required data is present
-    const hasScopeCenter = scopeCenterPx !== null;
-    const hasPixelScale = pxPerUnitX > 0 && pxPerUnitY > 0;
-    const hasReference = Number.isFinite(roll0) && Number.isFinite(pitch0);
-    const isComplete = hasScopeCenter && hasPixelScale && hasReference;
-
-    // Layout adjustments
-    const headerPadding = isLandscapeMode ? "p-3" : "p-5";
-    const titleSize = isLandscapeMode ? "text-xl" : "text-2xl";
-    const subtitleSize = isLandscapeMode ? "text-sm" : "text-base";
-    const subtitleMargin = isLandscapeMode ? "mt-1" : "mt-2";
-
-    const safeAreaEdges: ("top" | "bottom" | "left" | "right")[] = ["top", "bottom"];
-    if (isLandscapeMode) safeAreaEdges.push("left", "right");
-
-    const sideCtaWidth = isLandscapeMode
-        ? Math.min(320, Math.max(240, Math.floor(width * 0.34)))
-        : 0;
-
-    const bottomPadding = Math.max(insets.bottom, 8);
-
-    // ═══════════════════════════════════════════════════════════
-    // SUMMARY CARDS COMPONENT
-    // ═══════════════════════════════════════════════════════════
-
-    const SummaryCards = ({ compact = false }: { compact?: boolean }) => (
-        <View className={compact ? "gap-3" : "gap-4"}>
-            {/* Scope Center Card */}
-            <View className={`rounded-3xl bg-brand-greenDark/65 border border-brand-green/45 ${compact ? "p-4" : "p-5"}`}>
-                <View className="flex-row items-center">
-                    <View className="size-12 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-4">
-                        <Image source={icons.target} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
-                    </View>
-                    <View className="flex-1">
-                        <Text className="text-white/70 text-sm">Scope Center</Text>
-                        <Text className={`text-white ${compact ? "text-lg" : "text-xl"} font-semibold mt-1`}>
-                            {hasScopeCenter ? "Captured ✓" : "Not captured"}
-                        </Text>
-                    </View>
-                </View>
-            </View>
-
-            {/* Scope Adjustments Card */}
-            <View className={`rounded-3xl bg-brand-greenDark/65 border border-brand-green/45 ${compact ? "p-4" : "p-5"}`}>
-                <View className="flex-row items-center">
-                    <View className="size-12 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-4">
-                        <Image source={icons.scope} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
-                    </View>
-                    <View className="flex-1">
-                        <Text className="text-white/70 text-sm">Scope Adjustments</Text>
-                        <Text className={`text-white ${compact ? "text-lg" : "text-xl"} font-semibold mt-1`}>
-                            {hasPixelScale ? `Calibrated ✓ (${getUnitLabel(scopeUnit)})` : "Not calibrated"}
-                        </Text>
-                    </View>
-                </View>
-            </View>
-
-            {/* Reference Card */}
-            <View className={`rounded-3xl bg-brand-greenDark/65 border border-brand-green/45 ${compact ? "p-4" : "p-5"}`}>
-                <View className="flex-row items-center">
-                    <View className="size-12 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-4">
-                        <Image source={icons.compass} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
-                    </View>
-                    <View className="flex-1">
-                        <Text className="text-white/70 text-sm">Reference Baseline</Text>
-                        <Text className={`text-white ${compact ? "text-lg" : "text-xl"} font-semibold mt-1`}>
-                            {hasReference ? "Set ✓" : "Not set"}
-                        </Text>
-                    </View>
-                </View>
-            </View>
-
-            {/* Camera Settings Card */}
-            <View className={`rounded-3xl bg-brand-greenDark/65 border border-brand-green/45 ${compact ? "p-4" : "p-5"}`}>
-                <View className="flex-row items-center">
-                    <View className="size-12 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-4">
-                        <Image source={icons.camera} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
-                    </View>
-                    <View className="flex-1">
-                        <Text className="text-white/70 text-sm">Camera Setup</Text>
-                        <Text className={`text-white ${compact ? "text-lg" : "text-xl"} font-semibold mt-1`}>
-                            Ready ✓
-                        </Text>
-                        <Text className="text-white/50 text-xs mt-1">
-                            {getOrientationLabel(mountOrientation)} • {(cameraZoom * 100).toFixed(0)}% zoom
-                        </Text>
-                    </View>
-                </View>
-            </View>
-
-            {/* Warning if incomplete */}
-            {!isComplete && (
-                <View className="rounded-3xl bg-amber-900/40 border border-amber-600/50 p-4">
-                    <View className="flex-row items-start">
-                        <View className="size-10 rounded-2xl bg-amber-900/60 border border-amber-600/40 items-center justify-center mr-3">
-                            <Image source={icons.info} className="w-5 h-5" resizeMode="contain" tintColor="#fbbf24" />
-                        </View>
-                        <View className="flex-1">
-                            <Text className="text-amber-200 font-semibold">Calibration Incomplete</Text>
-                            <Text className="text-white/70 mt-1 text-sm">
-                                Please go back and complete all steps before hunting.
-                            </Text>
-                        </View>
-                    </View>
-                </View>
-            )}
+  // ==================== RENDER ====================
+  return (
+    <View className="flex-1 bg-brand-black">
+      {/* Camera Background */}
+      {shouldRenderCamera && (
+        <View style={StyleSheet.absoluteFill}>
+          <View style={[StyleSheet.absoluteFill, rotationTransform]}>
+            <CameraView
+              style={StyleSheet.absoluteFill}
+              facing="back"
+              zoom={cameraZoom}
+              autofocus={focusLocked ? "off" : "on"}
+            />
+          </View>
         </View>
-    );
+      )}
 
-    // ═══════════════════════════════════════════════════════════
-    // RENDER
-    // ═══════════════════════════════════════════════════════════
+      <SafeAreaView className="flex-1" edges={safeEdges}>
+        <View className={cn("flex-1 pt-3", compact ? "px-4" : "px-5")}>
+          <ScrollView
+            className="flex-1"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{
+              gap: compact ? 12 : 16,
+              paddingBottom: compact ? 80 : 120,
+            }}
+          >
+            {/* Header */}
+            <HeaderCard
+              icon={icons.check}
+              title="Calibration Complete"
+              subtitle="Review your settings and begin hunting"
+              compact={compact}
+            />
 
-    return (
-        <View className="flex-1 bg-brand-black">
-            {shouldRenderCamera && (
-                <View style={[StyleSheet.absoluteFill, rotationTransform]}>
-                    <CameraView style={StyleSheet.absoluteFill} facing="back" zoom={cameraZoom} autofocus={focusLocked ? "off" : "on"} />
+            {/* Summary Cards */}
+            <SummaryItem
+              icon={icons.target}
+              label="Scope Center"
+              value={hasScopeCenter ? "Captured" : "Not captured"}
+              success={hasScopeCenter}
+              compact={compact}
+            />
+
+            <SummaryItem
+              icon={icons.scope}
+              label="Scope Adjustments"
+              value={hasPixelScale ? `Calibrated (${getUnitLabel(scopeUnit)})` : "Not calibrated"}
+              success={hasPixelScale}
+              compact={compact}
+            />
+
+            <SummaryItem
+              icon={icons.compass}
+              label="Reference Baseline"
+              value={hasReference ? "Set" : "Not set"}
+              success={hasReference}
+              compact={compact}
+            />
+
+            <SummaryItem
+              icon={icons.camera}
+              label="Camera Setup"
+              value="Ready"
+              success={true}
+              compact={compact}
+            />
+
+            {/* Settings Summary */}
+            <SectionCard variant="muted" compact={compact}>
+              <View className={compact ? "gap-2" : "gap-3"}>
+                <View className="flex-row justify-between">
+                  <Text className="text-white/60 text-sm">Orientation</Text>
+                  <Text className="text-white text-sm font-semibold">
+                    {getOrientationLabel(mountOrientation)}
+                  </Text>
                 </View>
-            )}
+                <View className="flex-row justify-between">
+                  <Text className="text-white/60 text-sm">Unit System</Text>
+                  <Text className="text-white text-sm font-semibold">
+                    {getUnitLabel(scopeUnit)}
+                  </Text>
+                </View>
+                <View className="flex-row justify-between">
+                  <Text className="text-white/60 text-sm">Camera Zoom</Text>
+                  <Text className="text-white text-sm font-semibold">
+                    {(cameraZoom * 100).toFixed(0)}%
+                  </Text>
+                </View>
+                <View className="flex-row justify-between">
+                  <Text className="text-white/60 text-sm">Rotation</Text>
+                  <Text className="text-white text-sm font-semibold">
+                    {screenRotation.toFixed(1)}°
+                  </Text>
+                </View>
+              </View>
+            </SectionCard>
 
-            <SafeAreaView className="flex-1" edges={safeAreaEdges}>
-                {!isLandscapeMode ? (
-                    // ═══════════════════════════════════════════════════════
-                    // PORTRAIT LAYOUT
-                    // ═══════════════════════════════════════════════════════
-                    <View className="flex-1 px-6 pt-4">
-                        <ScrollView
-                            className="flex-1"
-                            contentContainerStyle={{ paddingBottom: 170 + bottomPadding }}
-                            showsVerticalScrollIndicator={false}
-                            bounces={false}
-                        >
-                            <View className={`rounded-3xl ${headerPadding} bg-brand-greenDark/70 border border-brand-green/60`}>
-                                <View className="flex-row items-center">
-                                    <View className="size-11 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-3">
-                                        <Image source={icons.target} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
-                                    </View>
-                                    <View className="flex-1">
-                                        <Text className={`text-white ${titleSize} font-semibold`}>Ready to Hunt</Text>
-                                        <Text className={`text-white/80 ${subtitleMargin} ${subtitleSize}`}>
-                                            Review your calibration, then begin.
-                                        </Text>
-                                    </View>
-                                </View>
-                            </View>
-
-                            <View className="mt-6">
-                                <SummaryCards />
-                            </View>
-                        </ScrollView>
-
-                        {/* CTAs */}
-                        <View style={{ paddingBottom: bottomPadding }} className="absolute bottom-0 left-0 right-0 px-6">
-                            <View className="bg-brand-black/55 border border-brand-green/20 rounded-3xl p-3">
-                                <Pressable
-                                    onPress={handleBeginHunting}
-                                    disabled={!isComplete}
-                                    className={[
-                                        "rounded-2xl items-center border py-5",
-                                        isComplete
-                                            ? "bg-brand-greenLight border-brand-green/60"
-                                            : "bg-brand-black/50 border-brand-green/30",
-                                    ].join(" ")}
-                                >
-                                    <Text className="text-white font-semibold text-xl">
-                                        {isComplete ? "Begin Hunt" : "Complete all steps"}
-                                    </Text>
-                                </Pressable>
-
-                                <View className="flex-row mt-3 gap-3">
-                                    <Pressable
-                                        onPress={handleBack}
-                                        className="flex-1 rounded-2xl items-center border bg-brand-black/50 border-brand-green/35 py-4"
-                                    >
-                                        <Text className="text-white/90 font-semibold text-base">Back</Text>
-                                    </Pressable>
-
-                                    <Pressable
-                                        onPress={handleCancel}
-                                        className="flex-1 rounded-2xl items-center border bg-brand-black/50 border-brand-green/35 py-4"
-                                    >
-                                        <Text className="text-red-400 font-semibold text-base">Cancel</Text>
-                                    </Pressable>
-                                </View>
-                            </View>
-                        </View>
-                    </View>
-                ) : (
-                    // ═══════════════════════════════════════════════════════
-                    // LANDSCAPE LAYOUT
-                    // ═══════════════════════════════════════════════════════
-                    <View className="flex-1 flex-row pt-3">
-                        <ScrollView
-                            className="flex-1"
-                            contentContainerStyle={{ paddingLeft: 16, paddingRight: 12, paddingTop: 8, paddingBottom: 16 }}
-                            showsVerticalScrollIndicator={false}
-                            bounces={false}
-                        >
-                            <View className={`rounded-3xl ${headerPadding} bg-brand-greenDark/70 border border-brand-green/60`}>
-                                <View className="flex-row items-center">
-                                    <View className="size-11 rounded-2xl bg-brand-black/50 border border-brand-green/40 items-center justify-center mr-3">
-                                        <Image source={icons.target} className="w-6 h-6" resizeMode="contain" tintColor="#0b7f4f" />
-                                    </View>
-                                    <View className="flex-1">
-                                        <Text className={`text-white ${titleSize} font-semibold`}>Ready to Hunt</Text>
-                                        <Text className={`text-white/80 ${subtitleMargin} ${subtitleSize}`}>
-                                            Review your calibration, then begin.
-                                        </Text>
-                                    </View>
-                                </View>
-                            </View>
-
-                            <View className="mt-4">
-                                <SummaryCards compact />
-                            </View>
-                        </ScrollView>
-
-                        {/* Side CTA Panel */}
-                        <View
-                            style={{
-                                width: sideCtaWidth,
-                                paddingRight: 16,
-                                paddingLeft: 8,
-                                paddingBottom: bottomPadding,
-                            }}
-                        >
-                            <View className="bg-brand-black/55 border border-brand-green/20 rounded-3xl p-3">
-                                <Text className="text-white/70 text-xs mb-2">Actions</Text>
-
-                                <Pressable
-                                    onPress={handleBeginHunting}
-                                    disabled={!isComplete}
-                                    className={[
-                                        "rounded-2xl items-center border py-4",
-                                        isComplete
-                                            ? "bg-brand-greenLight border-brand-green/60"
-                                            : "bg-brand-black/50 border-brand-green/30",
-                                    ].join(" ")}
-                                >
-                                    <Text className="text-white font-semibold text-lg">
-                                        {isComplete ? "Begin" : "Incomplete"}
-                                    </Text>
-                                </Pressable>
-
-                                <Pressable
-                                    onPress={handleBack}
-                                    className="mt-3 rounded-2xl items-center border bg-brand-black/50 border-brand-green/35 py-3"
-                                >
-                                    <Text className="text-white/90 font-semibold text-sm">Back</Text>
-                                </Pressable>
-
-                                <Pressable
-                                    onPress={handleCancel}
-                                    className="mt-3 rounded-2xl items-center border bg-brand-black/50 border-brand-green/35 py-3"
-                                >
-                                    <Text className="text-red-400 font-semibold text-sm">Cancel</Text>
-                                </Pressable>
-
-                                <View className="items-center">
-                                    <Text className="text-white/50 text-xs mt-3 text-center">
-                                        You can recalibrate anytime from settings.
-                                    </Text>
-                                </View>
-                            </View>
-                        </View>
-                    </View>
+            {/* Status Message */}
+            {isComplete ? (
+              <View
+                className={cn(
+                  "rounded-2xl bg-brand-greenLight/15 border border-brand-greenLight/40",
+                  compact ? "p-3" : "p-4"
                 )}
-            </SafeAreaView>
+              >
+                <Text
+                  className={cn(
+                    "text-brand-greenLight text-center font-semibold",
+                    compact ? "text-sm" : "text-base"
+                  )}
+                >
+                  All systems ready — tap "Begin Hunting" to start!
+                </Text>
+              </View>
+            ) : (
+              <View
+                className={cn(
+                  "rounded-2xl bg-yellow-500/15 border border-yellow-500/40",
+                  compact ? "p-3" : "p-4"
+                )}
+              >
+                <Text
+                  className={cn(
+                    "text-yellow-500 text-center font-semibold",
+                    compact ? "text-sm" : "text-base"
+                  )}
+                >
+                  Some steps are incomplete. Go back to finish calibration.
+                </Text>
+              </View>
+            )}
+          </ScrollView>
+
+          {/* CTAs */}
+          <View className={compact ? "py-2" : "py-3"}>
+            {/* Begin Hunting Button */}
+            <Pressable
+              onPress={handleBeginHunting}
+              disabled={!isComplete}
+              className={cn(
+                "rounded-xl items-center border",
+                compact ? "py-3" : "py-4",
+                isComplete
+                  ? "bg-brand-greenLight border-brand-green/60"
+                  : "bg-brand-black/30 border-brand-green/30"
+              )}
+            >
+              <View className="flex-row items-center">
+                <Image
+                  source={icons.target}
+                  className={compact ? "w-5 h-5 mr-2" : "w-6 h-6 mr-3"}
+                  resizeMode="contain"
+                  style={{ tintColor: isComplete ? "#ffffff" : "#666666" }}
+                />
+                <Text
+                  className={cn(
+                    "font-semibold",
+                    compact ? "text-base" : "text-lg",
+                    isComplete ? "text-white" : "text-white/40"
+                  )}
+                >
+                  Begin Hunting
+                </Text>
+              </View>
+            </Pressable>
+
+            {/* Navigation */}
+            <View className="flex-row items-center justify-center gap-4 mt-3">
+              <IconButton
+                icon={icons.chevronLeft}
+                onPress={handleBack}
+                size={compact ? "sm" : "md"}
+              />
+
+              <IconButton
+                icon={icons.cancel}
+                onPress={handleCancel}
+                size={compact ? "sm" : "md"}
+              />
+            </View>
+          </View>
         </View>
-    );
+      </SafeAreaView>
+    </View>
+  );
 }

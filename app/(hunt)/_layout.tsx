@@ -99,7 +99,7 @@ export default function HuntLayout() {
                 <View className="flex-row gap-4">
                     <View
                         className="px-6 py-3 rounded-xl bg-zinc-800 border border-zinc-700"
-                        onTouchEnd={() => router.replace("/(tabs)")}
+                        onTouchEnd={() => router.replace("/(tabs)/Home")}
                     >
                         <Text className="text-white font-semibold">Go Back</Text>
                     </View>

@@ -32,6 +32,7 @@ import chevronUp from "../assets/icons/chevronUp.png"
 import chevronDown from "../assets/icons/chevronDown.png"
 import arrowUp from "../assets/icons/arrowUp.png"
 import scope from "../assets/icons/scope.png"
+import refresh from "../assets/icons/refresh.png"
 
 const icons = {
     leftArrow,
@@ -67,6 +68,7 @@ const icons = {
     chevronUp,
     chevronDown,
     arrowUp,
-    scope
+    scope,
+    refresh
 }
 export default icons
