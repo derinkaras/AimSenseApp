@@ -78,6 +78,7 @@ export default function Step5() {
   const [stepSize, setStepSize] = useState<StepSize>(1);
   const [lastTapPoint, setLastTapPoint] = useState<ScopeCenterPx | null>(null);
   const [cameraLayout, setCameraLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [showMountWarning, setShowMountWarning] = useState(true);
 
   const rotationTransform = { transform: [{ rotate: `${rotation}deg` }] };
 
@@ -208,6 +209,47 @@ export default function Step5() {
       </View>
   );
 
+  // ==================== MOUNT WARNING BANNER ====================
+  const MountWarningBanner = () => {
+    if (!showMountWarning) return null;
+
+    // In landscape, account for side panel; in portrait, full width
+    const rightOffset = isLandscapeMode ? layoutConfig.sidePanelWidth + 16 : 16;
+
+    return (
+        <View
+            style={[
+              styles.warningContainer,
+              {
+                top: Math.max(insets.top, 8) + 8,
+                right: rightOffset,
+              }
+            ]}
+            pointerEvents="box-none"
+        >
+          <View style={styles.warningBanner}>
+            <View style={styles.warningContent}>
+              <Image
+                  source={icons.info}
+                  style={styles.warningIcon}
+                  resizeMode="contain"
+              />
+              <Text style={styles.warningText}>
+                Align the scope's crosshair with the screen axes using rotation, then mark its center precisely. Accuracy here determines holdover precision.
+              </Text>
+            </View>
+            <Pressable
+                onPress={() => setShowMountWarning(false)}
+                style={styles.warningClose}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.warningCloseText}>✕</Text>
+            </Pressable>
+          </View>
+        </View>
+    );
+  };
+
   // ==================== RENDER ====================
   if (isLandscapeMode) {
     return (
@@ -235,6 +277,9 @@ export default function Step5() {
             )}
             {centerPoint && <Magnifier point={centerPoint} />}
           </View>
+
+          {/* Mount Security Warning */}
+          <MountWarningBanner />
 
           {/* Side Panel */}
           <SafeAreaView className="absolute top-0 bottom-0 right-0" edges={["top", "bottom", "right"]} style={{ width: layoutConfig.sidePanelWidth }}>
@@ -359,6 +404,9 @@ export default function Step5() {
           {centerPoint && <Magnifier point={centerPoint} />}
         </View>
 
+        {/* Mount Security Warning */}
+        <MountWarningBanner />
+
         {/* Bottom Panel */}
         <SafeAreaView
             className="absolute bottom-0 left-0 right-0 bg-brand-black/95 border-t border-brand-green/30"
@@ -458,3 +506,56 @@ export default function Step5() {
       </View>
   );
 }
+
+// ==================== STYLES ====================
+const styles = StyleSheet.create({
+  warningContainer: {
+    position: 'absolute',
+    left: 16,
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  warningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(6, 78, 59, 0.95)',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.5)',
+    maxWidth: 360,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  warningContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  warningIcon: {
+    width: 18,
+    height: 18,
+    marginRight: 10,
+    tintColor: '#22c55e',
+  },
+  warningText: {
+    flex: 1,
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 16,
+  },
+  warningClose: {
+    marginLeft: 10,
+    padding: 4,
+  },
+  warningCloseText: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+});
