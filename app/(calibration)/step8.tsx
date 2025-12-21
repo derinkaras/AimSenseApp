@@ -356,7 +356,7 @@ export default function Step8() {
                                     ].join(" ")}
                                 >
                                     <Text className="text-white font-semibold text-lg">
-                                        {isComplete ? "🎯 Begin" : "Incomplete"}
+                                        {isComplete ? "Begin" : "Incomplete"}
                                     </Text>
                                 </Pressable>
 

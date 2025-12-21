@@ -33,7 +33,6 @@ import {
     isLandscape,
     ScopeCenterPx,
     getCameraLayoutConfig,
-    getMagnifierPosition,
     clampValue,
 } from "@/app/calibration/exports";
 import icons from "@/app/constants/icons";
@@ -116,33 +115,22 @@ export default function Step5() {
         return getCameraLayoutConfig(width, height, isLandscapeMode, insets.bottom);
     }, [storedCameraLayout, width, height, isLandscapeMode, insets.bottom]);
 
-    // Magnifier position using centralized function
+    // Magnifier position - as top-left as possible respecting safe areas
     const magnifierPos = useMemo(() => {
-        const fallbackW = Math.max(0, width - layoutConfig.cameraInsets.padRight);
-        const fallbackH = Math.max(0, height - layoutConfig.cameraInsets.padBottom);
-        const containerW = cameraLayout.width > 0 ? cameraLayout.width : fallbackW;
-        const containerH = cameraLayout.height > 0 ? cameraLayout.height : fallbackH;
+        const halfMag = layoutConfig.magnifierSize / 2;
 
-        // Default position in top-left area
-        return getMagnifierPosition(
-            layoutConfig.magnifierSize / 2 + 50,
-            layoutConfig.magnifierSize / 2 + insets.top + 20,
-            containerW,
-            containerH,
-            layoutConfig.magnifierSize,
-            width,
-            insets.top
-        );
-    }, [
-        width,
-        height,
-        insets.top,
-        layoutConfig.cameraInsets.padRight,
-        layoutConfig.cameraInsets.padBottom,
-        layoutConfig.magnifierSize,
-        cameraLayout.width,
-        cameraLayout.height,
-    ]);
+        // Minimum padding from edges
+        const edgePadding = 4;
+
+        // Respect safe areas (notch/dynamic island)
+        const safeLeft = isLandscapeMode ? Math.max(insets.left, edgePadding) : edgePadding;
+        const safeTop = Math.max(insets.top, edgePadding);
+
+        return {
+            x: safeLeft + halfMag + edgePadding,
+            y: safeTop + halfMag + edgePadding
+        };
+    }, [isLandscapeMode, insets.left, insets.top, layoutConfig.magnifierSize]);
 
     const handleCameraLayout = (event: any) => {
         const { x, y, width, height } = event.nativeEvent.layout;
@@ -276,8 +264,8 @@ export default function Step5() {
                                 {
                                     width: layoutConfig.magnifierSize,
                                     height: layoutConfig.magnifierSize,
-                                    left: magnifierPos.left,
-                                    top: magnifierPos.top,
+                                    left: magnifierPos.x,
+                                    top: magnifierPos.y,
                                 },
                             ]}
                             pointerEvents="none"
@@ -463,39 +451,35 @@ export default function Step5() {
                                 </>
                             )}
                         </ScrollView>
+
+                        {/* Navigation Buttons - Bottom of side panel */}
+                        <View className="px-3 pb-3 pt-2">
+                            <View className="flex-row items-center justify-center gap-2">
+                                <Pressable
+                                    onPress={handleBack}
+                                    className="size-10 rounded-xl items-center justify-center bg-brand-black/60 border border-brand-green/35"
+                                >
+                                    <Image source={icons.chevronLeft} className="w-5 h-5" resizeMode="contain" tintColor="#e5e5e5" />
+                                </Pressable>
+
+                                <Pressable
+                                    onPress={handleNext}
+                                    disabled={!centerPoint}
+                                    className={`size-10 rounded-xl items-center justify-center border ${centerPoint ? "bg-brand-greenLight border-brand-green/60" : "bg-brand-black/30 border-brand-green/30"}`}
+                                >
+                                    <Image source={icons.chevronRight} className="w-5 h-5" resizeMode="contain" tintColor={centerPoint ? "#ffffff" : "#666666"} />
+                                </Pressable>
+
+                                <Pressable
+                                    onPress={handleCancel}
+                                    className="size-10 rounded-xl items-center justify-center bg-brand-black/60 border border-brand-green/35"
+                                >
+                                    <Image source={icons.cancel} className="w-5 h-5" resizeMode="contain" tintColor="#e5e5e5" />
+                                </Pressable>
+                            </View>
+                        </View>
                     </View>
                 </SafeAreaView>
-
-                {/* Floating CTAs - Bottom center over camera */}
-                <View
-                    className="absolute bottom-0 left-0 items-center pb-4 px-4"
-                    style={{ right: layoutConfig.sidePanelWidth }}
-                    pointerEvents="box-none"
-                >
-                    <View className="flex-row items-center gap-3 bg-brand-black/80 rounded-2xl p-2 border border-brand-green/40">
-                        <Pressable
-                            onPress={handleBack}
-                            className="size-11 rounded-xl items-center justify-center bg-brand-black/60 border border-brand-green/35"
-                        >
-                            <Image source={icons.chevronLeft} className="w-5 h-5" resizeMode="contain" tintColor="#e5e5e5" />
-                        </Pressable>
-
-                        <Pressable
-                            onPress={handleNext}
-                            disabled={!centerPoint}
-                            className={`size-11 rounded-xl items-center justify-center border ${centerPoint ? "bg-brand-greenLight border-brand-green/60" : "bg-brand-black/30 border-brand-green/30"}`}
-                        >
-                            <Image source={icons.chevronRight} className="w-5 h-5" resizeMode="contain" tintColor={centerPoint ? "#ffffff" : "#666666"} />
-                        </Pressable>
-
-                        <Pressable
-                            onPress={handleCancel}
-                            className="size-11 rounded-xl items-center justify-center bg-brand-black/60 border border-brand-green/35"
-                        >
-                            <Image source={icons.cancel} className="w-5 h-5" resizeMode="contain" tintColor="#e5e5e5" />
-                        </Pressable>
-                    </View>
-                </View>
             </View>
         );
     }

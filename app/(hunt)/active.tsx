@@ -3,8 +3,8 @@
 // ============================================================
 // Live hunting experience with:
 // - Camera view with calibrated settings
+// - EXACT SAME LAYOUT as step6/step7 for pixel-perfect calibration accuracy
 // - Toggle crosshair to verify calibration alignment
-// - Clean minimal HUD with pulsing "Live" indicator
 
 import React, { useCallback, useState, useEffect, useRef } from "react";
 import {
@@ -16,6 +16,7 @@ import {
     Modal,
     Animated,
     Easing,
+    useWindowDimensions,
 } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -23,7 +24,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import * as Haptics from "expo-haptics";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import * as ScreenOrientation from "expo-screen-orientation";
-import { useCalibrationStore, isLandscape } from "@/app/calibration/exports";
+import { useCalibrationStore, isLandscape, getCameraLayoutConfig } from "@/app/calibration/exports";
 import {
     useHuntStore,
     selectSelectedGun,
@@ -42,6 +43,7 @@ export default function ActiveHunt() {
     const { activeScreen, setActiveScreen } = useCameraContext();
     const insets = useSafeAreaInsets();
     const navigation = useNavigation();
+    const { width, height } = useWindowDimensions();
 
     // UI State
     const [showEndConfirm, setShowEndConfirm] = useState(false);
@@ -81,7 +83,7 @@ export default function ActiveHunt() {
                         useNativeDriver: true,
                     }),
                     Animated.timing(pulseOpacity, {
-                        toValue: 0.3,
+                        toValue: 0,
                         duration: 600,
                         easing: Easing.out(Easing.ease),
                         useNativeDriver: true,
@@ -90,26 +92,23 @@ export default function ActiveHunt() {
                 Animated.parallel([
                     Animated.timing(pulseAnim, {
                         toValue: 1,
-                        duration: 600,
-                        easing: Easing.in(Easing.ease),
+                        duration: 0,
                         useNativeDriver: true,
                     }),
                     Animated.timing(pulseOpacity, {
                         toValue: 1,
-                        duration: 600,
-                        easing: Easing.in(Easing.ease),
+                        duration: 0,
                         useNativeDriver: true,
                     }),
                 ]),
+                Animated.delay(400),
             ])
         );
-
         pulseAnimation.start();
-
         return () => pulseAnimation.stop();
     }, []);
 
-    // Animate crosshair visibility
+    // Crosshair visibility animation
     useEffect(() => {
         Animated.timing(crosshairOpacity, {
             toValue: showCrosshair ? 1 : 0,
@@ -131,13 +130,8 @@ export default function ActiveHunt() {
     const isLandscapeMode = isLandscape(mountOrientation);
     const rotationTransform = { transform: [{ rotate: `${screenRotation}deg` }] };
 
-    const bottomPadding = Math.max(insets.bottom, 16);
-
-    const safeAreaEdges: ("top" | "bottom" | "left" | "right")[] = ["top", "bottom"];
-    if (isLandscapeMode) safeAreaEdges.push("left", "right");
-
-    // Get unit info
-    const isImperial = selectedGun?.unitSystem === "IMPERIAL";
+    // CRITICAL: Use the EXACT same layout config as step6/step7
+    const layoutConfig = getCameraLayoutConfig(width, height, isLandscapeMode, insets.bottom);
 
     // Handlers
     const handleToggleCrosshair = () => {
@@ -157,7 +151,6 @@ export default function ActiveHunt() {
         endHunt();
         await resetCalibration();
 
-        // Explicitly unlock and lock to portrait
         await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
 
         navigation.dispatch(
@@ -174,312 +167,469 @@ export default function ActiveHunt() {
     };
 
     // Pulsing Live Indicator Component
-    const PulsingLiveIndicator = () => (
-        <View style={styles.liveIndicatorRow}>
-            <View style={styles.pulseContainer}>
+    const PulsingLiveIndicator = ({ large = false }: { large?: boolean }) => (
+        <View className="flex-row items-center">
+            <View className={`${large ? "size-5" : "size-4"} items-center justify-center mr-1.5`}>
                 <Animated.View
                     style={[
-                        styles.pulseRing,
+                        {
+                            position: "absolute",
+                            width: large ? 18 : 14,
+                            height: large ? 18 : 14,
+                            borderRadius: large ? 9 : 7,
+                            borderWidth: 2,
+                            borderColor: "#22c55e",
+                        },
                         {
                             transform: [{ scale: pulseAnim }],
                             opacity: pulseOpacity,
                         },
                     ]}
                 />
-                <View style={styles.liveDot} />
+                <View
+                    style={{
+                        width: large ? 10 : 8,
+                        height: large ? 10 : 8,
+                        borderRadius: large ? 5 : 4,
+                        backgroundColor: "#22c55e",
+                    }}
+                />
             </View>
-            <Text style={styles.liveText}>Live</Text>
+            <Text className={`text-green-500 font-semibold ${large ? "text-base" : "text-sm"}`}>Live</Text>
         </View>
     );
 
+    // Modal renderer
+    const renderEndHuntModal = () => (
+        <Modal
+            visible={showEndConfirm}
+            animationType="fade"
+            transparent={true}
+            onRequestClose={handleCancelEndHunt}
+            supportedOrientations={["portrait", "landscape", "landscape-left", "landscape-right"]}
+        >
+            <View style={styles.modalOverlay}>
+                <View style={styles.modalContent}>
+                    <View style={styles.modalIconContainer}>
+                        <View style={styles.modalIconCircle}>
+                            <Image source={icons.cancel} style={styles.modalIcon} resizeMode="contain" />
+                        </View>
+                    </View>
+                    <Text style={styles.modalTitle}>End Hunt?</Text>
+                    <Text style={styles.modalMessage}>
+                        Are you sure you want to end this hunting session? You'll need to recalibrate to start a new hunt.
+                    </Text>
+                    <View style={styles.modalButtonRow}>
+                        <Pressable onPress={handleCancelEndHunt} style={styles.modalCancelButton}>
+                            <Text style={styles.modalCancelText}>Cancel</Text>
+                        </Pressable>
+                        <Pressable onPress={handleConfirmEndHunt} style={styles.modalConfirmButton}>
+                            <Text style={styles.modalConfirmText}>End Hunt</Text>
+                        </Pressable>
+                    </View>
+                </View>
+            </View>
+        </Modal>
+    );
+
+    // ============================================================
+    // LANDSCAPE LAYOUT - EXACT SAME AS STEP6/STEP7
+    // ============================================================
+    if (isLandscapeMode) {
+        return (
+            <View className="flex-1 bg-brand-black">
+                {/* Camera region (left) - EXACT same as step6/step7 */}
+                <View
+                    style={[
+                        StyleSheet.absoluteFill,
+                        { right: layoutConfig.cameraInsets.padRight, bottom: layoutConfig.cameraInsets.padBottom }
+                    ]}
+                >
+                    {shouldRenderCamera && (
+                        <View style={StyleSheet.absoluteFill}>
+                            <View style={[StyleSheet.absoluteFill, rotationTransform]}>
+                                <CameraView
+                                    style={StyleSheet.absoluteFill}
+                                    facing="back"
+                                    zoom={cameraZoom}
+                                    autofocus={focusLocked ? "off" : "on"}
+                                />
+                            </View>
+
+                            {/* Scope Center Crosshair - same style as step6/step7 */}
+                            {scopeCenterPx && (
+                                <Animated.View
+                                    style={[
+                                        styles.crosshairWrapper,
+                                        {
+                                            left: scopeCenterPx.x - 50,
+                                            top: scopeCenterPx.y - 50,
+                                            opacity: crosshairOpacity,
+                                        },
+                                    ]}
+                                    pointerEvents="none"
+                                >
+                                    <View style={styles.crosshairRing} />
+                                    <View style={styles.crosshairContainer}>
+                                        <View style={styles.crosshairTop} />
+                                        <View style={styles.crosshairBottom} />
+                                        <View style={styles.crosshairLeft} />
+                                        <View style={styles.crosshairRight} />
+                                        <View style={styles.crosshairCenter} />
+                                    </View>
+                                    <View style={styles.crosshairLabel}>
+                                        <Text style={styles.crosshairLabelText}>ZERO</Text>
+                                    </View>
+                                </Animated.View>
+                            )}
+                        </View>
+                    )}
+                </View>
+
+                {/* Right panel - EXACT same structure as step6/step7 */}
+                <SafeAreaView
+                    className="absolute top-0 bottom-0 right-0"
+                    edges={["top", "bottom", "right"]}
+                    style={{ width: layoutConfig.sidePanelWidth }}
+                >
+                    <View className="flex-1 bg-brand-black/95 border-l border-brand-green/30">
+                        {/* Header - same px-3 pt-3 pb-2 as step6/step7 */}
+                        <View className="px-3 pt-3 pb-2">
+                            <View className="flex-row items-start">
+                                <View className="size-8 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
+                                    <Image source={icons.scope} className="w-4 h-4" resizeMode="contain" tintColor="#0b7f4f" />
+                                </View>
+                                <View className="flex-1">
+                                    <Text className="text-white font-semibold text-sm">Hunt Active</Text>
+                                    <Text className="text-white/60 text-[11px]">Session in progress</Text>
+                                </View>
+                            </View>
+                        </View>
+
+                        {/* Content - same px-3 as step6/step7 */}
+                        <View className="flex-1 px-3">
+                            {/* Gun Profile Box */}
+                            <View className="rounded-xl bg-brand-greenDark/40 border border-brand-green/30 p-3 mb-2">
+                                <Text className="text-white/50 text-[10px] uppercase tracking-wider mb-1">Rifle</Text>
+                                <Text className="text-white font-semibold text-sm" numberOfLines={2}>
+                                    {selectedGun?.name ?? "Unknown"}
+                                </Text>
+                            </View>
+
+                            {/* Live Status */}
+                            <View className="rounded-xl bg-brand-greenDark/50 border border-brand-green/40 p-3 mb-2">
+                                <PulsingLiveIndicator />
+                            </View>
+
+                            {/* Verify Zero Button */}
+                            <Pressable
+                                onPress={handleToggleCrosshair}
+                                className={`rounded-xl p-3 border mb-2 ${
+                                    showCrosshair
+                                        ? "bg-brand-greenDark/80 border-brand-green"
+                                        : "bg-brand-black/40 border-brand-green/30"
+                                }`}
+                            >
+                                <View className="flex-row items-center">
+                                    <Image
+                                        source={icons.target}
+                                        className="w-5 h-5 mr-2"
+                                        resizeMode="contain"
+                                        tintColor={showCrosshair ? "#22c55e" : "#9ca3af"}
+                                    />
+                                    <Text className={`text-sm font-semibold ${showCrosshair ? "text-white" : "text-white/70"}`}>
+                                        {showCrosshair ? "Hide Crosshair" : "Verify Zero"}
+                                    </Text>
+                                </View>
+                                <Text className="text-white/50 text-xs mt-1">
+                                    {showCrosshair ? "Crosshair visible on screen" : "Tap to check calibration"}
+                                </Text>
+                            </Pressable>
+
+                            {/* Spacer */}
+                            <View className="flex-1" />
+
+                            {/* End Hunt Button */}
+                            <Pressable
+                                onPress={handleEndHuntPress}
+                                className="rounded-xl py-3 bg-red-950/70 border border-red-900/50 items-center mb-2"
+                            >
+                                <Text className="text-red-400 font-semibold text-base">End Hunt</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </SafeAreaView>
+
+                {renderEndHuntModal()}
+            </View>
+        );
+    }
+
+    // ============================================================
+    // PORTRAIT LAYOUT - EXACT SAME AS STEP6/STEP7
+    // ============================================================
+    const controlPanelHeight = 240; // EXACT same as step6/step7
+
     return (
         <View className="flex-1 bg-brand-black">
-            {/* Camera with calibrated settings */}
-            {shouldRenderCamera && (
-                <View style={[StyleSheet.absoluteFill, rotationTransform]}>
-                    <CameraView
-                        style={StyleSheet.absoluteFill}
-                        facing="back"
-                        zoom={cameraZoom}
-                        autofocus={focusLocked ? "off" : "on"}
-                    />
-                </View>
-            )}
-
-            {/* Scope Center Crosshair - conditionally visible with animation */}
-            {scopeCenterPx && (
-                <Animated.View
-                    style={[
-                        styles.crosshairContainer,
-                        {
-                            left: scopeCenterPx.x - 50,
-                            top: scopeCenterPx.y - 50,
-                            opacity: crosshairOpacity,
-                        },
-                    ]}
-                    pointerEvents="none"
-                >
-                    <View style={styles.crosshairRing} />
-                    <View style={styles.crosshairV} />
-                    <View style={styles.crosshairH} />
-                    <View style={styles.crosshairDot} />
-                    <View style={styles.crosshairLabel}>
-                        <Text style={styles.crosshairLabelText}>ZERO</Text>
-                    </View>
-                </Animated.View>
-            )}
-
-            <SafeAreaView className="flex-1" edges={safeAreaEdges}>
-                <View className={`flex-1 ${isLandscapeMode ? "px-4" : "px-6"}`}>
-
-                    {/* TOP HUD */}
-                    <View className="flex-row items-center justify-between mt-2">
-                        {/* Selected Gun Badge */}
-                        <View className="px-3 py-2 rounded-xl bg-black/60 backdrop-blur border border-zinc-700/50 flex-1 mr-2">
-                            <Text className="text-zinc-500 text-[10px] uppercase tracking-wider">Rifle</Text>
-                            <Text className="text-white font-semibold text-sm" numberOfLines={1}>
-                                {selectedGun?.name ?? "Unknown"}
-                            </Text>
+            {/* Camera region - EXACT same as step6/step7 portrait */}
+            <View
+                style={[
+                    StyleSheet.absoluteFill,
+                    { bottom: controlPanelHeight + layoutConfig.bottomPadding }
+                ]}
+            >
+                {shouldRenderCamera && (
+                    <View style={StyleSheet.absoluteFill}>
+                        <View style={[StyleSheet.absoluteFill, rotationTransform]}>
+                            <CameraView
+                                style={StyleSheet.absoluteFill}
+                                facing="back"
+                                zoom={cameraZoom}
+                                autofocus={focusLocked ? "off" : "on"}
+                            />
                         </View>
+
+                        {/* Scope Center Crosshair - same style as step6/step7 */}
+                        {scopeCenterPx && (
+                            <Animated.View
+                                style={[
+                                    styles.crosshairWrapper,
+                                    {
+                                        left: scopeCenterPx.x - 50,
+                                        top: scopeCenterPx.y - 50,
+                                        opacity: crosshairOpacity,
+                                    },
+                                ]}
+                                pointerEvents="none"
+                            >
+                                <View style={styles.crosshairRing} />
+                                <View style={styles.crosshairContainer}>
+                                    <View style={styles.crosshairTop} />
+                                    <View style={styles.crosshairBottom} />
+                                    <View style={styles.crosshairLeft} />
+                                    <View style={styles.crosshairRight} />
+                                    <View style={styles.crosshairCenter} />
+                                </View>
+                                <View style={styles.crosshairLabel}>
+                                    <Text style={styles.crosshairLabelText}>ZERO</Text>
+                                </View>
+                            </Animated.View>
+                        )}
+                    </View>
+                )}
+            </View>
+
+            <SafeAreaView className="absolute bottom-0 left-0 right-0" edges={["bottom"]}>
+                <View
+                    style={{ paddingBottom: layoutConfig.bottomPadding }}
+                    className="bg-brand-black/95 px-4"
+                >
+                    {/* Header Row - same structure as step6/step7 */}
+                    <View className="flex-row items-center mb-3">
+                        <View className="size-9 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
+                            <Image source={icons.scope} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
+                        </View>
+                        <View className="flex-1">
+                            <Text className="text-white font-semibold text-base">Hunt Active</Text>
+                            <Text className="text-white/60 text-xs">Session in progress</Text>
+                        </View>
+                        {/* Live indicator */}
+                        <View className="px-3 py-2 rounded-xl bg-brand-greenDark/50 border border-brand-green/40">
+                            <PulsingLiveIndicator large />
+                        </View>
+                    </View>
+
+                    {/* Gun Profile Box */}
+                    <View className="rounded-xl bg-brand-greenDark/40 border border-brand-green/30 p-3 mb-3">
+                        <Text className="text-white/50 text-xs uppercase tracking-wider mb-1">Rifle</Text>
+                        <Text className="text-white font-semibold text-lg" numberOfLines={1}>
+                            {selectedGun?.name ?? "Unknown"}
+                        </Text>
+                    </View>
+
+                    {/* Buttons Row */}
+                    <View className="flex-row gap-3">
+                        {/* Verify Zero Button */}
+                        <Pressable
+                            onPress={handleToggleCrosshair}
+                            className={`flex-1 rounded-xl py-3 px-4 flex-row items-center justify-center border ${
+                                showCrosshair
+                                    ? "bg-brand-greenDark/80 border-brand-green"
+                                    : "bg-brand-black/40 border-brand-green/30"
+                            }`}
+                        >
+                            <Image
+                                source={icons.target}
+                                className="w-5 h-5 mr-2"
+                                resizeMode="contain"
+                                tintColor={showCrosshair ? "#22c55e" : "#9ca3af"}
+                            />
+                            <Text className={`font-semibold text-base ${showCrosshair ? "text-white" : "text-white/70"}`}>
+                                {showCrosshair ? "Hide" : "Verify Zero"}
+                            </Text>
+                        </Pressable>
 
                         {/* End Hunt Button */}
                         <Pressable
                             onPress={handleEndHuntPress}
-                            className="px-3 py-2.5 rounded-xl bg-red-950/70 border border-red-900/50"
+                            className="rounded-xl py-3 px-6 bg-red-950/70 border border-red-900/50 items-center justify-center"
                         >
-                            <Text className="text-red-400 font-semibold text-xs">
-                                End
-                            </Text>
+                            <Text className="text-red-400 font-semibold text-base">End</Text>
                         </Pressable>
-
-                        {/* Status Badge with Pulsing Indicator */}
-                        <View className="px-3 py-2 rounded-xl bg-brand-greenDark/70 border border-brand-green/50 flex-1 ml-2">
-                            <PulsingLiveIndicator />
-                        </View>
-                    </View>
-
-                    {/* BOTTOM CONTROLS */}
-                    <View
-                        className="absolute bottom-0 left-0 right-0"
-                        style={{ paddingBottom: bottomPadding, paddingHorizontal: isLandscapeMode ? 16 : 24 }}
-                    >
-                        {/* Check Calibration Button */}
-                        <Pressable
-                            onPress={handleToggleCrosshair}
-                            className={`rounded-2xl py-4 flex-row items-center justify-center border ${
-                                showCrosshair
-                                    ? "bg-brand-greenDark/90 border-brand-green"
-                                    : "bg-black/70 border-zinc-700/50"
-                            }`}
-                            style={styles.calibrationButton}
-                        >
-                            <Image
-                                source={icons.target}
-                                className="w-5 h-5 mr-2.5"
-                                resizeMode="contain"
-                                tintColor={showCrosshair ? "#22c55e" : "#9ca3af"}
-                            />
-                            <Text className={`font-semibold ${showCrosshair ? "text-white" : "text-zinc-400"}`}>
-                                {showCrosshair ? "Hide Crosshair" : "Confirm Calibration"}
-                            </Text>
-
-                            <View className={`ml-3 px-2 py-0.5 rounded-full ${showCrosshair ? "bg-green-500/20" : "bg-zinc-700/50"}`}>
-                                <Text className={`text-[10px] font-medium ${showCrosshair ? "text-green-400" : "text-zinc-500"}`}>
-                                    {showCrosshair ? "ON" : "OFF"}
-                                </Text>
-                            </View>
-                        </Pressable>
-
-                        <Text className="text-zinc-600 text-[11px] text-center mt-2.5">
-                            {showCrosshair
-                                ? "Align your scope reticle with the green crosshair to make sure you're still calibrated"
-                                : "Tap to verify your scope is still aligned"
-                            }
-                        </Text>
                     </View>
                 </View>
             </SafeAreaView>
 
-            {/* End Hunt Confirmation Modal */}
-            <Modal
-                visible={showEndConfirm}
-                animationType="fade"
-                transparent={true}
-                onRequestClose={handleCancelEndHunt}
-                supportedOrientations={["portrait", "landscape", "landscape-left", "landscape-right"]}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        {/* Icon */}
-                        <View style={styles.modalIconContainer}>
-                            <View style={styles.modalIconCircle}>
-                                <Image
-                                    source={icons.cancel}
-                                    style={styles.modalIcon}
-                                    resizeMode="contain"
-                                />
-                            </View>
-                        </View>
-
-                        {/* Title & Message */}
-                        <Text style={styles.modalTitle}>End Hunt?</Text>
-                        <Text style={styles.modalMessage}>
-                            Are you sure you want to end this hunting session? You'll need to recalibrate to start a new hunt.
-                        </Text>
-
-                        {/* Buttons */}
-                        <View style={styles.modalButtonRow}>
-                            <Pressable
-                                onPress={handleCancelEndHunt}
-                                style={styles.modalCancelButton}
-                            >
-                                <Text style={styles.modalButtonText}>Cancel</Text>
-                            </Pressable>
-
-                            <Pressable
-                                onPress={handleConfirmEndHunt}
-                                style={styles.modalConfirmButton}
-                            >
-                                <Text style={styles.modalButtonText}>End Hunt</Text>
-                            </Pressable>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
+            {renderEndHuntModal()}
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    // Crosshair styles
-    crosshairContainer: {
+    // Crosshair wrapper (includes ring and label)
+    crosshairWrapper: {
         position: "absolute",
         width: 100,
         height: 100,
         alignItems: "center",
         justifyContent: "center",
-        zIndex: 10,
     },
+    // Outer ring around crosshair
     crosshairRing: {
+        position: "absolute",
+        width: 90,
+        height: 90,
+        borderRadius: 45,
+        borderWidth: 2,
+        borderColor: "rgba(34, 197, 94, 0.5)",
+    },
+    // Crosshair container - EXACT same as step6/step7
+    crosshairContainer: {
         position: "absolute",
         width: 80,
         height: 80,
-        borderRadius: 40,
-        borderWidth: 1.5,
-        borderColor: "rgba(34, 197, 94, 0.4)",
-    },
-    crosshairV: {
-        position: "absolute",
-        width: 2,
-        height: 100,
-        backgroundColor: "#22c55e",
-    },
-    crosshairH: {
-        position: "absolute",
-        width: 100,
-        height: 2,
-        backgroundColor: "#22c55e",
-    },
-    crosshairDot: {
-        position: "absolute",
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        backgroundColor: "#22c55e",
-        borderWidth: 2,
-        borderColor: "rgba(0, 0, 0, 0.5)",
-    },
-    crosshairLabel: {
-        position: "absolute",
-        bottom: -18,
-        backgroundColor: "rgba(34, 197, 94, 0.9)",
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 4,
-    },
-    crosshairLabelText: {
-        color: "#000",
-        fontSize: 9,
-        fontWeight: "700",
-        letterSpacing: 1,
-    },
-    calibrationButton: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 8,
-    },
-
-    // Pulsing indicator styles
-    liveIndicatorRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "flex-end",
-    },
-    pulseContainer: {
-        width: 12,
-        height: 12,
         alignItems: "center",
         justifyContent: "center",
     },
-    pulseRing: {
+    // Open center design - 4 line segments with gap (EXACT SAME AS STEP6/STEP7)
+    crosshairTop: {
         position: "absolute",
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: "#4ade80",
-    },
-    liveDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: "#4ade80",
-        shadowColor: "#4ade80",
+        width: 2,
+        height: 32,
+        top: 0,
+        backgroundColor: "#22c55e",
+        borderRadius: 1,
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.8,
-        shadowRadius: 4,
-        elevation: 4,
+        shadowOpacity: 0.9,
+        shadowRadius: 2,
+        elevation: 3,
     },
-    liveText: {
-        color: "#86efac",
-        fontWeight: "600",
-        fontSize: 12,
-        textTransform: "uppercase",
-        letterSpacing: 1,
-        marginLeft: 6,
+    crosshairBottom: {
+        position: "absolute",
+        width: 2,
+        height: 32,
+        bottom: 0,
+        backgroundColor: "#22c55e",
+        borderRadius: 1,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.9,
+        shadowRadius: 2,
+        elevation: 3,
+    },
+    crosshairLeft: {
+        position: "absolute",
+        width: 32,
+        height: 2,
+        left: 0,
+        backgroundColor: "#22c55e",
+        borderRadius: 1,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.9,
+        shadowRadius: 2,
+        elevation: 3,
+    },
+    crosshairRight: {
+        position: "absolute",
+        width: 32,
+        height: 2,
+        right: 0,
+        backgroundColor: "#22c55e",
+        borderRadius: 1,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.9,
+        shadowRadius: 2,
+        elevation: 3,
+    },
+    crosshairCenter: {
+        position: "absolute",
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: "#22c55e",
+        borderWidth: 1.5,
+        borderColor: "rgba(0, 0, 0, 0.6)",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.9,
+        shadowRadius: 2,
+        elevation: 3,
+    },
+    // ZERO label below crosshair
+    crosshairLabel: {
+        position: "absolute",
+        bottom: -2,
+        backgroundColor: "rgba(34, 197, 94, 0.9)",
+        paddingHorizontal: 10,
+        paddingVertical: 3,
+        borderRadius: 6,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.5,
+        shadowRadius: 2,
+        elevation: 3,
+    },
+    crosshairLabelText: {
+        color: "white",
+        fontSize: 11,
+        fontWeight: "700",
+        letterSpacing: 1.5,
     },
 
     // Modal styles
     modalOverlay: {
         flex: 1,
-        backgroundColor: "rgba(0, 0, 0, 0.7)",
+        backgroundColor: "rgba(0, 0, 0, 0.85)",
         justifyContent: "center",
         alignItems: "center",
-        padding: 32,
+        padding: 24,
     },
     modalContent: {
-        backgroundColor: "#18181b",
+        backgroundColor: "#1a1a1a",
         borderRadius: 24,
-        borderWidth: 1,
-        borderColor: "#3f3f46",
         padding: 24,
         width: "100%",
-        maxWidth: 320,
+        maxWidth: 340,
+        alignItems: "center",
+        borderWidth: 1,
+        borderColor: "rgba(255, 255, 255, 0.1)",
     },
     modalIconContainer: {
-        alignItems: "center",
         marginBottom: 16,
     },
     modalIconCircle: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: "rgba(127, 29, 29, 0.3)",
-        borderWidth: 1,
-        borderColor: "rgba(220, 38, 38, 0.4)",
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: "rgba(239, 68, 68, 0.15)",
         alignItems: "center",
         justifyContent: "center",
+        borderWidth: 1,
+        borderColor: "rgba(239, 68, 68, 0.3)",
     },
     modalIcon: {
         width: 28,
@@ -487,43 +637,49 @@ const styles = StyleSheet.create({
         tintColor: "#ef4444",
     },
     modalTitle: {
-        color: "#ffffff",
+        color: "white",
         fontSize: 20,
-        fontWeight: "600",
-        textAlign: "center",
+        fontWeight: "700",
         marginBottom: 8,
+        textAlign: "center",
     },
     modalMessage: {
-        color: "#9ca3af",
+        color: "rgba(255, 255, 255, 0.6)",
         fontSize: 14,
         textAlign: "center",
-        marginBottom: 24,
         lineHeight: 20,
+        marginBottom: 24,
     },
     modalButtonRow: {
         flexDirection: "row",
         gap: 12,
+        width: "100%",
     },
     modalCancelButton: {
         flex: 1,
         paddingVertical: 14,
         borderRadius: 12,
-        backgroundColor: "#27272a",
-        borderWidth: 1,
-        borderColor: "#3f3f46",
+        backgroundColor: "rgba(255, 255, 255, 0.1)",
         alignItems: "center",
+        borderWidth: 1,
+        borderColor: "rgba(255, 255, 255, 0.1)",
+    },
+    modalCancelText: {
+        color: "white",
+        fontWeight: "600",
+        fontSize: 15,
     },
     modalConfirmButton: {
         flex: 1,
         paddingVertical: 14,
         borderRadius: 12,
-        backgroundColor: "rgba(127, 29, 29, 0.8)",
-        borderWidth: 1,
-        borderColor: "rgba(220, 38, 38, 0.6)",
+        backgroundColor: "rgba(239, 68, 68, 0.8)",
         alignItems: "center",
+        borderWidth: 1,
+        borderColor: "rgba(239, 68, 68, 0.6)",
     },
-    modalButtonText: {
-        color: "#ffffff",
+    modalConfirmText: {
+        color: "white",
         fontWeight: "600",
         fontSize: 15,
     },
