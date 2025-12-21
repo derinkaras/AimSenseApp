@@ -36,6 +36,8 @@ import {
 } from "@/app/hunt/store";
 import icons from "@/app/constants/icons";
 import { useCameraContext } from "./_layout";
+// ⚠️ CRITICAL: Import shared crosshair styles for pixel-perfect 1:1 match with calibration
+import { crosshairStyles } from "@/app/calibration/exports/calibrationStyles";
 
 const SCREEN_ID = "active";
 
@@ -317,30 +319,25 @@ export default function ActiveHunt() {
                                 />
                             </View>
 
-                            {/* Scope Center Crosshair - same style as step6/step7 */}
+                            {/* Scope Center Crosshair - EXACT SAME as step6/step7 */}
+                            {/* ⚠️ CRITICAL: Uses shared crosshairStyles, offset by 40 for 80x80 container */}
                             {scopeCenterPx && (
                                 <Animated.View
                                     style={[
-                                        styles.crosshairWrapper,
+                                        crosshairStyles.container,
                                         {
-                                            left: scopeCenterPx.x - 50,
-                                            top: scopeCenterPx.y - 50,
+                                            left: scopeCenterPx.x - 40,
+                                            top: scopeCenterPx.y - 40,
                                             opacity: crosshairOpacity,
                                         },
                                     ]}
                                     pointerEvents="none"
                                 >
-                                    <View style={styles.crosshairRing} />
-                                    <View style={styles.crosshairContainer}>
-                                        <View style={styles.crosshairTop} />
-                                        <View style={styles.crosshairBottom} />
-                                        <View style={styles.crosshairLeft} />
-                                        <View style={styles.crosshairRight} />
-                                        <View style={styles.crosshairCenter} />
-                                    </View>
-                                    <View style={styles.crosshairLabel}>
-                                        <Text style={styles.crosshairLabelText}>ZERO</Text>
-                                    </View>
+                                    <View style={crosshairStyles.top} />
+                                    <View style={crosshairStyles.bottom} />
+                                    <View style={crosshairStyles.left} />
+                                    <View style={crosshairStyles.right} />
+                                    <View style={crosshairStyles.center} />
                                 </Animated.View>
                             )}
                         </View>
@@ -456,57 +453,60 @@ export default function ActiveHunt() {
                             />
                         </View>
 
-                        {/* Scope Center Crosshair - same style as step6/step7 */}
+                        {/* Scope Center Crosshair - EXACT SAME as step6/step7 */}
+                        {/* ⚠️ CRITICAL: Uses shared crosshairStyles, offset by 40 for 80x80 container */}
                         {scopeCenterPx && (
                             <Animated.View
                                 style={[
-                                    styles.crosshairWrapper,
+                                    crosshairStyles.container,
                                     {
-                                        left: scopeCenterPx.x - 50,
-                                        top: scopeCenterPx.y - 50,
+                                        left: scopeCenterPx.x - 40,
+                                        top: scopeCenterPx.y - 40,
                                         opacity: crosshairOpacity,
                                     },
                                 ]}
                                 pointerEvents="none"
                             >
-                                <View style={styles.crosshairRing} />
-                                <View style={styles.crosshairContainer}>
-                                    <View style={styles.crosshairTop} />
-                                    <View style={styles.crosshairBottom} />
-                                    <View style={styles.crosshairLeft} />
-                                    <View style={styles.crosshairRight} />
-                                    <View style={styles.crosshairCenter} />
-                                </View>
-                                <View style={styles.crosshairLabel}>
-                                    <Text style={styles.crosshairLabelText}>ZERO</Text>
-                                </View>
+                                <View style={crosshairStyles.top} />
+                                <View style={crosshairStyles.bottom} />
+                                <View style={crosshairStyles.left} />
+                                <View style={crosshairStyles.right} />
+                                <View style={crosshairStyles.center} />
                             </Animated.View>
                         )}
                     </View>
                 )}
             </View>
 
-            <SafeAreaView className="absolute bottom-0 left-0 right-0" edges={["bottom"]}>
-                <View
-                    style={{ paddingBottom: layoutConfig.bottomPadding }}
-                    className="bg-brand-black/95 px-4"
-                >
-                    {/* Header Row - same structure as step6/step7 */}
+            {/* Bottom Panel - Matches calibration step styling */}
+            {/* ⚠️ CRITICAL: Must use exact height from layoutConfig to match calibration */}
+            <SafeAreaView
+                className="absolute bottom-0 left-0 right-0 bg-brand-black/95 border-t border-brand-green/30"
+                edges={["bottom"]}
+                style={{ height: layoutConfig.bottomPanelTotalHeight }}
+            >
+                <View className="flex-1 px-4 pt-3" style={{ paddingBottom: layoutConfig.bottomPadding }}>
+                    {/* Status Header Row */}
                     <View className="flex-row items-center mb-3">
-                        <View className="size-9 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
-                            <Image source={icons.scope} className="w-5 h-5" resizeMode="contain" tintColor="#0b7f4f" />
+                        <View className="w-9 h-9 rounded-xl bg-brand-greenDark/70 border border-brand-green/40 items-center justify-center mr-2">
+                            <Image
+                                source={icons.scope}
+                                className="w-5 h-5"
+                                resizeMode="contain"
+                                style={{ tintColor: "#0b7f4f" }}
+                            />
                         </View>
                         <View className="flex-1">
                             <Text className="text-white font-semibold text-base">Hunt Active</Text>
                             <Text className="text-white/60 text-xs">Session in progress</Text>
                         </View>
-                        {/* Live indicator */}
+                        {/* Live Indicator Pill */}
                         <View className="px-3 py-2 rounded-xl bg-brand-greenDark/50 border border-brand-green/40">
                             <PulsingLiveIndicator large />
                         </View>
                     </View>
 
-                    {/* Gun Profile Box */}
+                    {/* Gun Profile Box - matches calibration step styling */}
                     <View className="rounded-xl bg-brand-greenDark/40 border border-brand-green/30 p-3 mb-3">
                         <Text className="text-white/50 text-xs uppercase tracking-wider mb-1">Rifle</Text>
                         <Text className="text-white font-semibold text-lg" numberOfLines={1}>
@@ -529,7 +529,7 @@ export default function ActiveHunt() {
                                 source={icons.target}
                                 className="w-5 h-5 mr-2"
                                 resizeMode="contain"
-                                tintColor={showCrosshair ? "#22c55e" : "#9ca3af"}
+                                style={{ tintColor: showCrosshair ? "#22c55e" : "#9ca3af" }}
                             />
                             <Text className={`font-semibold text-base ${showCrosshair ? "text-white" : "text-white/70"}`}>
                                 {showCrosshair ? "Hide" : "Verify Zero"}
@@ -553,118 +553,8 @@ export default function ActiveHunt() {
 }
 
 const styles = StyleSheet.create({
-    // Crosshair wrapper (includes ring and label)
-    crosshairWrapper: {
-        position: "absolute",
-        width: 100,
-        height: 100,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    // Outer ring around crosshair
-    crosshairRing: {
-        position: "absolute",
-        width: 90,
-        height: 90,
-        borderRadius: 45,
-        borderWidth: 2,
-        borderColor: "rgba(34, 197, 94, 0.5)",
-    },
-    // Crosshair container - EXACT same as step6/step7
-    crosshairContainer: {
-        position: "absolute",
-        width: 80,
-        height: 80,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    // Open center design - 4 line segments with gap (EXACT SAME AS STEP6/STEP7)
-    crosshairTop: {
-        position: "absolute",
-        width: 2,
-        height: 32,
-        top: 0,
-        backgroundColor: "#22c55e",
-        borderRadius: 1,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.9,
-        shadowRadius: 2,
-        elevation: 3,
-    },
-    crosshairBottom: {
-        position: "absolute",
-        width: 2,
-        height: 32,
-        bottom: 0,
-        backgroundColor: "#22c55e",
-        borderRadius: 1,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.9,
-        shadowRadius: 2,
-        elevation: 3,
-    },
-    crosshairLeft: {
-        position: "absolute",
-        width: 32,
-        height: 2,
-        left: 0,
-        backgroundColor: "#22c55e",
-        borderRadius: 1,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.9,
-        shadowRadius: 2,
-        elevation: 3,
-    },
-    crosshairRight: {
-        position: "absolute",
-        width: 32,
-        height: 2,
-        right: 0,
-        backgroundColor: "#22c55e",
-        borderRadius: 1,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.9,
-        shadowRadius: 2,
-        elevation: 3,
-    },
-    crosshairCenter: {
-        position: "absolute",
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-        backgroundColor: "#22c55e",
-        borderWidth: 1.5,
-        borderColor: "rgba(0, 0, 0, 0.6)",
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.9,
-        shadowRadius: 2,
-        elevation: 3,
-    },
-    // ZERO label below crosshair
-    crosshairLabel: {
-        position: "absolute",
-        bottom: -2,
-        backgroundColor: "rgba(34, 197, 94, 0.9)",
-        paddingHorizontal: 10,
-        paddingVertical: 3,
-        borderRadius: 6,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.5,
-        shadowRadius: 2,
-        elevation: 3,
-    },
-    crosshairLabelText: {
-        color: "white",
-        fontSize: 11,
-        fontWeight: "700",
-        letterSpacing: 1.5,
-    },
+    // NOTE: Crosshair styles are now imported from @/app/calibration/exports/calibrationStyles
+    // to guarantee 1:1 pixel-perfect match with calibration steps
 
     // Modal styles
     modalOverlay: {
