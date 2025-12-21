@@ -192,6 +192,8 @@ export default function Step3() {
               <View style={[styles.modalSection, compact && { padding: 10 }]}>
                 <Text style={[styles.modalSectionTitle, compact && { fontSize: 11 }]}>What to check:</Text>
                 <Text style={[styles.modalSectionText, compact && { fontSize: 10 }]}>
+                  • Use a distant target.{"\n"}
+                  • Low light makes focusing harder.{"\n"}
                   • Adapter too close to scope{"\n"}
                   • Adapter too far from scope{"\n"}
                   • Eye relief not aligned
@@ -199,7 +201,7 @@ export default function Step3() {
               </View>
 
               <View style={[styles.modalSectionAlt, compact && { padding: 10 }]}>
-                <Text style={[styles.modalSectionTitle, compact && { fontSize: 11 }]}>Solution:</Text>
+                <Text style={[styles.modalSectionTitle, compact && { fontSize: 11 }]}>Common Solution:</Text>
                 <Text style={[styles.modalSectionText, compact && { fontSize: 10 }]}>
                   Slide the adapter in or out until the image appears sharp.
                 </Text>
