@@ -6,7 +6,7 @@
 
 import { create } from "zustand";
 import type { GunProfile } from "@/app/types/apiTypes";
-import type { CalibrationResult } from "@/app/calibration/exports";
+import type { CalibrationResult, CameraResolution } from "@/app/calibration/exports";
 
 // ==================== TYPES ====================
 
@@ -29,11 +29,13 @@ interface HuntState {
     // Current session
     session: HuntSession;
     
-    // Camera invariants from calibration (must match during hunt)
+    // Camera invariants from calibration (must match during hunt) - spec 14.2
     cameraInvariants: {
         zoom: number;
         screenRotation: number;
         mountOrientation: string;
+        cameraResolution: CameraResolution;
+        cameraAspectRatio: number;
     } | null;
 }
 
@@ -51,11 +53,12 @@ interface HuntActions {
     resumeHunt: () => void;
     endHunt: () => void;
     
-    // Validation
+    // Validation - now includes camera resolution (spec 14.2)
     validateCameraInvariants: (
         currentZoom: number,
         currentRotation: number,
-        currentOrientation: string
+        currentOrientation: string,
+        currentResolution?: CameraResolution
     ) => { valid: boolean; errors: string[] };
     
     // Reset
@@ -85,6 +88,8 @@ export const useHuntStore = create<HuntStore>((set, get) => ({
             orientation: calibrationResult.mountOrientation,
             zoom: calibrationResult.cameraZoom,
             rotation: calibrationResult.screenRotation,
+            resolution: calibrationResult.cameraResolution,
+            aspectRatio: calibrationResult.cameraAspectRatio,
             pxPerUnitX: calibrationResult.pxPerUnitX,
             pxPerUnitY: calibrationResult.pxPerUnitY,
         });
@@ -100,6 +105,8 @@ export const useHuntStore = create<HuntStore>((set, get) => ({
                 zoom: calibrationResult.cameraZoom,
                 screenRotation: calibrationResult.screenRotation,
                 mountOrientation: calibrationResult.mountOrientation,
+                cameraResolution: calibrationResult.cameraResolution,
+                cameraAspectRatio: calibrationResult.cameraAspectRatio,
             },
         });
     },
@@ -202,10 +209,10 @@ export const useHuntStore = create<HuntStore>((set, get) => ({
     },
 
     // ═══════════════════════════════════════════════════════════
-    // VALIDATION
+    // VALIDATION (spec 14.2)
     // ═══════════════════════════════════════════════════════════
     
-    validateCameraInvariants: (currentZoom, currentRotation, currentOrientation) => {
+    validateCameraInvariants: (currentZoom, currentRotation, currentOrientation, currentResolution) => {
         const { cameraInvariants } = get();
         const errors: string[] = [];
 
@@ -234,6 +241,30 @@ export const useHuntStore = create<HuntStore>((set, get) => ({
             errors.push(
                 `Orientation mismatch: expected ${cameraInvariants.mountOrientation}, got ${currentOrientation}`
             );
+        }
+
+        // Check camera resolution (spec 14.2 - critical for px/unit accuracy)
+        if (currentResolution && cameraInvariants.cameraResolution) {
+            const resolutionTolerance = 2; // Allow 2px tolerance for rounding
+            const widthDiff = Math.abs(currentResolution.width - cameraInvariants.cameraResolution.width);
+            const heightDiff = Math.abs(currentResolution.height - cameraInvariants.cameraResolution.height);
+            
+            if (widthDiff > resolutionTolerance || heightDiff > resolutionTolerance) {
+                errors.push(
+                    `Resolution mismatch: expected ${cameraInvariants.cameraResolution.width}x${cameraInvariants.cameraResolution.height}, ` +
+                    `got ${currentResolution.width}x${currentResolution.height}. Recalibration required.`
+                );
+            }
+
+            // Also check aspect ratio (more sensitive to distortion)
+            const currentAspect = currentResolution.width / currentResolution.height;
+            const aspectTolerance = 0.01;
+            if (Math.abs(currentAspect - cameraInvariants.cameraAspectRatio) > aspectTolerance) {
+                errors.push(
+                    `Aspect ratio mismatch: expected ${cameraInvariants.cameraAspectRatio.toFixed(3)}, ` +
+                    `got ${currentAspect.toFixed(3)}. This will cause calibration inaccuracy.`
+                );
+            }
         }
 
         return {

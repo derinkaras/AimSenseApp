@@ -73,6 +73,11 @@ export interface FocusPoint {
     normalizedY: number;
 }
 
+export interface CameraResolution {
+    width: number;
+    height: number;
+}
+
 export interface CalibrationResult {
     mountOrientation: MountOrientation;
     roll0: number;
@@ -83,6 +88,9 @@ export interface CalibrationResult {
     cameraZoom: number;
     focusPoint: FocusPoint | null;
     screenRotation: number; // Degrees to rotate camera view to align with crosshair
+    // Camera invariants for validation (spec 14.2)
+    cameraResolution: CameraResolution;
+    cameraAspectRatio: number; // width / height
     // Scope center
     scopeCenterPx: ScopeCenterPx;
     // Elevation calibration positions (for debugging/verification)
@@ -371,6 +379,8 @@ interface CalibrationState {
     focusPoint: FocusPoint | null;
     screenRotation: number;
     cameraLayout: CameraLayoutConfig | null;
+    // Camera resolution for validation (spec 14.2)
+    cameraResolution: CameraResolution | null;
 
     // Calibration points
     scopeCenterPx: ScopeCenterPx | null;
@@ -406,6 +416,7 @@ interface CalibrationActions {
     // Step 3: Camera settings
     setCameraZoom: (zoom: number) => void;
     setFocusPoint: (point: FocusPoint | null) => void;
+    setCameraResolution: (resolution: CameraResolution) => void;
 
     // Step 4: IMU baseline + Camera layout
     captureBaseline: (roll: number, pitch: number) => void;
@@ -447,6 +458,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
     focusPoint: null,
     screenRotation: 0,
     cameraLayout: null,
+    cameraResolution: null,
     scopeCenterPx: null,
     elevationStartPx: null,
     elevationEndPx: null,
@@ -481,6 +493,8 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
     setCameraZoom: (zoom) => set({ cameraZoom: zoom }),
 
     setFocusPoint: (point) => set({ focusPoint: point }),
+
+    setCameraResolution: (resolution) => set({ cameraResolution: resolution }),
 
     // Step 4: IMU baseline + Camera layout
     captureBaseline: (roll, pitch) => set({ roll0: roll, pitch0: pitch }),
@@ -572,6 +586,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             cameraZoom,
             focusPoint,
             screenRotation,
+            cameraResolution,
             scopeCenterPx,
             elevationStartPx,
             elevationEndPx,
@@ -590,6 +605,9 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
         if (!windageStartPx || !windageEndPx) {
             throw new Error("Windage not calibrated");
         }
+        if (!cameraResolution) {
+            throw new Error("Camera resolution not captured");
+        }
 
         const result: CalibrationResult = {
             mountOrientation,
@@ -600,6 +618,8 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             cameraZoom,
             focusPoint,
             screenRotation,
+            cameraResolution,
+            cameraAspectRatio: cameraResolution.width / cameraResolution.height,
             scopeCenterPx,
             elevationStartPx,
             elevationEndPx,
@@ -619,6 +639,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             cameraZoom: 0,
             focusPoint: null,
             screenRotation: 0,
+            cameraResolution: null,
             scopeCenterPx: null,
             elevationStartPx: null,
             elevationEndPx: null,
@@ -689,6 +710,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             cameraZoom,
             focusPoint,
             screenRotation,
+            cameraResolution,
             scopeCenterPx,
             elevationStartPx,
             elevationEndPx,
@@ -707,6 +729,9 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
         if (!windageStartPx || !windageEndPx) {
             throw new Error("Windage not calibrated");
         }
+        if (!cameraResolution) {
+            throw new Error("Camera resolution not captured");
+        }
 
         const result: CalibrationResult = {
             mountOrientation,
@@ -717,6 +742,8 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             cameraZoom,
             focusPoint,
             screenRotation,
+            cameraResolution,
+            cameraAspectRatio: cameraResolution.width / cameraResolution.height,
             scopeCenterPx,
             elevationStartPx,
             elevationEndPx,
@@ -784,6 +811,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             focusPoint: null,
             screenRotation: 0,
             cameraLayout: null, // Reset camera layout
+            cameraResolution: null, // Reset camera resolution
             scopeCenterPx: null,
             elevationStartPx: null,
             elevationEndPx: null,
@@ -794,6 +822,7 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
             pxPerUnitY: 0,
             roll0: 0,
             pitch0: 0,
+            savedResult: null, // Clear saved result so hunt mode uses fresh calibration
         });
     },
 
@@ -813,6 +842,7 @@ export const selectCameraZoom = (s: CalibrationStore) => s.cameraZoom;
 export const selectFocusPoint = (s: CalibrationStore) => s.focusPoint;
 export const selectScreenRotation = (s: CalibrationStore) => s.screenRotation;
 export const selectCameraLayout = (s: CalibrationStore) => s.cameraLayout; // ⚠️ Use this in all steps
+export const selectCameraResolution = (s: CalibrationStore) => s.cameraResolution;
 export const selectScopeCenterPx = (s: CalibrationStore) => s.scopeCenterPx;
 export const selectElevationStartPx = (s: CalibrationStore) => s.elevationStartPx;
 export const selectElevationEndPx = (s: CalibrationStore) => s.elevationEndPx;

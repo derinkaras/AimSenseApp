@@ -3,6 +3,7 @@
 // ============================================================
 // User taps on camera to mark crosshair center, then fine-tunes position.
 // ⚠️ CRITICAL: Uses camera layout from store (set in step3)
+// Also captures camera resolution for hunt mode validation (spec 14.2)
 
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
@@ -63,6 +64,7 @@ export default function Step5() {
   const setScopeCenterPx = useCalibrationStore((s) => s.setScopeCenterPx);
   const setElevationStartPx = useCalibrationStore((s) => s.setElevationStartPx);
   const setStoreRotation = useCalibrationStore((s) => s.setScreenRotation);
+  const setCameraResolution = useCalibrationStore((s) => s.setCameraResolution);
   const reset = useCalibrationStore((s) => s.resetCalibration);
 
   const isLandscapeMode = isLandscape(mountOrientation);
@@ -149,6 +151,14 @@ export default function Step5() {
     setScopeCenterPx(centerPoint);
     setElevationStartPx(centerPoint);
     setStoreRotation(rotation);
+    // Save camera resolution for hunt mode validation (spec 14.2)
+    // This is the authoritative capture point since we know camera is active
+    if (cameraLayout.width > 0 && cameraLayout.height > 0) {
+      setCameraResolution({
+        width: cameraLayout.width,
+        height: cameraLayout.height,
+      });
+    }
     router.push("/(calibration)/step6");
   };
 

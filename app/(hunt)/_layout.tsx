@@ -3,13 +3,17 @@
 // ============================================================
 // Manages camera context for hunt mode screens.
 // Ensures camera configuration matches calibration invariants.
+//
+// IMPORTANT: This layout does NOT initialize the hunt store.
+// Initialization happens in step8.tsx via beginHunt().
+// This layout only verifies the hunt store has valid data.
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import { View, Text, ActivityIndicator } from "react-native";
 import { Stack, useRouter } from "expo-router";
 
-import { useHuntStore, selectCameraInvariants, selectHuntStatus } from "@/app/hunt/store";
-import { useCalibrationStore, selectSavedResult, lockOrientation } from "@/app/calibration/exports";
+import { useHuntStore, selectCalibrationResult, selectHuntStatus } from "@/app/hunt/store";
+import { lockOrientation } from "@/app/calibration/exports";
 
 // ==================== CAMERA CONTEXT ====================
 
@@ -32,47 +36,75 @@ export default function HuntLayout() {
     const [activeScreen, setActiveScreen] = useState<string | null>("select-gun");
     const [isInitializing, setIsInitializing] = useState(true);
     const [initError, setInitError] = useState<string | null>(null);
+    const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const hasInitialized = useRef(false);
 
-    // Get calibration result and hunt store
-    const savedCalibration = useCalibrationStore(selectSavedResult);
+    // Get calibration result from HUNT STORE (not calibration store!)
+    // This was set by beginHunt() in step8.tsx via initializeHunt()
+    const huntCalibration = useHuntStore(selectCalibrationResult);
     const huntStatus = useHuntStore(selectHuntStatus);
-    const initializeHunt = useHuntStore((s) => s.initializeHunt);
 
-    // Initialize hunt mode with calibration data
+    // Verify hunt store has valid data and lock orientation
     useEffect(() => {
-        const initHunt = async () => {
-            try {
-                // Verify we have calibration data
-                if (!savedCalibration) {
-                    setInitError("No calibration data found. Please complete calibration first.");
+        // Clear any existing timeout
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+        }
+
+        // If we already successfully initialized, don't do anything
+        if (hasInitialized.current) {
+            return;
+        }
+
+        const verifyHunt = async () => {
+            // If we have valid data, proceed
+            if (huntCalibration && huntStatus !== "idle") {
+                try {
+                    // Lock screen to calibrated orientation
+                    await lockOrientation(huntCalibration.mountOrientation);
+
+                    console.log("🎯 Hunt layout verified:", {
+                        status: huntStatus,
+                        orientation: huntCalibration.mountOrientation,
+                        zoom: huntCalibration.cameraZoom,
+                        rotation: huntCalibration.screenRotation,
+                    });
+
+                    hasInitialized.current = true;
                     setIsInitializing(false);
-                    return;
+                } catch (error) {
+                    console.error("Failed to lock orientation:", error);
+                    setInitError("Failed to initialize hunt mode. Please try again.");
+                    setIsInitializing(false);
                 }
-
-                // Lock screen to calibrated orientation
-                await lockOrientation(savedCalibration.mountOrientation);
-
-                // Initialize hunt store with calibration data
-                if (huntStatus === "idle") {
-                    initializeHunt(savedCalibration);
-                }
-
-                console.log("🎯 Hunt mode initialized:", {
-                    orientation: savedCalibration.mountOrientation,
-                    zoom: savedCalibration.cameraZoom,
-                    rotation: savedCalibration.screenRotation,
-                });
-
-                setIsInitializing(false);
-            } catch (error) {
-                console.error("Failed to initialize hunt mode:", error);
-                setInitError("Failed to initialize hunt mode. Please try again.");
-                setIsInitializing(false);
+                return;
             }
+
+            // Data not available yet - this is expected on first render
+            // The useEffect will re-run when huntCalibration/huntStatus change
+            console.log("Hunt layout: Waiting for hunt store data...", {
+                hasCalibration: !!huntCalibration,
+                status: huntStatus,
+            });
         };
 
-        initHunt();
-    }, [savedCalibration, huntStatus, initializeHunt]);
+        verifyHunt();
+
+        // Set a timeout to show error if data never arrives (e.g., user navigated directly)
+        timeoutRef.current = setTimeout(() => {
+            if (!hasInitialized.current && !huntCalibration) {
+                console.error("Hunt layout: Timeout - no calibration data received");
+                setInitError("No calibration data found. Please complete calibration first.");
+                setIsInitializing(false);
+            }
+        }, 2000); // 2 second timeout
+
+        return () => {
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+            }
+        };
+    }, [huntCalibration, huntStatus]);
 
     // Show loading state during initialization
     if (isInitializing) {

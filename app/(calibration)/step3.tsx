@@ -33,6 +33,7 @@ export default function Step3() {
   const setStoreFocusPoint = useCalibrationStore((s) => s.setFocusPoint);
   const setStoreRotation = useCalibrationStore((s) => s.setScreenRotation);
   const setCameraLayoutStore = useCalibrationStore((s) => s.setCameraLayout);
+  const setCameraResolution = useCalibrationStore((s) => s.setCameraResolution);
   const reset = useCalibrationStore((s) => s.resetCalibration);
 
   const isLandscapeMode = isLandscape(mountOrientation);
@@ -50,16 +51,16 @@ export default function Step3() {
   const focusAppliedRef = useRef(false);
 
   useFocusEffect(
-    useCallback(() => {
-      setActiveScreen(SCREEN_ID);
-      return () => {};
-    }, [setActiveScreen])
+      useCallback(() => {
+        setActiveScreen(SCREEN_ID);
+        return () => {};
+      }, [setActiveScreen])
   );
 
   const shouldRenderCamera = cameraEnabled && activeScreen === SCREEN_ID;
   const layoutConfig = useMemo(
-    () => getCameraLayoutConfig(width, height, isLandscapeMode, insets.bottom),
-    [width, height, isLandscapeMode, insets.bottom]
+      () => getCameraLayoutConfig(width, height, isLandscapeMode, insets.bottom),
+      [width, height, isLandscapeMode, insets.bottom]
   );
 
   useEffect(() => {
@@ -67,6 +68,16 @@ export default function Step3() {
       setCameraLayoutStore(layoutConfig);
     }
   }, [layoutConfig, setCameraLayoutStore, width, height]);
+
+  // Save camera resolution when layout is captured (spec 14.2)
+  useEffect(() => {
+    if (cameraLayout.width > 0 && cameraLayout.height > 0) {
+      setCameraResolution({
+        width: cameraLayout.width,
+        height: cameraLayout.height,
+      });
+    }
+  }, [cameraLayout.width, cameraLayout.height, setCameraResolution]);
 
   const applyFocus = useCallback(async (normalizedX: number, normalizedY: number) => {
     try {
@@ -150,90 +161,90 @@ export default function Step3() {
 
   // Focus Trouble Modal - proper sizing for both orientations
   const renderInfoModal = () => (
-    <Modal
-      visible={showInfoModal}
-      transparent
-      animationType="fade"
-      onRequestClose={() => setShowInfoModal(false)}
-      supportedOrientations={["portrait", "landscape"]}
-    >
-      <Pressable style={styles.modalOverlay} onPress={() => setShowInfoModal(false)}>
-        <ScrollView
-          contentContainerStyle={styles.modalScrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <Pressable
-            style={[styles.modalContent, compact && styles.modalContentCompact]}
-            onPress={(e) => e.stopPropagation()}
+      <Modal
+          visible={showInfoModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowInfoModal(false)}
+          supportedOrientations={["portrait", "landscape"]}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowInfoModal(false)}>
+          <ScrollView
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={false}
           >
-            <View style={styles.modalIconContainer}>
-              <Image
-                source={icons.info}
-                style={{ width: compact ? 28 : 36, height: compact ? 28 : 36, tintColor: "#22c55e" }}
-                resizeMode="contain"
-              />
-            </View>
-            <Text style={[styles.modalTitle, compact && { fontSize: 15 }]}>Focus Trouble?</Text>
-            <Text style={[styles.modalSubtitle, compact && { fontSize: 11, marginBottom: 10 }]}>
-              If the camera won't focus clearly through your scope, your phone adapter may need adjustment.
-            </Text>
-
-            <View style={[styles.modalSection, compact && { padding: 10 }]}>
-              <Text style={[styles.modalSectionTitle, compact && { fontSize: 11 }]}>What to check:</Text>
-              <Text style={[styles.modalSectionText, compact && { fontSize: 10 }]}>
-                • Adapter too close to scope{"\n"}
-                • Adapter too far from scope{"\n"}
-                • Eye relief not aligned
-              </Text>
-            </View>
-
-            <View style={[styles.modalSectionAlt, compact && { padding: 10 }]}>
-              <Text style={[styles.modalSectionTitle, compact && { fontSize: 11 }]}>Solution:</Text>
-              <Text style={[styles.modalSectionText, compact && { fontSize: 10 }]}>
-                Slide the adapter in or out until the image appears sharp.
-              </Text>
-            </View>
-
             <Pressable
-              onPress={() => setShowInfoModal(false)}
-              style={[styles.modalButton, compact && { paddingVertical: 10 }]}
+                style={[styles.modalContent, compact && styles.modalContentCompact]}
+                onPress={(e) => e.stopPropagation()}
             >
-              <Text style={[styles.modalButtonText, compact && { fontSize: 13 }]}>Got it</Text>
+              <View style={styles.modalIconContainer}>
+                <Image
+                    source={icons.info}
+                    style={{ width: compact ? 28 : 36, height: compact ? 28 : 36, tintColor: "#22c55e" }}
+                    resizeMode="contain"
+                />
+              </View>
+              <Text style={[styles.modalTitle, compact && { fontSize: 15 }]}>Focus Trouble?</Text>
+              <Text style={[styles.modalSubtitle, compact && { fontSize: 11, marginBottom: 10 }]}>
+                If the camera won't focus clearly through your scope, your phone adapter may need adjustment.
+              </Text>
+
+              <View style={[styles.modalSection, compact && { padding: 10 }]}>
+                <Text style={[styles.modalSectionTitle, compact && { fontSize: 11 }]}>What to check:</Text>
+                <Text style={[styles.modalSectionText, compact && { fontSize: 10 }]}>
+                  • Adapter too close to scope{"\n"}
+                  • Adapter too far from scope{"\n"}
+                  • Eye relief not aligned
+                </Text>
+              </View>
+
+              <View style={[styles.modalSectionAlt, compact && { padding: 10 }]}>
+                <Text style={[styles.modalSectionTitle, compact && { fontSize: 11 }]}>Solution:</Text>
+                <Text style={[styles.modalSectionText, compact && { fontSize: 10 }]}>
+                  Slide the adapter in or out until the image appears sharp.
+                </Text>
+              </View>
+
+              <Pressable
+                  onPress={() => setShowInfoModal(false)}
+                  style={[styles.modalButton, compact && { paddingVertical: 10 }]}
+              >
+                <Text style={[styles.modalButtonText, compact && { fontSize: 13 }]}>Got it</Text>
+              </Pressable>
             </Pressable>
-          </Pressable>
-        </ScrollView>
-      </Pressable>
-    </Modal>
+          </ScrollView>
+        </Pressable>
+      </Modal>
   );
 
   const renderFocusIndicator = () => {
     if (!focusPoint) return null;
     if (showFocusIndicator) {
       return (
-        <View
-          style={[styles.focusIndicator, { left: focusPoint.x - 30, top: focusPoint.y - 30 }]}
-          pointerEvents="none"
-        >
           <View
-            style={[
-              styles.focusRing,
-              isFocusing && styles.focusRingAnimating,
-              focusLocked && styles.focusRingLocked,
-            ]}
-          />
-        </View>
+              style={[styles.focusIndicator, { left: focusPoint.x - 30, top: focusPoint.y - 30 }]}
+              pointerEvents="none"
+          >
+            <View
+                style={[
+                  styles.focusRing,
+                  isFocusing && styles.focusRingAnimating,
+                  focusLocked && styles.focusRingLocked,
+                ]}
+            />
+          </View>
       );
     }
     if (focusLocked) {
       return (
-        <View
-          style={[styles.lockedFocusIndicator, { left: focusPoint.x - 24, top: focusPoint.y - 24 }]}
-          pointerEvents="none"
-        >
-          <View style={styles.lockedFocusOuter}>
-            <View style={styles.lockedFocusInner} />
+          <View
+              style={[styles.lockedFocusIndicator, { left: focusPoint.x - 24, top: focusPoint.y - 24 }]}
+              pointerEvents="none"
+          >
+            <View style={styles.lockedFocusOuter}>
+              <View style={styles.lockedFocusInner} />
+            </View>
           </View>
-        </View>
       );
     }
     return null;
@@ -242,259 +253,259 @@ export default function Step3() {
   // LANDSCAPE LAYOUT
   if (isLandscapeMode) {
     return (
-      <View className="flex-1 bg-brand-black">
-        <View
-          onLayout={handleCameraLayout}
-          style={[StyleSheet.absoluteFill, { right: layoutConfig.cameraInsets.padRight }]}
-        >
-          {shouldRenderCamera && (
-            <Pressable onPress={handleTapToFocus} style={StyleSheet.absoluteFill}>
-              <View style={[StyleSheet.absoluteFill, rotationTransform]}>
-                <CameraView
-                  ref={cameraRef}
-                  style={StyleSheet.absoluteFill}
-                  facing="back"
-                  zoom={zoom}
-                  autofocus={focusLocked ? "off" : "on"}
-                />
-              </View>
-              {renderFocusIndicator()}
-              {!focusPoint && (
-                <View style={styles.guideOverlay} pointerEvents="none">
-                  <View style={styles.guideBox}>
-                    <Text style={styles.guideText}>Tap to lock focus</Text>
+        <View className="flex-1 bg-brand-black">
+          <View
+              onLayout={handleCameraLayout}
+              style={[StyleSheet.absoluteFill, { right: layoutConfig.cameraInsets.padRight }]}
+          >
+            {shouldRenderCamera && (
+                <Pressable onPress={handleTapToFocus} style={StyleSheet.absoluteFill}>
+                  <View style={[StyleSheet.absoluteFill, rotationTransform]}>
+                    <CameraView
+                        ref={cameraRef}
+                        style={StyleSheet.absoluteFill}
+                        facing="back"
+                        zoom={zoom}
+                        autofocus={focusLocked ? "off" : "on"}
+                    />
                   </View>
-                </View>
-              )}
-            </Pressable>
-          )}
-        </View>
-
-        <SafeAreaView
-          className="absolute right-0 top-0 bottom-0 bg-brand-black/95 border-l border-brand-green/30"
-          style={{ width: layoutConfig.sidePanelWidth }}
-          edges={["top", "bottom", "right"]}
-        >
-          <ScrollView className="flex-1 p-3" showsVerticalScrollIndicator={false}>
-            <Pressable
-              onPress={() => setShowInfoModal(true)}
-              className="flex-row items-center justify-center py-1.5 px-2 rounded-lg bg-blue-500/15 border border-blue-400/30 mb-2"
-            >
-              <Image
-                source={icons.info}
-                className="w-3.5 h-3.5 mr-1.5"
-                resizeMode="contain"
-                style={{ tintColor: "#60a5fa" }}
-              />
-              <Text className="text-blue-300 text-[10px] font-semibold">Focus trouble?</Text>
-            </Pressable>
-
-            <HeaderCard icon={icons.camera} title="Camera Setup" subtitle="Zoom, focus & align" compact />
-
-            <SectionCard title="Zoom" variant="secondary" compact className="mt-2">
-              <View className="flex-row items-center justify-between">
-                <Text className="text-white/70 text-[10px]">Level</Text>
-                <Text className="text-brand-greenLight font-mono text-[10px]">
-                  {(zoom * 100).toFixed(0)}%
-                </Text>
-              </View>
-              <Slider
-                style={{ width: "100%", height: 32 }}
-                minimumValue={0}
-                maximumValue={1}
-                value={zoom}
-                onValueChange={handleZoomChange}
-                minimumTrackTintColor="#0b7f4f"
-                maximumTrackTintColor="#333"
-                thumbTintColor="#22c55e"
-              />
-            </SectionCard>
-
-            <SectionCard title="Rotation" variant="secondary" compact className="mt-2">
-              <View className="flex-row items-center justify-between">
-                <Text className="text-white/70 text-[10px]">Angle</Text>
-                <Text
-                  className={cn(
-                    "font-mono text-[10px]",
-                    rotation === 0 ? "text-white/50" : "text-brand-greenLight"
+                  {renderFocusIndicator()}
+                  {!focusPoint && (
+                      <View style={styles.guideOverlay} pointerEvents="none">
+                        <View style={styles.guideBox}>
+                          <Text style={styles.guideText}>Tap to lock focus</Text>
+                        </View>
+                      </View>
                   )}
-                >
-                  {rotation > 0 ? "+" : ""}
-                  {rotation.toFixed(1)}°
-                </Text>
-              </View>
-              <Slider
-                style={{ width: "100%", height: 32 }}
-                minimumValue={MIN_ROTATION}
-                maximumValue={MAX_ROTATION}
-                value={rotation}
-                onValueChange={handleRotationChange}
-                minimumTrackTintColor="#0b7f4f"
-                maximumTrackTintColor="#333"
-                thumbTintColor="#22c55e"
-              />
-              <View className="flex-row justify-between">
-                <Text className="text-white/40 text-[9px]">-45°</Text>
-                <Pressable onPress={handleResetRotation}>
-                  <Text className="text-brand-greenLight/70 text-[9px] font-semibold">Reset</Text>
                 </Pressable>
-                <Text className="text-white/40 text-[9px]">+45°</Text>
-              </View>
-            </SectionCard>
-
-            <SectionCard title="Focus" variant="secondary" compact className="mt-2">
-              {focusPoint ? (
-                <View className="flex-row items-center">
-                  <StatusBadge
-                    status={focusLocked ? "success" : "warning"}
-                    label={focusLocked ? "LOCKED" : "..."}
-                    compact
-                    className="flex-1"
-                  />
-                  <Pressable
-                    onPress={handleClearFocus}
-                    className="ml-2 px-2 py-1 rounded bg-brand-black/40 border border-brand-green/30"
-                  >
-                    <Text className="text-white/70 text-[9px]">Clear</Text>
-                  </Pressable>
-                </View>
-              ) : (
-                <Text className="text-white/50 text-[9px] text-center">Tap camera to focus</Text>
-              )}
-            </SectionCard>
-          </ScrollView>
-        </SafeAreaView>
-
-        <View
-          className="absolute bottom-0 left-0 items-center pb-3 px-3"
-          style={{ right: layoutConfig.sidePanelWidth }}
-          pointerEvents="box-none"
-        >
-          <View className="flex-row items-center gap-2 bg-brand-black/80 rounded-xl p-2 border border-brand-green/40">
-            <IconButton icon={icons.chevronLeft} onPress={handleBack} size="sm" />
-            <IconButton icon={icons.chevronRight} onPress={handleNext} size="sm" variant="primary" tintColor="#fff" />
-            <IconButton icon={icons.cancel} onPress={handleCancel} size="sm" />
+            )}
           </View>
-        </View>
 
-        {renderInfoModal()}
-      </View>
+          <SafeAreaView
+              className="absolute right-0 top-0 bottom-0 bg-brand-black/95 border-l border-brand-green/30"
+              style={{ width: layoutConfig.sidePanelWidth }}
+              edges={["top", "bottom", "right"]}
+          >
+            <ScrollView className="flex-1 p-3" showsVerticalScrollIndicator={false}>
+              <Pressable
+                  onPress={() => setShowInfoModal(true)}
+                  className="flex-row items-center justify-center py-1.5 px-2 rounded-lg bg-blue-500/15 border border-blue-400/30 mb-2"
+              >
+                <Image
+                    source={icons.info}
+                    className="w-3.5 h-3.5 mr-1.5"
+                    resizeMode="contain"
+                    style={{ tintColor: "#60a5fa" }}
+                />
+                <Text className="text-blue-300 text-[10px] font-semibold">Focus trouble?</Text>
+              </Pressable>
+
+              <HeaderCard icon={icons.camera} title="Camera Setup" subtitle="Zoom, focus & align" compact />
+
+              <SectionCard title="Zoom" variant="secondary" compact className="mt-2">
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-white/70 text-[10px]">Level</Text>
+                  <Text className="text-brand-greenLight font-mono text-[10px]">
+                    {(zoom * 100).toFixed(0)}%
+                  </Text>
+                </View>
+                <Slider
+                    style={{ width: "100%", height: 32 }}
+                    minimumValue={0}
+                    maximumValue={1}
+                    value={zoom}
+                    onValueChange={handleZoomChange}
+                    minimumTrackTintColor="#0b7f4f"
+                    maximumTrackTintColor="#333"
+                    thumbTintColor="#22c55e"
+                />
+              </SectionCard>
+
+              <SectionCard title="Rotation" variant="secondary" compact className="mt-2">
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-white/70 text-[10px]">Angle</Text>
+                  <Text
+                      className={cn(
+                          "font-mono text-[10px]",
+                          rotation === 0 ? "text-white/50" : "text-brand-greenLight"
+                      )}
+                  >
+                    {rotation > 0 ? "+" : ""}
+                    {rotation.toFixed(1)}°
+                  </Text>
+                </View>
+                <Slider
+                    style={{ width: "100%", height: 32 }}
+                    minimumValue={MIN_ROTATION}
+                    maximumValue={MAX_ROTATION}
+                    value={rotation}
+                    onValueChange={handleRotationChange}
+                    minimumTrackTintColor="#0b7f4f"
+                    maximumTrackTintColor="#333"
+                    thumbTintColor="#22c55e"
+                />
+                <View className="flex-row justify-between">
+                  <Text className="text-white/40 text-[9px]">-45°</Text>
+                  <Pressable onPress={handleResetRotation}>
+                    <Text className="text-brand-greenLight/70 text-[9px] font-semibold">Reset</Text>
+                  </Pressable>
+                  <Text className="text-white/40 text-[9px]">+45°</Text>
+                </View>
+              </SectionCard>
+
+              <SectionCard title="Focus" variant="secondary" compact className="mt-2">
+                {focusPoint ? (
+                    <View className="flex-row items-center">
+                      <StatusBadge
+                          status={focusLocked ? "success" : "warning"}
+                          label={focusLocked ? "LOCKED" : "..."}
+                          compact
+                          className="flex-1"
+                      />
+                      <Pressable
+                          onPress={handleClearFocus}
+                          className="ml-2 px-2 py-1 rounded bg-brand-black/40 border border-brand-green/30"
+                      >
+                        <Text className="text-white/70 text-[9px]">Clear</Text>
+                      </Pressable>
+                    </View>
+                ) : (
+                    <Text className="text-white/50 text-[9px] text-center">Tap camera to focus</Text>
+                )}
+              </SectionCard>
+            </ScrollView>
+          </SafeAreaView>
+
+          <View
+              className="absolute bottom-0 left-0 items-center pb-3 px-3"
+              style={{ right: layoutConfig.sidePanelWidth }}
+              pointerEvents="box-none"
+          >
+            <View className="flex-row items-center gap-2 bg-brand-black/80 rounded-xl p-2 border border-brand-green/40">
+              <IconButton icon={icons.chevronLeft} onPress={handleBack} size="sm" />
+              <IconButton icon={icons.chevronRight} onPress={handleNext} size="sm" variant="primary" tintColor="#fff" />
+              <IconButton icon={icons.cancel} onPress={handleCancel} size="sm" />
+            </View>
+          </View>
+
+          {renderInfoModal()}
+        </View>
     );
   }
 
   // PORTRAIT LAYOUT
   return (
-    <View className="flex-1 bg-brand-black">
-      <View
-        onLayout={handleCameraLayout}
-        style={[StyleSheet.absoluteFill, { bottom: layoutConfig.cameraInsets.padBottom }]}
-      >
-        {shouldRenderCamera && (
-          <Pressable onPress={handleTapToFocus} style={StyleSheet.absoluteFill}>
-            <View style={[StyleSheet.absoluteFill, rotationTransform]}>
-              <CameraView
-                ref={cameraRef}
-                style={StyleSheet.absoluteFill}
-                facing="back"
-                zoom={zoom}
-                autofocus={focusLocked ? "off" : "on"}
-              />
-            </View>
-            {renderFocusIndicator()}
-            {!focusPoint && (
-              <View style={styles.guideOverlay} pointerEvents="none">
-                <View style={styles.guideBox}>
-                  <Text style={styles.guideText}>Tap to lock focus</Text>
+      <View className="flex-1 bg-brand-black">
+        <View
+            onLayout={handleCameraLayout}
+            style={[StyleSheet.absoluteFill, { bottom: layoutConfig.cameraInsets.padBottom }]}
+        >
+          {shouldRenderCamera && (
+              <Pressable onPress={handleTapToFocus} style={StyleSheet.absoluteFill}>
+                <View style={[StyleSheet.absoluteFill, rotationTransform]}>
+                  <CameraView
+                      ref={cameraRef}
+                      style={StyleSheet.absoluteFill}
+                      facing="back"
+                      zoom={zoom}
+                      autofocus={focusLocked ? "off" : "on"}
+                  />
                 </View>
+                {renderFocusIndicator()}
+                {!focusPoint && (
+                    <View style={styles.guideOverlay} pointerEvents="none">
+                      <View style={styles.guideBox}>
+                        <Text style={styles.guideText}>Tap to lock focus</Text>
+                      </View>
+                    </View>
+                )}
+              </Pressable>
+          )}
+        </View>
+
+        <SafeAreaView
+            className="absolute bottom-0 left-0 right-0 bg-brand-black/95 border-t border-brand-green/30"
+            style={{ height: layoutConfig.bottomPanelTotalHeight }}
+            edges={["bottom"]}
+        >
+          <ScrollView className="flex-1 px-4 pt-2" showsVerticalScrollIndicator={false}>
+            <Pressable
+                onPress={() => setShowInfoModal(true)}
+                className="flex-row items-center justify-center py-2 px-3 rounded-xl bg-blue-500/15 border border-blue-400/30 mb-2"
+            >
+              <Image
+                  source={icons.info}
+                  className="w-4 h-4 mr-2"
+                  resizeMode="contain"
+                  style={{ tintColor: "#60a5fa" }}
+              />
+              <Text className="text-blue-300 text-sm font-semibold">Focus trouble?</Text>
+            </Pressable>
+
+            <View className="flex-row gap-2 mb-2">
+              <View className="flex-1 rounded-xl bg-brand-greenDark/50 border border-brand-green/40 p-2">
+                <View className="flex-row justify-between mb-1">
+                  <Text className="text-white font-semibold text-xs">Zoom</Text>
+                  <Text className="text-brand-greenLight font-mono text-xs">{(zoom * 100).toFixed(0)}%</Text>
+                </View>
+                <Slider
+                    style={{ width: "100%", height: 28 }}
+                    minimumValue={0}
+                    maximumValue={1}
+                    value={zoom}
+                    onValueChange={handleZoomChange}
+                    minimumTrackTintColor="#0b7f4f"
+                    maximumTrackTintColor="#333"
+                    thumbTintColor="#22c55e"
+                />
               </View>
-            )}
-          </Pressable>
-        )}
+              <View className="flex-1 rounded-xl bg-brand-greenDark/50 border border-brand-green/40 p-2">
+                <View className="flex-row justify-between mb-1">
+                  <Text className="text-white font-semibold text-xs">Rotation</Text>
+                  <Text
+                      className={cn("font-mono text-xs", rotation === 0 ? "text-white/50" : "text-brand-greenLight")}
+                  >
+                    {rotation > 0 ? "+" : ""}
+                    {rotation.toFixed(1)}°
+                  </Text>
+                </View>
+                <Slider
+                    style={{ width: "100%", height: 28 }}
+                    minimumValue={MIN_ROTATION}
+                    maximumValue={MAX_ROTATION}
+                    value={rotation}
+                    onValueChange={handleRotationChange}
+                    minimumTrackTintColor="#0b7f4f"
+                    maximumTrackTintColor="#333"
+                    thumbTintColor="#22c55e"
+                />
+              </View>
+            </View>
+
+            <View className="flex-row gap-2 mb-2">
+              <PillButton label="Reset Zoom" onPress={handleResetZoom} variant="ghost" compact />
+              <PillButton label="Reset Rot" onPress={handleResetRotation} variant="ghost" compact />
+              {focusPoint && <PillButton label="Clear Focus" onPress={handleClearFocus} variant="ghost" compact />}
+            </View>
+
+            <View className="items-center mb-2">
+              {focusPoint ? (
+                  <StatusBadge status={focusLocked ? "success" : "warning"} label={focusLocked ? "Focus Locked" : "Focusing..."} />
+              ) : (
+                  <StatusBadge status="neutral" label="Tap camera to focus" showDot={false} />
+              )}
+            </View>
+
+            <View className="flex-row items-center justify-center gap-4">
+              <IconButton icon={icons.chevronLeft} onPress={handleBack} size="md" />
+              <IconButton icon={icons.chevronRight} onPress={handleNext} size="md" variant="primary" tintColor="#fff" />
+              <IconButton icon={icons.cancel} onPress={handleCancel} size="md" />
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+
+        {renderInfoModal()}
       </View>
-
-      <SafeAreaView
-        className="absolute bottom-0 left-0 right-0 bg-brand-black/95 border-t border-brand-green/30"
-        style={{ height: layoutConfig.bottomPanelTotalHeight }}
-        edges={["bottom"]}
-      >
-        <ScrollView className="flex-1 px-4 pt-2" showsVerticalScrollIndicator={false}>
-          <Pressable
-            onPress={() => setShowInfoModal(true)}
-            className="flex-row items-center justify-center py-2 px-3 rounded-xl bg-blue-500/15 border border-blue-400/30 mb-2"
-          >
-            <Image
-              source={icons.info}
-              className="w-4 h-4 mr-2"
-              resizeMode="contain"
-              style={{ tintColor: "#60a5fa" }}
-            />
-            <Text className="text-blue-300 text-sm font-semibold">Focus trouble?</Text>
-          </Pressable>
-
-          <View className="flex-row gap-2 mb-2">
-            <View className="flex-1 rounded-xl bg-brand-greenDark/50 border border-brand-green/40 p-2">
-              <View className="flex-row justify-between mb-1">
-                <Text className="text-white font-semibold text-xs">Zoom</Text>
-                <Text className="text-brand-greenLight font-mono text-xs">{(zoom * 100).toFixed(0)}%</Text>
-              </View>
-              <Slider
-                style={{ width: "100%", height: 28 }}
-                minimumValue={0}
-                maximumValue={1}
-                value={zoom}
-                onValueChange={handleZoomChange}
-                minimumTrackTintColor="#0b7f4f"
-                maximumTrackTintColor="#333"
-                thumbTintColor="#22c55e"
-              />
-            </View>
-            <View className="flex-1 rounded-xl bg-brand-greenDark/50 border border-brand-green/40 p-2">
-              <View className="flex-row justify-between mb-1">
-                <Text className="text-white font-semibold text-xs">Rotation</Text>
-                <Text
-                  className={cn("font-mono text-xs", rotation === 0 ? "text-white/50" : "text-brand-greenLight")}
-                >
-                  {rotation > 0 ? "+" : ""}
-                  {rotation.toFixed(1)}°
-                </Text>
-              </View>
-              <Slider
-                style={{ width: "100%", height: 28 }}
-                minimumValue={MIN_ROTATION}
-                maximumValue={MAX_ROTATION}
-                value={rotation}
-                onValueChange={handleRotationChange}
-                minimumTrackTintColor="#0b7f4f"
-                maximumTrackTintColor="#333"
-                thumbTintColor="#22c55e"
-              />
-            </View>
-          </View>
-
-          <View className="flex-row gap-2 mb-2">
-            <PillButton label="Reset Zoom" onPress={handleResetZoom} variant="ghost" compact />
-            <PillButton label="Reset Rot" onPress={handleResetRotation} variant="ghost" compact />
-            {focusPoint && <PillButton label="Clear Focus" onPress={handleClearFocus} variant="ghost" compact />}
-          </View>
-
-          <View className="items-center mb-2">
-            {focusPoint ? (
-              <StatusBadge status={focusLocked ? "success" : "warning"} label={focusLocked ? "Focus Locked" : "Focusing..."} />
-            ) : (
-              <StatusBadge status="neutral" label="Tap camera to focus" showDot={false} />
-            )}
-          </View>
-
-          <View className="flex-row items-center justify-center gap-4">
-            <IconButton icon={icons.chevronLeft} onPress={handleBack} size="md" />
-            <IconButton icon={icons.chevronRight} onPress={handleNext} size="md" variant="primary" tintColor="#fff" />
-            <IconButton icon={icons.cancel} onPress={handleCancel} size="md" />
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-
-      {renderInfoModal()}
-    </View>
   );
 }
 

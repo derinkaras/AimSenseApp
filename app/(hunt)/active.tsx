@@ -5,6 +5,8 @@
 // - Camera view with calibrated settings
 // - EXACT SAME LAYOUT as step6/step7 for pixel-perfect calibration accuracy
 // - Toggle crosshair to verify calibration alignment
+// - Camera invariant validation (spec 14.2)
+// - Zoom gesture prevention
 
 import React, { useCallback, useState, useEffect, useRef } from "react";
 import {
@@ -18,18 +20,19 @@ import {
     Easing,
     useWindowDimensions,
 } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import * as ScreenOrientation from "expo-screen-orientation";
-import { useCalibrationStore, isLandscape, getCameraLayoutConfig } from "@/app/calibration/exports";
+import { useCalibrationStore, isLandscape, getCameraLayoutConfig, lockOrientation } from "@/app/calibration/exports";
 import {
     useHuntStore,
     selectSelectedGun,
     selectCalibrationResult,
     selectIsHuntActive,
+    selectCameraInvariants,
 } from "@/app/hunt/store";
 import icons from "@/app/constants/icons";
 import { useCameraContext } from "./_layout";
@@ -43,12 +46,18 @@ export default function ActiveHunt() {
     const { activeScreen, setActiveScreen } = useCameraContext();
     const insets = useSafeAreaInsets();
     const navigation = useNavigation();
+    const router = useRouter();
     const { width, height } = useWindowDimensions();
 
     // UI State
     const [showEndConfirm, setShowEndConfirm] = useState(false);
     const [showCrosshair, setShowCrosshair] = useState(false);
     const crosshairOpacity = useRef(new Animated.Value(0)).current;
+
+    // Camera validation state (spec 14.2)
+    const [cameraLayout, setCameraLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
+    const [cameraValidated, setCameraValidated] = useState(false);
+    const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
     // Pulsing animation for Live indicator
     const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -58,18 +67,56 @@ export default function ActiveHunt() {
     const selectedGun = useHuntStore(selectSelectedGun);
     const calibrationResult = useHuntStore(selectCalibrationResult);
     const isHuntActive = useHuntStore(selectIsHuntActive);
+    const cameraInvariants = useHuntStore(selectCameraInvariants);
+    const validateCameraInvariants = useHuntStore((s) => s.validateCameraInvariants);
     const endHunt = useHuntStore((s) => s.endHunt);
 
     // Calibration store
     const resetCalibration = useCalibrationStore((s) => s.resetCalibration);
 
+    // Lock orientation on focus (redundant safety)
     useFocusEffect(
         useCallback(() => {
             console.log(SCREEN_ID);
             setActiveScreen(SCREEN_ID);
+            
+            // Ensure orientation is still locked to calibrated orientation
+            if (calibrationResult?.mountOrientation) {
+                lockOrientation(calibrationResult.mountOrientation);
+            }
+            
             return () => {};
-        }, [setActiveScreen])
+        }, [setActiveScreen, calibrationResult])
     );
+
+    // Validate camera when layout changes (spec 14.2)
+    useEffect(() => {
+        if (cameraLayout.width > 0 && cameraLayout.height > 0 && calibrationResult) {
+            const currentResolution = {
+                width: cameraLayout.width,
+                height: cameraLayout.height,
+            };
+            
+            const result = validateCameraInvariants(
+                calibrationResult.cameraZoom,
+                calibrationResult.screenRotation,
+                calibrationResult.mountOrientation,
+                currentResolution
+            );
+            
+            setCameraValidated(result.valid);
+            setValidationErrors(result.errors);
+            
+            if (!result.valid) {
+                console.warn("⚠️ Camera validation failed:", result.errors);
+            }
+        }
+    }, [cameraLayout, calibrationResult, validateCameraInvariants]);
+
+    // Handle camera layout for validation
+    const handleCameraLayout = (e: any) => {
+        setCameraLayout(e.nativeEvent.layout);
+    };
 
     // Start pulsing animation on mount
     useEffect(() => {
@@ -239,14 +286,18 @@ export default function ActiveHunt() {
         return (
             <View className="flex-1 bg-brand-black">
                 {/* Camera region (left) - EXACT same as step6/step7 */}
+                {/* Wrapped in View that captures gestures to prevent zoom (spec 14.2) */}
                 <View
+                    onLayout={handleCameraLayout}
                     style={[
                         StyleSheet.absoluteFill,
                         { right: layoutConfig.cameraInsets.padRight, bottom: layoutConfig.cameraInsets.padBottom }
                     ]}
+                    onStartShouldSetResponder={() => true}
+                    onMoveShouldSetResponder={() => true}
                 >
                     {shouldRenderCamera && (
-                        <View style={StyleSheet.absoluteFill}>
+                        <View style={StyleSheet.absoluteFill} pointerEvents="box-only">
                             <View style={[StyleSheet.absoluteFill, rotationTransform]}>
                                 <CameraView
                                     style={StyleSheet.absoluteFill}
@@ -373,14 +424,18 @@ export default function ActiveHunt() {
     return (
         <View className="flex-1 bg-brand-black">
             {/* Camera region - EXACT same as step6/step7 portrait */}
+            {/* Wrapped to capture gestures and prevent zoom (spec 14.2) */}
             <View
+                onLayout={handleCameraLayout}
                 style={[
                     StyleSheet.absoluteFill,
                     { bottom: controlPanelHeight + layoutConfig.bottomPadding }
                 ]}
+                onStartShouldSetResponder={() => true}
+                onMoveShouldSetResponder={() => true}
             >
                 {shouldRenderCamera && (
-                    <View style={StyleSheet.absoluteFill}>
+                    <View style={StyleSheet.absoluteFill} pointerEvents="box-only">
                         <View style={[StyleSheet.absoluteFill, rotationTransform]}>
                             <CameraView
                                 style={StyleSheet.absoluteFill}
