@@ -375,21 +375,18 @@ export default function ActiveHunt() {
 
     // ==================== INITIALIZATION ====================
 
-    // Load saved preferences
+    // Load saved preferences and ALWAYS show rangefinder modal on page load
     useEffect(() => {
-        // Load tip dismissed state
-        AsyncStorage.getItem(STORAGE_KEY_TIP_DISMISSED).then((val) => {
-            if (val === "1") setShowCalibrationTip(false);
-        });
+        // Always show the zero info card on page load (user can dismiss each session)
+        setShowCalibrationTip(true);
 
         // Load rangefinder mode
         AsyncStorage.getItem(STORAGE_KEY_RANGEFINDER_MODE).then((val) => {
             if (val === "LOS" || val === "COMPENSATED") {
                 setRangefinderMode(val);
-            } else {
-                // First time - show modal to select
-                setShowRangefinderModal(true);
             }
+            // Always show modal when entering hunt mode to confirm rangefinder type
+            setShowRangefinderModal(true);
         });
     }, []);
 
@@ -448,10 +445,10 @@ export default function ActiveHunt() {
         setShowRangefinderModal(false);
     }, []);
 
-    const handleDismissTip = useCallback(async () => {
+    const handleDismissTip = useCallback(() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         setShowCalibrationTip(false);
-        await AsyncStorage.setItem(STORAGE_KEY_TIP_DISMISSED, "1");
+        // Don't persist - we want it to show again next session
     }, []);
 
     const handleToggleCrosshair = useCallback(() => {
@@ -607,31 +604,36 @@ export default function ActiveHunt() {
         const cantDegrees = Math.abs(ballisticsData.currentCant).toFixed(1);
 
         return (
-            <View style={[styles.cantBanner, { top: insets.top + 8, backgroundColor: bgColor, borderColor }]}>
+            <View style={[styles.cantBanner, { top: insets.top + 8, left: isLandscapeMode ? 48 : 16, backgroundColor: bgColor, borderColor }]}>
                 <Text style={[styles.cantBannerText, { color: textColor }]}>
                     {isRed ? `⚠ LEVEL RIFLE! (${cantDegrees}°)` : `⚠ CHECK CANT (${cantDegrees}°)`}
                 </Text>
             </View>
         );
-    }, [cantLevel, isTargetConfirmed, ballisticsData, insets.top]);
+    }, [cantLevel, isTargetConfirmed, ballisticsData, insets.top, isLandscapeMode]);
 
-    // Calibration tip overlay
-    const CalibrationTip = useMemo(() => {
+    // Zero verification info card - shows in center of camera view
+    const ZeroInfoCard = useMemo(() => {
         if (!showCalibrationTip) return null;
 
         return (
-            <View style={styles.tipContainer}>
-                <View style={styles.tipBox}>
-                    <Image source={icons.info} style={styles.tipIcon} resizeMode="contain" />
-                    <View style={styles.tipTextWrap}>
-                        <Text style={styles.tipTitle}>Verify Zero Regularly</Text>
-                        <Text style={styles.tipText}>
-                            Tap the crosshair button to check scope alignment. Minor drift is normal — recalibrate only if significantly off.
-                        </Text>
+            <View style={styles.zeroInfoOverlay}>
+                <View style={styles.zeroInfoCard}>
+                    <View style={styles.zeroInfoHeader}>
+                        <View style={styles.zeroInfoIconWrap}>
+                            <Image source={icons.target} style={styles.zeroInfoIcon} resizeMode="contain" />
+                        </View>
+                        <Text style={styles.zeroInfoTitle}>Verify Zero Button</Text>
+                        <Pressable onPress={handleDismissTip} style={styles.zeroInfoClose} hitSlop={12}>
+                            <Image source={icons.cancel} style={styles.zeroInfoCloseIcon} resizeMode="contain" />
+                        </Pressable>
                     </View>
-                    <Pressable onPress={handleDismissTip} style={styles.tipClose} hitSlop={12}>
-                        <Image source={icons.cancel} style={styles.tipCloseIcon} resizeMode="contain" />
-                    </Pressable>
+                    <Text style={styles.zeroInfoText}>
+                        Tap the <Text style={styles.zeroInfoHighlight}>crosshair button</Text> in the control panel to show your calibrated scope center. Use this to verify alignment hasn't drifted during your hunt.
+                    </Text>
+                    <Text style={styles.zeroInfoSubtext}>
+                        Minor drift is normal — only recalibrate if significantly off target.
+                    </Text>
                 </View>
             </View>
         );
@@ -794,7 +796,7 @@ export default function ActiveHunt() {
 
                     {HoldoverCrosshair}
                     {CantWarningBanner}
-                    {CalibrationTip}
+                    {ZeroInfoCard}
                 </View>
             )}
         </>
@@ -1028,50 +1030,79 @@ const styles = StyleSheet.create({
         fontWeight: "700",
     },
 
-    tipContainer: {
+    // Zero Info Card - centered in camera view
+    zeroInfoOverlay: {
         position: "absolute",
-        bottom: 12,
-        left: 12,
-        right: 12,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: "center",
+        alignItems: "center",
+        paddingHorizontal: 24,
     },
-    tipBox: {
-        backgroundColor: "rgba(39, 39, 42, 0.95)",
-        borderRadius: 14,
-        padding: 12,
-        flexDirection: "row",
-        alignItems: "flex-start",
+    zeroInfoCard: {
+        backgroundColor: "rgba(24, 24, 27, 0.97)",
+        borderRadius: 16,
+        padding: 16,
+        maxWidth: 320,
+        width: "100%",
         borderWidth: 1,
         borderColor: "rgba(34, 197, 94, 0.4)",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 8,
     },
-    tipIcon: {
-        width: 18,
-        height: 18,
-        tintColor: "#22c55e",
+    zeroInfoHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginBottom: 12,
+    },
+    zeroInfoIconWrap: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        backgroundColor: "rgba(34, 197, 94, 0.15)",
+        alignItems: "center",
+        justifyContent: "center",
         marginRight: 10,
-        marginTop: 2,
     },
-    tipTextWrap: {
+    zeroInfoIcon: {
+        width: 20,
+        height: 20,
+        tintColor: "#22c55e",
+    },
+    zeroInfoTitle: {
         flex: 1,
-    },
-    tipTitle: {
         color: "#22c55e",
-        fontSize: 13,
+        fontSize: 16,
         fontWeight: "700",
-        marginBottom: 3,
     },
-    tipText: {
-        color: "rgba(255, 255, 255, 0.7)",
-        fontSize: 11,
-        lineHeight: 15,
-    },
-    tipClose: {
+    zeroInfoClose: {
         padding: 4,
-        marginLeft: 6,
     },
-    tipCloseIcon: {
-        width: 14,
-        height: 14,
+    zeroInfoCloseIcon: {
+        width: 16,
+        height: 16,
         tintColor: "rgba(255, 255, 255, 0.5)",
+    },
+    zeroInfoText: {
+        color: "rgba(255, 255, 255, 0.85)",
+        fontSize: 14,
+        lineHeight: 20,
+        marginBottom: 8,
+    },
+    zeroInfoHighlight: {
+        color: "#22c55e",
+        fontWeight: "600",
+    },
+    zeroInfoSubtext: {
+        color: "rgba(255, 255, 255, 0.5)",
+        fontSize: 12,
+        lineHeight: 16,
+        fontStyle: "italic",
     },
 
     modalOverlay: {
