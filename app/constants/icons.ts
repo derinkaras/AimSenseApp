@@ -33,7 +33,7 @@ import chevronDown from "../assets/icons/chevronDown.png"
 import arrowUp from "../assets/icons/arrowUp.png"
 import scope from "../assets/icons/scope.png"
 import refresh from "../assets/icons/refresh.png"
-
+import distance from "../assets/icons/distance.png"
 const icons = {
     leftArrow,
     mail,
@@ -69,6 +69,7 @@ const icons = {
     chevronDown,
     arrowUp,
     scope,
-    refresh
+    refresh,
+    distance
 }
 export default icons

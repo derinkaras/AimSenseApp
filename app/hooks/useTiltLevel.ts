@@ -39,8 +39,10 @@ function remapGravityToPortrait(gx: number, gy: number, gz: number, o: MountOrie
 export interface TiltLevelResult {
     /** Display-friendly level angle (integer degrees for UI bubble) */
     levelDeg: number;
-    /** Whether the device is level and stable (gating condition met) */
+    /** Whether the device is level (near 0°) and stable */
     isLevel: boolean;
+    /** Whether the device is being held steady (stable readings, any angle) */
+    isStable: boolean;
     /** Raw smoothed roll angle (degrees) - store this as roll0 */
     rollNow: number;
     /** Raw smoothed pitch angle (degrees) - store this as pitch0 */
@@ -58,19 +60,22 @@ export interface TiltLevelControls {
  * Measure-like leveling (Expo approximation):
  * - Auto-selects FLAT vs UPRIGHT mode based on |gz| fraction (with hysteresis)
  * - Shows signed integer degrees (-2..-1..0..1..2) for UI
- * - isLevel is based on the true smoothed angle (not the integer)
+ * - isLevel: device is near 0° AND stable (for level-requiring steps)
+ * - isStable: device readings are stable at ANY angle (for baseline capture)
  * - Returns raw rollNow/pitchNow for baseline capture
  *
  * CALIBRATION RULE:
- * - toleranceDeg defaults to 3° (≤ 3° gating condition)
- * - holdMs defaults to 500ms (stability requirement)
- * - When isLevel=true, rollNow and pitchNow are safe to capture as baseline
+ * - For baseline capture, use isStable (not isLevel)
+ * - isStable means the values haven't changed much over stabilityMs
+ * - This allows capturing the baseline at whatever angle the mount holds the phone
  */
 export function useTiltLevel(
     mountOrientation: MountOrientation,
     opts?: {
         toleranceDeg?: number;
         holdMs?: number;
+        stabilityThresholdDeg?: number; // Max change per reading to be considered "stable"
+        stabilityMs?: number; // How long readings must be stable
 
         zeroEnterDeg?: number;
         zeroExitDeg?: number;
@@ -81,10 +86,16 @@ export function useTiltLevel(
     },
     controls?: TiltLevelControls
 ): TiltLevelResult {
-    // ≤ 3° gating condition for baseline capture
+    // ≤ 3° gating condition for "isLevel" (phone near 0)
     const toleranceDeg = opts?.toleranceDeg ?? 3.0;
-    // 0.4-0.6s stability requirement
+    // How long to hold for isLevel
     const holdMs = opts?.holdMs ?? 500;
+
+    // Stability detection (for baseline capture at any angle)
+    // Max degrees of change between readings to be "stable"
+    const stabilityThresholdDeg = opts?.stabilityThresholdDeg ?? 0.5;
+    // How long values must be stable
+    const stabilityMs = opts?.stabilityMs ?? 800;
 
     const zeroEnterDeg = opts?.zeroEnterDeg ?? 0.12;
     const zeroExitDeg = opts?.zeroExitDeg ?? 0.6;
@@ -98,11 +109,12 @@ export function useTiltLevel(
 
     const [levelDeg, setLevelDeg] = useState<number>(0);
     const [isLevel, setIsLevel] = useState(false);
+    const [isStable, setIsStable] = useState(false);
     const [rollNow, setRollNow] = useState<number>(0);
     const [pitchNow, setPitchNow] = useState<number>(0);
 
     const stableSince = useRef<number | null>(null);
-    const logicalRef = useRef<number>(Infinity); // smoothed signed degrees for display
+    const logicalRef = useRef<number>(Infinity);
     const displayRef = useRef<number>(0);
     const modeRef = useRef<"FLAT" | "UPRIGHT">("UPRIGHT");
 
@@ -110,22 +122,30 @@ export function useTiltLevel(
     const rollRef = useRef<number>(Infinity);
     const pitchRef = useRef<number>(Infinity);
 
+    // For stability detection - track previous values
+    const prevRollRef = useRef<number>(Infinity);
+    const prevPitchRef = useRef<number>(Infinity);
+    const stableStartRef = useRef<number | null>(null);
+
     useEffect(() => {
-        // When disabled: stop IMU work and reset "ready" state.
-        // (Leaving last levelDeg on screen is fine; but baseline-ready must be false.)
         if (!enabled) {
             stableSince.current = null;
+            stableStartRef.current = null;
             setIsLevel(false);
+            setIsStable(false);
             return;
         }
 
-        // Fresh start when re-enabled (prevents weird smoothing carry-over)
+        // Fresh start when re-enabled
         stableSince.current = null;
+        stableStartRef.current = null;
         logicalRef.current = Infinity;
         displayRef.current = 0;
         modeRef.current = "UPRIGHT";
         rollRef.current = Infinity;
         pitchRef.current = Infinity;
+        prevRollRef.current = Infinity;
+        prevPitchRef.current = Infinity;
 
         DeviceMotion.setUpdateInterval(updateIntervalMs);
 
@@ -164,17 +184,45 @@ export function useTiltLevel(
             setRollNow(smoothedRoll);
             setPitchNow(smoothedPitch);
 
-            // Calculate display-friendly level angle
+            // ============================================================
+            // STABILITY DETECTION (for baseline capture at any angle)
+            // ============================================================
+            const now = Date.now();
+
+            if (Number.isFinite(prevRollRef.current) && Number.isFinite(prevPitchRef.current)) {
+                const rollChange = Math.abs(smoothedRoll - prevRollRef.current);
+                const pitchChange = Math.abs(smoothedPitch - prevPitchRef.current);
+                const maxChange = Math.max(rollChange, pitchChange);
+
+                if (maxChange <= stabilityThresholdDeg) {
+                    // Values are stable
+                    if (stableStartRef.current === null) {
+                        stableStartRef.current = now;
+                    }
+                    if (now - stableStartRef.current >= stabilityMs) {
+                        setIsStable(true);
+                    }
+                } else {
+                    // Values changed too much - reset stability
+                    stableStartRef.current = null;
+                    setIsStable(false);
+                }
+            }
+
+            prevRollRef.current = smoothedRoll;
+            prevPitchRef.current = smoothedPitch;
+
+            // ============================================================
+            // LEVEL DETECTION (for UI display, near 0°)
+            // ============================================================
             let chosenSigned: number;
 
             if (modeRef.current === "FLAT") {
-                // Signed "slope" like Measure (wrap to [-90, 90] to avoid flips)
                 let r = ((rawRoll + 180) % 360) - 180;
                 if (r > 90) r -= 180;
                 if (r < -90) r += 180;
                 chosenSigned = r;
             } else {
-                // Upright: treat "no cant" as near 90°
                 const abs = Math.abs(rawRoll);
                 chosenSigned = Math.sign(rawRoll || 1) * (abs - 90);
             }
@@ -202,12 +250,10 @@ export function useTiltLevel(
             displayRef.current = next;
             setLevelDeg(next);
 
-            // Gating condition: ≤ toleranceDeg (default 3°) AND stable
-            // Uses the true smoothed angle, not the display integer
-            const within = Math.abs(logical) <= toleranceDeg;
-            const now = Date.now();
+            // isLevel: near 0° AND stable for holdMs
+            const withinTolerance = Math.abs(logical) <= toleranceDeg;
 
-            if (within) {
+            if (withinTolerance) {
                 if (stableSince.current == null) stableSince.current = now;
                 if (now - stableSince.current >= holdMs) setIsLevel(true);
             } else {
@@ -223,6 +269,8 @@ export function useTiltLevel(
         mountOrientation,
         toleranceDeg,
         holdMs,
+        stabilityThresholdDeg,
+        stabilityMs,
         zeroEnterDeg,
         zeroExitDeg,
         smoothingAlpha,
@@ -230,5 +278,5 @@ export function useTiltLevel(
         flatExitGz,
     ]);
 
-    return { levelDeg, isLevel, rollNow, pitchNow };
+    return { levelDeg, isLevel, isStable, rollNow, pitchNow };
 }

@@ -327,7 +327,9 @@ export default function ActiveHunt() {
         const W = 0; // Wind correction (not implemented yet)
 
         // Calculate current cant relative to locked position
-        const currentCant = cantNow - (cantLocked ?? calibrationData.pitch0);
+        // When cantLocked is null (before target confirmation), use 0 as baseline
+        // After confirmation, cantLocked holds the cant angle at confirmation time
+        const currentCant = cantNow - (cantLocked ?? 0);
         const cantRad = (currentCant * Math.PI) / 180;
 
         // Rotate correction vector by cant angle (Spec Section 7, Step 4)

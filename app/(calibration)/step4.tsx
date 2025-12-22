@@ -1,10 +1,14 @@
 // ============================================================
-// step4.tsx - Set Reference (Level & Hold Steady)
+// step4.tsx - Capture Baseline Reference
 // ============================================================
-// Captures the baseline IMU reference for live cant/pitch tracking.
-// Responsive layout adapts to portrait/landscape and all device sizes.
+// Captures the baseline IMU reference when the RIFLE is level.
+//
+// IMPORTANT: We capture whatever angles the PHONE reads when the
+// RIFLE is held in a level shooting position. The phone may not
+// read 0° due to mount adapter alignment - that's expected and fine.
+// This step records the relationship between phone angles and rifle angles.
 
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, Pressable, ScrollView, Image, StyleSheet } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -26,6 +30,13 @@ import { HeaderCard, IconButton } from "../calibration/exports/components";
 
 const SCREEN_ID = "step4";
 
+// Stability config for baseline capture
+const BASELINE_CONFIG = {
+  ...DEFAULT_TILT_CONFIG,
+  stabilityThresholdDeg: 0.3,  // Very still
+  stabilityMs: 1000,           // Hold for 1 second
+};
+
 // ==================== MAIN COMPONENT ====================
 export default function Step4() {
   const [permission] = useCameraPermissions();
@@ -35,7 +46,7 @@ export default function Step4() {
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const wasLevel = useRef(false);
+  const wasStable = useRef(false);
   const timeouts = useRef<Array<ReturnType<typeof setTimeout>>>([]);
 
   // Store selectors
@@ -47,22 +58,20 @@ export default function Step4() {
   const safeEdges = getSafeAreaEdges(isLandscapeMode);
   const compact = isLandscapeMode;
 
-  // Tilt level hook - only active when focused
-  const { levelDeg, isLevel, rollNow, pitchNow } = useTiltLevel(
-    mountOrientation,
-    DEFAULT_TILT_CONFIG,
-    { enabled: isFocused, updateIntervalMs: 60 }
+  // Tilt level hook - use isStable for baseline capture (not isLevel)
+  const { levelDeg, isStable, rollNow, pitchNow } = useTiltLevel(
+      mountOrientation,
+      BASELINE_CONFIG,
+      { enabled: isFocused, updateIntervalMs: 50 }
   );
-
-  const safe = Number.isFinite(levelDeg) ? levelDeg : 0;
 
   // Focus effect
   useFocusEffect(
-    useCallback(() => {
-      console.log(SCREEN_ID);
-      setActiveScreen(SCREEN_ID);
-      return () => {};
-    }, [setActiveScreen])
+      useCallback(() => {
+        console.log(SCREEN_ID);
+        setActiveScreen(SCREEN_ID);
+        return () => {};
+      }, [setActiveScreen])
   );
 
   const shouldRenderCamera = cameraEnabled && activeScreen === SCREEN_ID;
@@ -75,34 +84,35 @@ export default function Step4() {
 
   // Reset refs on focus change
   useFocusEffect(
-    useCallback(() => {
-      wasLevel.current = false;
-      return () => {
-        wasLevel.current = false;
-        clearHapticsTimers();
-      };
-    }, [clearHapticsTimers])
+      useCallback(() => {
+        wasStable.current = false;
+        return () => {
+          wasStable.current = false;
+          clearHapticsTimers();
+        };
+      }, [clearHapticsTimers])
   );
 
-  // Haptic feedback when level is achieved
+  // Haptic feedback when stability is achieved
   useEffect(() => {
     if (!isFocused) return;
     clearHapticsTimers();
 
-    if (isLevel && !wasLevel.current) {
+    if (isStable && !wasStable.current) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       timeouts.current.push(
-        setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 100)
+          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 100)
       );
       timeouts.current.push(
-        setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 200)
+          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 200)
       );
     }
-    wasLevel.current = isLevel;
-  }, [isLevel, isFocused, clearHapticsTimers]);
+    wasStable.current = isStable;
+  }, [isStable, isFocused, clearHapticsTimers]);
 
   // ==================== HANDLERS ====================
   const handleCapture = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     captureBaseline(rollNow, pitchNow);
     router.push("/(calibration)/step5");
   };
@@ -112,191 +122,245 @@ export default function Step4() {
   const handleCancel = async () => {
     await reset();
     navigation.dispatch(
-      CommonActions.reset({
-        index: 0,
-        routes: [{ name: "(tabs)" }],
-      })
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: "(tabs)" }],
+        })
     );
   };
 
   // ==================== RENDER ====================
   return (
-    <View className="flex-1 bg-brand-black">
-      {/* Camera Background */}
-      {shouldRenderCamera && (
-        <CameraView style={StyleSheet.absoluteFill} facing="back" />
-      )}
+      <View className="flex-1 bg-brand-black">
+        {/* Camera Background */}
+        {shouldRenderCamera && (
+            <CameraView style={StyleSheet.absoluteFill} facing="back" />
+        )}
 
-      <SafeAreaView className="flex-1" edges={safeEdges}>
-        <View className={cn("flex-1 pt-3", compact ? "px-4" : "px-5")}>
-          <ScrollView
-            className="flex-1"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{
-              gap: compact ? 12 : 16,
-              paddingBottom: compact ? 80 : 120,
-            }}
-          >
-            {/* Header */}
-            <HeaderCard
-              icon={icons.compass}
-              title="Set Reference"
-              compact={compact}
+        <SafeAreaView className="flex-1" edges={safeEdges}>
+          <View className={cn("flex-1 pt-3", compact ? "px-4" : "px-5")}>
+            <ScrollView
+                className="flex-1"
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{
+                  gap: compact ? 12 : 16,
+                  paddingBottom: compact ? 80 : 120,
+                }}
             >
-              <View className={compact ? "gap-1.5" : "gap-2"}>
-                <View
-                  className={cn(
-                    "rounded-xl bg-brand-black/40 border border-brand-green/30",
-                    compact ? "p-2" : "p-3"
-                  )}
-                >
-                  <Text
-                    className={cn(
-                      "text-white/90",
-                      compact ? "text-[10px] leading-3.5" : "text-sm leading-5"
-                    )}
-                  >
-                    Hold the rifle in a normal shooting position and point it forward while leveling the reference.
-                  </Text>
-                </View>
-
-                <View
-                  className={cn(
-                    "rounded-xl bg-brand-greenDark/40 border border-brand-green/25",
-                    compact ? "p-2" : "p-3"
-                  )}
-                >
-                  <Text
-                    className={cn(
-                      "text-white/70",
-                      compact ? "text-[10px] leading-3.5" : "text-sm leading-5"
-                    )}
-                  >
-                    It's okay if the phone is slightly tilted in the scope adapter — this step records your setup's alignment.
-                  </Text>
-                </View>
-              </View>
-            </HeaderCard>
-
-            {/* Level Card */}
-            <View
-              className={cn(
-                "rounded-3xl border bg-brand-greenDark/65",
-                isLevel ? "border-brand-greenLight" : "border-brand-green/45",
-                compact ? "p-4" : "p-5"
-              )}
-            >
-              <View className="flex-row items-center justify-between">
-                <View>
-                  <Text className="text-white/70 text-sm">Level Offset</Text>
-                  <Text
-                    className={cn(
-                      "text-white font-bold mt-2",
-                      compact ? "text-5xl" : "text-6xl"
-                    )}
-                  >
-                    {safe.toFixed(1)}°
-                  </Text>
-                </View>
-
-                <View
-                  className={cn(
-                    "w-16 h-16 rounded-3xl items-center justify-center border",
-                    isLevel
-                      ? "bg-brand-greenLight/15 border-brand-greenLight"
-                      : "bg-brand-black/40 border-brand-green/35"
-                  )}
-                >
-                  <Image
-                    source={isLevel ? icons.level : icons.tilt}
-                    className="w-8 h-8"
-                    resizeMode="contain"
-                    style={{ tintColor: isLevel ? "#0b7f4f" : "#9ca3af" }}
-                  />
-                </View>
-              </View>
-
-              {/* Status Message */}
-              <View
-                className={cn(
-                  "mt-4 px-4 py-3 rounded-2xl border",
-                  isLevel
-                    ? "bg-brand-greenLight/10 border-brand-greenLight/70"
-                    : "bg-brand-black/30 border-brand-green/30"
-                )}
+              {/* Header */}
+              <HeaderCard
+                  icon={icons.compass}
+                  title="Capture Baseline"
+                  compact={compact}
               >
-                <Text
+                <View className={compact ? "gap-1.5" : "gap-2"}>
+                  {/* Main instruction - what to do */}
+                  <View
+                      className={cn(
+                          "rounded-xl bg-brand-greenLight/15 border border-brand-greenLight/40",
+                          compact ? "p-2.5" : "p-3"
+                      )}
+                  >
+                    <Text
+                        className={cn(
+                            "text-white font-semibold",
+                            compact ? "text-xs" : "text-sm"
+                        )}
+                    >
+                      Hold your rifle perfectly level and steady
+                    </Text>
+                    <Text
+                        className={cn(
+                            "text-white/70 mt-1",
+                            compact ? "text-[10px] leading-3.5" : "text-xs leading-4"
+                        )}
+                    >
+                      Point at a distant target on the horizon. Use a bubble level on your rifle if you have one.
+                    </Text>
+                  </View>
+
+                  {/* Why this matters */}
+                  <View
+                      className={cn(
+                          "rounded-xl bg-brand-black/40 border border-brand-green/30",
+                          compact ? "p-2" : "p-3"
+                      )}
+                  >
+                    <Text
+                        className={cn(
+                            "text-white/80",
+                            compact ? "text-[10px] leading-3.5" : "text-xs leading-4"
+                        )}
+                    >
+                      This captures your mount's alignment. The phone angle doesn't need to be zero — we're recording what "level rifle" looks like to your specific setup.
+                    </Text>
+                  </View>
+                </View>
+              </HeaderCard>
+
+              {/* Stability Card */}
+              <View
                   className={cn(
-                    "text-white font-semibold",
-                    compact ? "text-sm" : "text-base"
+                      "rounded-3xl border bg-brand-greenDark/65",
+                      isStable ? "border-brand-greenLight" : "border-brand-green/45",
+                      compact ? "p-4" : "p-5"
                   )}
-                >
-                  {isLevel
-                    ? "Reference locked — tap Continue"
-                    : "Level the rifle to set your baseline"}
-                </Text>
+              >
+                {/* Status Icon and Indicator */}
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-1">
+                    <Text className="text-white/70 text-sm">
+                      {isStable ? "Ready to Capture" : "Waiting for Steady Hold"}
+                    </Text>
+                    <View className="flex-row items-center mt-2">
+                      <View
+                          className={cn(
+                              "w-4 h-4 rounded-full mr-3",
+                              isStable ? "bg-brand-greenLight" : "bg-yellow-500"
+                          )}
+                      />
+                      <Text
+                          className={cn(
+                              "text-white font-bold",
+                              compact ? "text-2xl" : "text-3xl"
+                          )}
+                      >
+                        {isStable ? "STEADY" : "HOLD STILL..."}
+                      </Text>
+                    </View>
+                  </View>
 
-                <Text className="text-white/70 mt-1 text-sm">
-                  {isLevel
-                    ? "Baseline captured. You don't need to hold this exact angle afterward."
-                    : "Make small adjustments and hold steady once it reads level."}
-                </Text>
-              </View>
-
-              {/* Almost there hint */}
-              {!isLevel && Math.abs(safe) <= 5 && (
-                <View className="mt-4 flex-row items-start">
-                  <View className="w-10 h-10 rounded-2xl bg-brand-black/40 border border-brand-green/35 items-center justify-center mr-3">
+                  <View
+                      className={cn(
+                          "w-16 h-16 rounded-3xl items-center justify-center border",
+                          isStable
+                              ? "bg-brand-greenLight/15 border-brand-greenLight"
+                              : "bg-brand-black/40 border-brand-green/35"
+                      )}
+                  >
                     <Image
-                      source={icons.info}
-                      className="w-5 h-5"
-                      resizeMode="contain"
-                      style={{ tintColor: "#9ca3af" }}
+                        source={isStable ? icons.check : icons.target}
+                        className="w-8 h-8"
+                        resizeMode="contain"
+                        style={{ tintColor: isStable ? "#22c55e" : "#9ca3af" }}
                     />
                   </View>
-                  <Text className="flex-1 text-white/65 text-sm">
-                    Almost there — keep the rifle upright, adjust slowly, then pause once it reads level.
+                </View>
+
+                {/* Status Message */}
+                <View
+                    className={cn(
+                        "mt-4 px-4 py-3 rounded-2xl border",
+                        isStable
+                            ? "bg-brand-greenLight/10 border-brand-greenLight/70"
+                            : "bg-brand-black/30 border-brand-green/30"
+                    )}
+                >
+                  <Text
+                      className={cn(
+                          "text-white font-semibold",
+                          compact ? "text-sm" : "text-base"
+                      )}
+                  >
+                    {isStable
+                        ? "✓ Baseline ready — tap Continue"
+                        : "Keep the rifle still for 1 second"}
+                  </Text>
+
+                  <Text className="text-white/70 mt-1 text-sm">
+                    {isStable
+                        ? "Your mount's reference angles have been captured."
+                        : "Make sure the rifle is level and pointed at the horizon."}
                   </Text>
                 </View>
+
+                {/* Checklist */}
+                <View className={cn("mt-4", compact ? "gap-2" : "gap-3")}>
+                  <View className="flex-row items-center">
+                    <View className="w-6 h-6 rounded-full bg-brand-black/40 border border-brand-green/40 items-center justify-center mr-3">
+                      <Text className="text-brand-greenLight text-xs">1</Text>
+                    </View>
+                    <Text className={cn("text-white/80 flex-1", compact ? "text-xs" : "text-sm")}>
+                      Rifle is level (not tilted left or right)
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center">
+                    <View className="w-6 h-6 rounded-full bg-brand-black/40 border border-brand-green/40 items-center justify-center mr-3">
+                      <Text className="text-brand-greenLight text-xs">2</Text>
+                    </View>
+                    <Text className={cn("text-white/80 flex-1", compact ? "text-xs" : "text-sm")}>
+                      Barrel pointed at horizon (not up or down)
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center">
+                    <View className="w-6 h-6 rounded-full bg-brand-black/40 border border-brand-green/40 items-center justify-center mr-3">
+                      <Text className="text-brand-greenLight text-xs">3</Text>
+                    </View>
+                    <Text className={cn("text-white/80 flex-1", compact ? "text-xs" : "text-sm")}>
+                      Holding steady (not moving)
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Info tip */}
+              <View
+                  className={cn(
+                      "rounded-xl bg-brand-black/40 border border-brand-green/25",
+                      compact ? "p-2.5" : "p-3"
+                  )}
+              >
+                <View className="flex-row items-start">
+                  <View className="w-8 h-8 rounded-lg bg-brand-greenDark/60 border border-brand-green/40 items-center justify-center mr-2.5">
+                    <Image
+                        source={icons.info}
+                        className="w-4 h-4"
+                        resizeMode="contain"
+                        style={{ tintColor: "#9ca3af" }}
+                    />
+                  </View>
+                  <Text className={cn("flex-1 text-white/60", compact ? "text-[10px] leading-3.5" : "text-xs leading-4")}>
+                    Don't worry if the phone isn't perfectly flat in the mount. This step learns your specific setup so the app can correctly detect when your rifle is canted or angled during hunting.
+                  </Text>
+                </View>
+              </View>
+            </ScrollView>
+
+            {/* Navigation CTAs */}
+            <View className={compact ? "py-2" : "py-3"}>
+              <View className="flex-row items-center justify-center gap-4">
+                <IconButton
+                    icon={icons.chevronLeft}
+                    onPress={handleBack}
+                    size={compact ? "sm" : "md"}
+                    variant="secondary"
+                />
+
+                <IconButton
+                    icon={icons.chevronRight}
+                    onPress={handleCapture}
+                    disabled={!isStable}
+                    size={compact ? "sm" : "md"}
+                    variant="primary"
+                    tintColor="#ffffff"
+                />
+
+                <IconButton
+                    icon={icons.cancel}
+                    onPress={handleCancel}
+                    size={compact ? "sm" : "md"}
+                    variant="secondary"
+                />
+              </View>
+
+              {!isStable && (
+                  <Text className="text-white/50 text-center text-sm mt-3">
+                    Hold rifle level and steady to continue
+                  </Text>
               )}
             </View>
-          </ScrollView>
-
-          {/* Navigation CTAs */}
-          <View className={compact ? "py-2" : "py-3"}>
-            <View className="flex-row items-center justify-center gap-4">
-              <IconButton
-                icon={icons.chevronLeft}
-                onPress={handleBack}
-                size={compact ? "sm" : "md"}
-                variant="secondary"
-              />
-
-              <IconButton
-                icon={icons.chevronRight}
-                onPress={handleCapture}
-                disabled={!isLevel}
-                size={compact ? "sm" : "md"}
-                variant="primary"
-                tintColor="#ffffff"
-              />
-
-              <IconButton
-                icon={icons.cancel}
-                onPress={handleCancel}
-                size={compact ? "sm" : "md"}
-                variant="secondary"
-              />
-            </View>
-
-            {!isLevel && (
-              <Text className="text-white/50 text-center text-sm mt-3">
-                Level the rifle to continue
-              </Text>
-            )}
           </View>
-        </View>
-      </SafeAreaView>
-    </View>
+        </SafeAreaView>
+      </View>
   );
 }
