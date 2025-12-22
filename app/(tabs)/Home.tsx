@@ -1,20 +1,60 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { View, Text, Image, StyleSheet, AppState } from "react-native";
+import { View, Text, Image, StyleSheet, AppState, TouchableOpacity } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions, Camera } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useIsFocused } from "@react-navigation/native";
 import * as ScreenOrientation from "expo-screen-orientation";
+import * as Haptics from "expo-haptics";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { CameraPermissionBanner } from "@/app/components/CameraPermissionBanner";
 import { lockToPortrait } from "@/app/calibration/exports";
 import icons from "@/app/constants/icons";
 import { SlideToStartCalibration } from "@/app/components/SlideToStartCalibration";
 
+const STORAGE_KEYS = {
+    DISMISS_HARDWARE_BANNER: "aimsense.dismissBanner.hardware.v1",
+};
+
 export default function Home() {
     const [permission, requestPermission] = useCameraPermissions();
     const [cameraEnabled, setCameraEnabled] = useState(!!permission?.granted);
+
+    // ============================================================
+    // Hardware banner - shows once for new users
+    // ============================================================
+    const [showHardwareBanner, setShowHardwareBanner] = useState(false);
+
+    useEffect(() => {
+        const checkBannerStatus = async () => {
+            try {
+                const dismissed = await AsyncStorage.getItem(STORAGE_KEYS.DISMISS_HARDWARE_BANNER);
+                setShowHardwareBanner(dismissed !== "1");
+            } catch {
+                setShowHardwareBanner(true);
+            }
+        };
+        checkBannerStatus();
+    }, []);
+
+    const dismissHardwareBanner = useCallback(async () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setShowHardwareBanner(false);
+        try {
+            await AsyncStorage.setItem(STORAGE_KEYS.DISMISS_HARDWARE_BANNER, "1");
+        } catch {}
+    }, []);
+
+    const handleGoToStore = useCallback(async () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setShowHardwareBanner(false);
+        try {
+            await AsyncStorage.setItem(STORAGE_KEYS.DISMISS_HARDWARE_BANNER, "1");
+        } catch {}
+        router.push("/(tabs)/Store");
+    }, []);
 
     // ============================================================
     // KEY OPTIMIZATION: Track if this screen is focused
@@ -123,6 +163,63 @@ export default function Home() {
                     </View>
                 ) : (
                     <View className="flex-1 pt-4 px-6">
+                        {/* ===================== HARDWARE BANNER (First-time only) ===================== */}
+                        {showHardwareBanner && (
+                            <View className="mb-4 rounded-2xl bg-amber-900/40 border border-amber-600/50 p-4">
+                                <View className="flex-row items-start">
+                                    {/* Icon */}
+                                    <View className="size-10 rounded-xl bg-amber-600/30 items-center justify-center mr-3">
+                                        <Image
+                                            source={icons.store}
+                                            className="size-5"
+                                            resizeMode="contain"
+                                            tintColor="#fbbf24"
+                                        />
+                                    </View>
+
+                                    {/* Content */}
+                                    <View className="flex-1">
+                                        <Text className="text-amber-100 text-base font-semibold mb-1">
+                                            Hardware Required
+                                        </Text>
+                                        <Text className="text-amber-200/80 text-sm leading-5">
+                                            To use AimSense, you'll need our adapter and phone mount to attach your device to your scope.
+                                        </Text>
+
+                                        {/* CTA Button */}
+                                        <TouchableOpacity
+                                            onPress={handleGoToStore}
+                                            activeOpacity={0.8}
+                                            className="mt-3 bg-amber-600 rounded-xl py-2.5 px-4 self-start flex-row items-center"
+                                        >
+                                            <Text className="text-white text-sm font-semibold mr-1">
+                                                Visit Store
+                                            </Text>
+                                            <Image
+                                                source={icons.chevronRight}
+                                                className="size-4"
+                                                resizeMode="contain"
+                                                tintColor="#fff"
+                                            />
+                                        </TouchableOpacity>
+                                    </View>
+
+                                    {/* Close Button */}
+                                    <TouchableOpacity
+                                        onPress={dismissHardwareBanner}
+                                        className="size-8 rounded-full bg-amber-800/50 items-center justify-center ml-2"
+                                    >
+                                        <Image
+                                            source={icons.cancel}
+                                            className="size-4"
+                                            resizeMode="contain"
+                                            tintColor="#fcd34d"
+                                        />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        )}
+
                         {/* ===================== MAIN CARD ===================== */}
                         <View className="rounded-3xl bg-brand-greenDark/70 border border-brand-green/60 p-6">
                             <View className="flex-row items-center">

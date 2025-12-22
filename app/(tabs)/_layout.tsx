@@ -150,6 +150,22 @@ export default function Layout() {
             />
 
             <Tabs.Screen
+                name="Store"
+                options={{
+                    title: "Store",
+                    headerShown: false,
+                    tabBarIcon: ({ focused }) => (
+                        <TabIcon
+                            focused={focused}
+                            icon={icons.store}
+                            title="Store"
+                            scale={1.6}
+                        />
+                    ),
+                }}
+            />
+
+            <Tabs.Screen
                 name="Profile"
                 options={{
                     title: "Profile",

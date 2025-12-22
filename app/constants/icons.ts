@@ -34,6 +34,8 @@ import arrowUp from "../assets/icons/arrowUp.png"
 import scope from "../assets/icons/scope.png"
 import refresh from "../assets/icons/refresh.png"
 import distance from "../assets/icons/distance.png"
+import store from "../assets/icons/store.png"
+
 const icons = {
     leftArrow,
     mail,
@@ -70,6 +72,7 @@ const icons = {
     arrowUp,
     scope,
     refresh,
-    distance
+    distance,
+    store,
 }
 export default icons
