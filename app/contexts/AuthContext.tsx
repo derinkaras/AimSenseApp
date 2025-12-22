@@ -15,7 +15,9 @@ import { apiCache } from "@/app/api/apiCache";
 type AuthContextType = {
     user: User | null;
     session: Session | null;
-    loading: boolean;
+    // ✅ Separate states: initializing = first auth check, loading = operations in progress
+    initializing: boolean;  // True until first session check completes
+    loading: boolean;       // True during login/signup/logout operations
     error: string | null;
     clearError: () => void;
     signup: (
@@ -60,7 +62,9 @@ const canReachSupabase = async (timeout: number = 5000): Promise<boolean> => {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<User | null>(null);
     const [session, setSession] = useState<Session | null>(null);
-    const [loading, setLoading] = useState(false);
+    // ✅ Separate states to avoid conflicts
+    const [initializing, setInitializing] = useState(true);  // First auth check
+    const [loading, setLoading] = useState(false);           // Operations (login/signup/logout)
     const [error, setError] = useState<string | null>(null);
 
     const validateEmail = (email: string) =>
@@ -73,14 +77,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // 🔐 Initialize session once on mount
     useEffect(() => {
         const initSession = async () => {
-            const { data, error } = await supabase.auth.getSession();
-            if (error) {
-                console.log("Supabase getSession error:", error.message);
-                setError(error.message);
-                return;
+            try {
+                const { data, error } = await supabase.auth.getSession();
+
+                if (error) {
+                    console.log("Supabase getSession error:", error.message);
+                    // ✅ If there's an error getting session, clear everything
+                    setSession(null);
+                    setUser(null);
+                    setError(error.message);
+                    return;
+                }
+
+                console.log("Initial session check:", data.session ? "Session found" : "No session");
+                setSession(data.session ?? null);
+                setUser(data.session?.user ?? null);
+            } catch (e: any) {
+                console.log("initSession catch:", e?.message);
+                setSession(null);
+                setUser(null);
+            } finally {
+                // ✅ Always set initializing to false when init completes
+                setInitializing(false);
             }
-            setSession(data.session ?? null);
-            setUser(data.session?.user ?? null);
         };
 
         initSession();
@@ -88,9 +107,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // 🔐 Keep user/session synced with Supabase
         const {
             data: { subscription },
-        } = supabase.auth.onAuthStateChange((_event, newSession) => {
-            setSession(newSession);
-            setUser(newSession?.user ?? null);
+        } = supabase.auth.onAuthStateChange((event, newSession) => {
+            console.log("Auth state changed:", event, newSession ? "has session" : "no session");
+
+            // ✅ Handle different auth events
+            if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED' && !newSession) {
+                console.log("User signed out or token refresh failed");
+                setSession(null);
+                setUser(null);
+            } else {
+                setSession(newSession);
+                setUser(newSession?.user ?? null);
+            }
         });
 
         return () => subscription.unsubscribe();
@@ -268,67 +296,51 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
-    // 🚪 LOGOUT - Requires internet connection
+    // 🚪 LOGOUT - Always clears local state, attempts server signout
     const logout = async (): Promise<{ success: boolean }> => {
         try {
             clearError();
             setLoading(true);
 
-            // ✅ Check connectivity first
-            const canConnect = await canReachSupabase(AUTH_TIMEOUT_MS);
-            if (!canConnect) {
-                Toast.show({
-                    type: "error",
-                    text1: "No Connection",
-                    text2: "Please connect to the internet to log out.",
-                });
-                setLoading(false);
-                return { success: false };
+            // ✅ Try to sign out from Supabase (best effort)
+            try {
+                await supabase.auth.signOut();
+                console.log("Supabase signOut successful");
+            } catch (signOutError: any) {
+                // Log but don't fail - we'll clear local state anyway
+                console.log("Supabase signOut error (non-fatal):", signOutError?.message);
             }
 
-            // ✅ Sign out from Supabase (invalidates token server-side)
-            const { error } = await supabase.auth.signOut();
-            if (error) {
-                setError(error.message);
-                Toast.show({
-                    type: "error",
-                    text1: "Logout Failed",
-                    text2: error.message || "Please try again",
-                });
-                setLoading(false);
-                return { success: false };
-            }
-
-            // ✅ Clear local state
+            // ✅ ALWAYS clear local state regardless of server response
+            console.log("Clearing local auth state");
             setUser(null);
             setSession(null);
 
-            // ✅ Clear all cached data (important for security)
-            await apiCache.clearAll();
-
-            setLoading(false);
-            return { success: true };
-        } catch (e: any) {
-            const msg = e?.message ?? "Logout failed";
-            setError(msg);
-
-            // Check if it's a network error
-            if (msg.includes('Network') || msg.includes('fetch') || msg.includes('timeout')) {
-                Toast.show({
-                    type: "error",
-                    text1: "No Connection",
-                    text2: "Please connect to the internet to log out.",
-                });
-            } else {
-                Toast.show({
-                    type: "error",
-                    text1: "Logout Error",
-                    text2: msg,
-                });
+            // ✅ Clear all cached data
+            try {
+                await apiCache.clearAll();
+            } catch (cacheError) {
+                console.log("Cache clear error (non-fatal):", cacheError);
             }
 
             setLoading(false);
-            return { success: false };
+
+            Toast.show({
+                type: "success",
+                text1: "Logged Out",
+                text2: "See you next time!",
+            });
+
+            return { success: true };
+        } catch (e: any) {
+            console.log("Logout unexpected error:", e?.message);
+
+            // ✅ Even on error, clear local state to ensure user can "escape"
+            setUser(null);
+            setSession(null);
+            setLoading(false);
+
+            return { success: true }; // Return success since local state is cleared
         }
     };
 
@@ -337,6 +349,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             value={{
                 user,
                 session,
+                initializing,
                 loading,
                 error,
                 clearError,

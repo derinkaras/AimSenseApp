@@ -46,8 +46,10 @@ import { useCameraContext } from "./_layout";
 import { crosshairStyles } from "@/app/calibration/exports/calibrationStyles";
 
 const SCREEN_ID = "active";
-const STORAGE_KEY_TIP_DISMISSED = "aimsense.hunt.tipDismissed.v1";
 const STORAGE_KEY_RANGEFINDER_MODE = "aimsense.hunt.rangefinderMode";
+
+// Soft dead zone threshold for cant (degrees)
+const CANT_DEAD_ZONE_DEG = 0.5;
 
 // Rangefinder mode types
 type RangefinderMode = "LOS" | "COMPENSATED";
@@ -166,33 +168,29 @@ function computeBallistics(
 // ============================================================
 // IMU AXIS MAPPING
 // ============================================================
-// The useTiltLevel hook returns rollNow and pitchNow based on phone orientation.
-// However, when the phone is mounted on a rifle scope, we need to map these
-// to "cant" (side-to-side rifle tilt) and "elevation" (up/down aim).
-//
-// The hook's remapGravityToPortrait() transforms raw accelerometer data
-// so that the OUTPUT is always in a "portrait-like" coordinate frame.
-// This means:
-//   - After remapping, rollNow = rotation around phone's long axis
-//   - After remapping, pitchNow = tilt forward/backward of phone screen
-//
-// But for a SCOPE-MOUNTED phone (screen facing shooter's eye):
-//   - CANT (rifle tilts left/right) = what the hook reports as pitchNow
-//   - ELEVATION (rifle aims up/down) = what the hook reports as rollNow
-//
-// This is TRUE FOR ALL ORIENTATIONS because the hook already normalizes
-// the coordinate frame via remapGravityToPortrait().
+/**
+ * CANONICAL DEFINITIONS (after useTiltLevel remapGravityToPortrait):
+ * - imuRoll  = phone long-axis rotation
+ * - imuPitch = phone forward/back tilt
+ *
+ * For scope-mounted phone (screen toward shooter), we interpret:
+ * - elevationNow = imuRoll
+ * - cantNow      = imuPitch
+ *
+ * Baselines captured at Step 4:
+ * - roll0  = imuRoll at level
+ * - pitch0 = imuPitch at level
+ *
+ * True rifle angles (degrees):
+ * - riflePitchDeg = elevationNow - roll0      // UP/DOWN, lock this at confirm
+ * - rifleCantDeg  = cantNow - pitch0          // LEFT/RIGHT roll, keep live
+ */
 
 function mapIMUToRifleAxes(
     imuRoll: number,
     imuPitch: number,
     _mountOrientation: MountOrientation
 ): { cantNow: number; elevationNow: number } {
-    // The hook's remapGravityToPortrait already normalizes coordinates.
-    // For a scope-mounted phone (screen toward shooter):
-    //   - Side-to-side rifle tilt (cant) affects imuPitch
-    //   - Up/down rifle aim (elevation) affects imuRoll
-    // This mapping is consistent across all orientations after the hook's remap.
     return {
         cantNow: imuPitch,
         elevationNow: imuRoll,
@@ -232,7 +230,6 @@ export default function ActiveHunt() {
     const [distanceInputText, setDistanceInputText] = useState("");
     const [isTargetConfirmed, setIsTargetConfirmed] = useState(false);
     const [pitchLocked, setPitchLocked] = useState<number | null>(null);
-    const [cantLocked, setCantLocked] = useState<number | null>(null);
 
     // Cant warning
     const [cantLevel, setCantLevel] = useState<"ok" | "warn" | "bad">("ok");
@@ -293,27 +290,57 @@ export default function ActiveHunt() {
     );
 
     // ==================== BALLISTICS COMPUTATION ====================
+    // Split into two memos for performance:
+    // 1. dropSolution: Heavy G1 integration, only recalcs when distance/pitch/mode changes
+    // 2. aimSolution: Light cant rotation, runs at IMU rate (20Hz)
 
-    const ballisticsData = useMemo(() => {
-        if (!isTargetConfirmed || !targetDistance || !calibrationData.scopeCenterPx) {
+    // Smoothed cant ref for stable crosshair
+    const cantFilteredRef = useRef(0);
+
+    // Reset filter ONLY when confirmation state changes (not every IMU tick)
+    // This seeds the filter at the moment of confirm so it doesn't jump
+    useEffect(() => {
+        if (!isTargetConfirmed) {
+            cantFilteredRef.current = 0;
+        } else {
+            // Seed with current raw cant at moment of confirmation
+            cantFilteredRef.current = cantNow - calibrationData.pitch0;
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isTargetConfirmed, calibrationData.pitch0]);
+
+    // Update filtered cant value (only when confirmed)
+    useEffect(() => {
+        if (!isTargetConfirmed) return;
+        const rawCant = cantNow - calibrationData.pitch0;
+        cantFilteredRef.current = cantFilteredRef.current * 0.85 + rawCant * 0.15;
+    }, [cantNow, calibrationData.pitch0, isTargetConfirmed]);
+
+    // MEMO 1: Ballistics drop calculation (heavy, runs rarely)
+    const dropSolution = useMemo(() => {
+        if (!isTargetConfirmed || !targetDistance) {
+            return null;
+        }
+
+        // Block if calibration incomplete
+        if (calibrationData.pxPerUnitX === 0 || calibrationData.pxPerUnitY === 0) {
+            console.warn("Calibration incomplete: pxPerUnit is 0");
             return null;
         }
 
         // Convert distance to yards
-        let rangeYards = toYards(targetDistance, gunData.isImperial);
+        const rangeYards = toYards(targetDistance, gunData.isImperial);
         const zeroYards = toYards(gunData.zeroDistance, gunData.isImperial);
         const scopeHeightIn = toInches(gunData.scopeHeight, gunData.isImperial);
 
-        // Apply angle correction ONLY if rangefinder gives LOS distance
-        // If rangefinder already compensates, skip this to avoid double-correction
-        let rangeHorizontal = rangeYards;
-        if (rangefinderMode === "LOS" && pitchLocked !== null) {
-            const pitchRad = (pitchLocked * Math.PI) / 180;
-            rangeHorizontal = rangeYards * Math.cos(pitchRad);
-        }
-        // If rangefinderMode === "COMPENSATED", rangeHorizontal = rangeYards (no cosine)
+        // Apply cosine correction ONLY for LOS rangefinders
+        // COMPENSATED rangefinders already give horizontal distance - never apply cosine
+        const shouldApplyCosine = rangefinderMode === "LOS" && pitchLocked !== null;
+        const rangeHorizontal = shouldApplyCosine
+            ? rangeYards * Math.cos((pitchLocked * Math.PI) / 180)
+            : rangeYards;
 
-        // Compute ballistics
+        // Heavy G1 ballistics computation
         const result = computeBallistics(
             rangeHorizontal,
             gunData.muzzleVelocityFps,
@@ -322,19 +349,53 @@ export default function ActiveHunt() {
             zeroYards
         );
 
-        // Get drop in scope units (D = vertical correction)
+        // Get drop in scope units
         const D = calibrationData.scopeUnit === "MOA" ? result.dropMOA : result.dropMIL;
-        const W = 0; // Wind correction (not implemented yet)
+        const W = 0; // Wind correction (not implemented)
 
-        // Calculate current cant relative to locked position
-        // When cantLocked is null (before target confirmation), use 0 as baseline
-        // After confirmation, cantLocked holds the cant angle at confirmation time
-        const currentCant = cantNow - (cantLocked ?? 0);
-        const cantRad = (currentCant * Math.PI) / 180;
+        return {
+            D,
+            W,
+            dropMOA: result.dropMOA,
+            dropMIL: result.dropMIL,
+            dropInches: result.dropInches,
+        };
+    }, [
+        isTargetConfirmed,
+        targetDistance,
+        pitchLocked,
+        rangefinderMode,
+        gunData.isImperial,
+        gunData.muzzleVelocityFps,
+        gunData.ballisticCoefficient,
+        gunData.zeroDistance,
+        gunData.scopeHeight,
+        calibrationData.scopeUnit,
+        calibrationData.pxPerUnitX,
+        calibrationData.pxPerUnitY,
+    ]);
+
+    // MEMO 2: Cant rotation + pixel positioning (light, runs at IMU rate)
+    const aimSolution = useMemo(() => {
+        if (!dropSolution || !calibrationData.scopeCenterPx) {
+            return null;
+        }
+
+        const { D, W } = dropSolution;
+
+        // Rotation uses FILTERED cant (smooth crosshair movement)
+        // Warnings use UNFILTERED cant (instant feedback)
+        const cantDegFiltered = cantFilteredRef.current;
+        const cantDegUnfiltered = cantNow - calibrationData.pitch0;
+
+        // Soft dead zone: subtract threshold instead of snapping
+        const sign = Math.sign(cantDegFiltered);
+        const mag = Math.max(0, Math.abs(cantDegFiltered) - CANT_DEAD_ZONE_DEG);
+        const cantDegUsedForRotation = sign * mag;
+
+        const cantRad = (cantDegUsedForRotation * Math.PI) / 180;
 
         // Rotate correction vector by cant angle (Spec Section 7, Step 4)
-        // xRot = W·cos(cant) + D·sin(cant)
-        // yRot = D·cos(cant) − W·sin(cant)
         const xRot = W * Math.cos(cantRad) + D * Math.sin(cantRad);
         const yRot = D * Math.cos(cantRad) - W * Math.sin(cantRad);
 
@@ -343,26 +404,43 @@ export default function ActiveHunt() {
         const offsetPxY = yRot * calibrationData.pxPerUnitY;
 
         // Compute aim point (Spec Section 7, Step 6)
-        // aimY = cy - offsetPxY (subtract because screen Y increases downward)
+        // NOTE: We intentionally do NOT clamp the aim point.
+        // Extreme holds imply unethical / unrealistic shots.
+        // If aim goes off-screen, UI may warn but math stays pure.
         const aimX = calibrationData.scopeCenterPx.x + offsetPxX;
         const aimY = calibrationData.scopeCenterPx.y - offsetPxY;
 
-        // Cant warning zones (Spec Section 8.2)
-        const absCant = Math.abs(currentCant);
+        // Warnings use unfiltered cant for instant response
+        const absCantRaw = Math.abs(cantDegUnfiltered);
         let cantWarning: "ok" | "warn" | "bad" = "ok";
-        if (absCant > 6) cantWarning = "bad";      // Red: > 6°
-        else if (absCant > 3) cantWarning = "warn"; // Yellow: 3-6°
+        if (absCantRaw > 6) cantWarning = "bad";
+        else if (absCantRaw > 3) cantWarning = "warn";
 
         return {
-            dropMOA: result.dropMOA,
-            dropMIL: result.dropMIL,
-            dropInches: result.dropInches,
             holdoverX: aimX,
             holdoverY: aimY,
-            currentCant,
+            cantDegUnfiltered,      // Raw cant for display/warnings
+            cantDegUsedForRotation, // Filtered + deadzoned for rotation
             cantWarning,
         };
-    }, [isTargetConfirmed, targetDistance, pitchLocked, cantLocked, cantNow, rangefinderMode, gunData, calibrationData]);
+    }, [
+        dropSolution,
+        cantNow,
+        calibrationData.pitch0,
+        calibrationData.pxPerUnitX,
+        calibrationData.pxPerUnitY,
+        calibrationData.scopeCenterPx?.x,
+        calibrationData.scopeCenterPx?.y,
+    ]);
+
+    // Combined ballistics data for consumers
+    const ballisticsData = useMemo(() => {
+        if (!dropSolution || !aimSolution) return null;
+        return {
+            ...dropSolution,
+            ...aimSolution,
+        };
+    }, [dropSolution, aimSolution]);
 
     // Update cant level state
     useEffect(() => {
@@ -489,19 +567,18 @@ export default function ActiveHunt() {
         }
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
-        // Lock current elevation (pitch) and cant at confirmation
-        // elevationNow = up/down angle of rifle
-        // cantNow = side-to-side tilt of rifle
+        // Lock current elevation (pitch) at confirmation
+        // elevationNow = up/down angle of rifle (from IMU roll after mapping)
+        // Subtract roll0 baseline to get true rifle pitch angle
+        // Cant is NOT locked - it uses calibration baseline (pitch0) continuously
         setPitchLocked(elevationNow - calibrationData.roll0);
-        setCantLocked(cantNow);
         setIsTargetConfirmed(true);
-    }, [targetDistance, rangefinderMode, elevationNow, cantNow, calibrationData.roll0, handleOpenDistanceInput]);
+    }, [targetDistance, rangefinderMode, elevationNow, calibrationData.roll0, handleOpenDistanceInput]);
 
     const handleUnlockTarget = useCallback(() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         setIsTargetConfirmed(false);
         setPitchLocked(null);
-        setCantLocked(null);
         setCantLevel("ok");
     }, []);
 
@@ -601,7 +678,7 @@ export default function ActiveHunt() {
         const bgColor = isRed ? "rgba(127, 29, 29, 0.95)" : "rgba(113, 63, 18, 0.95)";
         const textColor = isRed ? "#fca5a5" : "#fde047";
         const borderColor = isRed ? "#dc2626" : "#ca8a04";
-        const cantDegrees = Math.abs(ballisticsData.currentCant).toFixed(1);
+        const cantDegrees = Math.abs(ballisticsData.cantDegUnfiltered).toFixed(1);
 
         return (
             <View style={[styles.cantBanner, { top: insets.top + 8, left: isLandscapeMode ? 48 : 16, backgroundColor: bgColor, borderColor }]}>
@@ -834,7 +911,9 @@ export default function ActiveHunt() {
                             <View className="px-3 py-3 border-b border-zinc-800/50">
                                 <View className="bg-zinc-900/60 rounded-xl p-3 border border-zinc-700/40">
                                     <Text className="text-zinc-500 text-xs text-center">
-                                        {targetDistance ? "Tap Confirm to track" : "Set distance to begin"}
+                                        {targetDistance
+                                            ? "Aim at your target, then confirm"
+                                            : "Set distance to begin"}
                                     </Text>
                                 </View>
                             </View>
@@ -914,7 +993,9 @@ export default function ActiveHunt() {
                     ) : (
                         <View className="bg-zinc-900/60 rounded-xl p-3 mb-3 border border-zinc-700/40">
                             <Text className="text-zinc-500 text-sm text-center">
-                                {targetDistance ? "Tap Confirm Target to begin tracking" : "Set distance, then confirm target"}
+                                {targetDistance
+                                    ? "Place your scope crosshair on target, then confirm"
+                                    : "Set distance, then aim and confirm"}
                             </Text>
                         </View>
                     )}

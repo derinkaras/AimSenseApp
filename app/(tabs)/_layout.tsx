@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React from "react";
 import {
     View,
     Text,
@@ -6,10 +6,11 @@ import {
     Image,
     ImageSourcePropType,
     PressableProps,
+    ActivityIndicator,
 } from "react-native";
-import { Tabs, useRouter } from "expo-router";
+import { Tabs, Redirect } from "expo-router";
 import * as Haptics from "expo-haptics";
-import type { BottomTabBarButtonProps } from "@react-navigation/bottom-tabs"; // ⬅️ add this
+import type { BottomTabBarButtonProps } from "@react-navigation/bottom-tabs";
 import icons from "@/app/constants/icons";
 import { useAuth } from "@/app/contexts/AuthContext";
 
@@ -80,15 +81,21 @@ const TabBarButton: React.FC<BottomTabBarButtonProps> = ({
 };
 
 export default function Layout() {
-    const { session, loading } = useAuth();
-    const router = useRouter();
+    const { session, initializing } = useAuth();
 
-    useEffect(() => {
-        if (loading) return;
-        if (!session) {
-            router.replace("/(onboarding)");
-        }
-    }, [loading, session, router]);
+    // ✅ Show loading state while checking initial auth
+    if (initializing) {
+        return (
+            <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator size="large" color="#22c55e" />
+            </View>
+        );
+    }
+
+    // ✅ Redirect to onboarding if no session (using Redirect component, not useRouter)
+    if (!session) {
+        return <Redirect href="/(onboarding)" />;
+    }
 
     return (
         <Tabs

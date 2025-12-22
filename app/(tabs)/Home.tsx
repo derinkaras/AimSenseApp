@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { View, Text, Image, StyleSheet } from "react-native";
+import { View, Text, Image, StyleSheet, AppState } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions, Camera } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -30,6 +30,32 @@ export default function Home() {
 
     // Key to force camera remount when permission changes
     const [cameraKey, setCameraKey] = useState(0);
+
+    // ============================================================
+    // OPTION 1: Callback for when permission is granted via banner
+    // ============================================================
+    const handlePermissionGranted = useCallback(() => {
+        setCameraEnabled(true);
+        setCameraKey(prev => prev + 1);
+    }, []);
+
+    // ============================================================
+    // OPTION 2: AppState listener for when user returns from Settings
+    // ============================================================
+    useEffect(() => {
+        const subscription = AppState.addEventListener("change", async (nextAppState) => {
+            if (nextAppState === "active") {
+                // User returned to app - check if they granted permission in Settings
+                const { granted } = await Camera.getCameraPermissionsAsync();
+                if (granted && !cameraEnabled) {
+                    setCameraEnabled(true);
+                    setCameraKey(prev => prev + 1);
+                }
+            }
+        });
+
+        return () => subscription.remove();
+    }, [cameraEnabled]);
 
     // Update cameraEnabled when permission changes
     useEffect(() => {
@@ -93,7 +119,7 @@ export default function Home() {
             <SafeAreaView className="flex-1" edges={["top"]}>
                 {!cameraEnabled ? (
                     <View className="flex-1 justify-center items-center px-6 pb-24">
-                        <CameraPermissionBanner />
+                        <CameraPermissionBanner onPermissionGranted={handlePermissionGranted} />
                     </View>
                 ) : (
                     <View className="flex-1 pt-4 px-6">
