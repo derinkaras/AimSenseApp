@@ -6,80 +6,169 @@
 
 import { StyleSheet } from "react-native";
 
-// ==================== CROSSHAIR STYLES ====================
+// ==================== PRECISION CROSSHAIR STYLES ====================
+// Ultra-thin crosshair for pixel-perfect scope center alignment
+// - 1px lines for maximum precision
+// - Small gap at center to see exact alignment point
+// - High contrast with dark outline for visibility on any background
+
 export const crosshairStyles = StyleSheet.create({
   container: {
     position: "absolute",
-    width: 80,
-    height: 80,
+    width: 120,
+    height: 120,
     alignItems: "center",
     justifyContent: "center",
   },
+  // Outer lines - longer, thinner for precise alignment
   top: {
     position: "absolute",
-    width: 2,
-    height: 32,
+    width: 1,
+    height: 50,
     top: 0,
     backgroundColor: "#22c55e",
-    borderRadius: 1,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 2,
-    elevation: 3,
+    shadowOpacity: 1,
+    shadowRadius: 1,
+    elevation: 2,
   },
   bottom: {
     position: "absolute",
-    width: 2,
-    height: 32,
+    width: 1,
+    height: 50,
     bottom: 0,
     backgroundColor: "#22c55e",
-    borderRadius: 1,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 2,
-    elevation: 3,
+    shadowOpacity: 1,
+    shadowRadius: 1,
+    elevation: 2,
   },
   left: {
     position: "absolute",
-    width: 32,
-    height: 2,
+    width: 50,
+    height: 1,
     left: 0,
     backgroundColor: "#22c55e",
-    borderRadius: 1,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 2,
-    elevation: 3,
+    shadowOpacity: 1,
+    shadowRadius: 1,
+    elevation: 2,
   },
   right: {
     position: "absolute",
-    width: 32,
-    height: 2,
+    width: 50,
+    height: 1,
     right: 0,
     backgroundColor: "#22c55e",
-    borderRadius: 1,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 2,
-    elevation: 3,
+    shadowOpacity: 1,
+    shadowRadius: 1,
+    elevation: 2,
   },
+  // Center dot - tiny 2x2 pixel for exact center indication
   center: {
     position: "absolute",
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#22c55e",
-    borderWidth: 1.5,
-    borderColor: "rgba(0, 0, 0, 0.6)",
+    width: 2,
+    height: 2,
+    borderRadius: 0,
+    backgroundColor: "#ff0000",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 2,
+    shadowOpacity: 1,
+    shadowRadius: 1,
     elevation: 3,
+  },
+  // Inner crosshair lines - short lines near center for fine alignment
+  innerTop: {
+    position: "absolute",
+    width: 1,
+    height: 8,
+    top: 52,
+    backgroundColor: "#22c55e",
+  },
+  innerBottom: {
+    position: "absolute",
+    width: 1,
+    height: 8,
+    bottom: 52,
+    backgroundColor: "#22c55e",
+  },
+  innerLeft: {
+    position: "absolute",
+    width: 8,
+    height: 1,
+    left: 52,
+    backgroundColor: "#22c55e",
+  },
+  innerRight: {
+    position: "absolute",
+    width: 8,
+    height: 1,
+    right: 52,
+    backgroundColor: "#22c55e",
+  },
+});
+
+// ==================== ALTERNATIVE PRECISION CROSSHAIR ====================
+// Even finer crosshair for maximum precision (use for final alignment)
+export const precisionCrosshairStyles = StyleSheet.create({
+  container: {
+    position: "absolute",
+    width: 100,
+    height: 100,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Main crosshair lines - 1px, with gap at center
+  lineVertical: {
+    position: "absolute",
+    width: 1,
+    height: 100,
+    backgroundColor: "#22c55e",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 0.5,
+    elevation: 2,
+  },
+  lineHorizontal: {
+    position: "absolute",
+    width: 100,
+    height: 1,
+    backgroundColor: "#22c55e",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 0.5,
+    elevation: 2,
+  },
+  // Center gap mask (to create gap at intersection)
+  centerGap: {
+    position: "absolute",
+    width: 10,
+    height: 10,
+    backgroundColor: "transparent",
+  },
+  // Tiny center point - 1x1 pixel (the actual center)
+  centerPixel: {
+    position: "absolute",
+    width: 1,
+    height: 1,
+    backgroundColor: "#ff0000",
+  },
+  // Center ring for visibility (doesn't obscure center point)
+  centerRing: {
+    position: "absolute",
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#22c55e",
+    backgroundColor: "transparent",
   },
 });
 
@@ -106,29 +195,41 @@ export const magnifierStyles = StyleSheet.create({
     fontFamily: "monospace",
   },
   crosshair: {
-    width: 40,
-    height: 40,
+    width: 60,
+    height: 60,
     alignItems: "center",
     justifyContent: "center",
   },
+  // Ultra-thin crosshair lines for magnified view
   crosshairV: {
     position: "absolute",
     width: 1,
-    height: 40,
+    height: 60,
     backgroundColor: "#22c55e",
   },
   crosshairH: {
     position: "absolute",
-    width: 40,
+    width: 60,
     height: 1,
     backgroundColor: "#22c55e",
   },
+  // Tiny center dot - 2x2 pixel for precise center
   crosshairDot: {
     position: "absolute",
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#22c55e",
+    width: 2,
+    height: 2,
+    borderRadius: 0, // Square for pixel precision
+    backgroundColor: "#ff0000", // Red for visibility
+  },
+  // Optional: center ring that doesn't obscure the dot
+  crosshairRing: {
+    position: "absolute",
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: "rgba(34, 197, 94, 0.6)",
+    backgroundColor: "transparent",
   },
 });
 

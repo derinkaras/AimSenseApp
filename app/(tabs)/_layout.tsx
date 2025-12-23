@@ -159,7 +159,7 @@ export default function Layout() {
                             focused={focused}
                             icon={icons.store}
                             title="Store"
-                            scale={1.6}
+                            scale={1.5}
                         />
                     ),
                 }}
