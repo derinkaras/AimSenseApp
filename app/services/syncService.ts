@@ -1,8 +1,16 @@
 // app/services/syncService.ts
+import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { apiCache, PendingOperation } from '@/app/api/apiCache';
-import { supabase } from '@/app/lib/supabase';
+import { auth } from '@/app/lib/firebase';
+import {
+    gunProfileDoc,
+    gunProfilesCol,
+    isNetworkOrTimeoutError,
+    requireUid,
+    userDoc,
+    withTimeout,
+} from '@/app/api/firestoreUtils';
 
-const API_BASE_URL = 'http://10.0.0.78:8080/api/v1';
 const MAX_RETRIES = 5;
 const SYNC_TIMEOUT = 10000; // 10 seconds per operation
 
@@ -20,71 +28,31 @@ type SyncCallbacks = {
     onOperationFailed?: (operation: PendingOperation, error: string) => void;
 };
 
-const getAuthHeaders = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        ...(session?.access_token && {
-            'Authorization': `Bearer ${session.access_token}`
-        })
-    };
-};
-
 /**
- * Fetch with timeout - critical for detecting slow connections
- */
-const fetchWithTimeout = async (
-    url: string,
-    options: RequestInit,
-    timeout: number = SYNC_TIMEOUT
-): Promise<Response> => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-    try {
-        const response = await fetch(url, {
-            ...options,
-            signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-        return response;
-    } catch (error: any) {
-        clearTimeout(timeoutId);
-        if (error.name === 'AbortError') {
-            throw new Error('Request timed out - connection too slow');
-        }
-        throw error;
-    }
-};
-
-/**
- * Process a single gun profile operation
+ * Process a single gun profile operation.
+ * Every write is idempotent (fixed doc IDs), so replaying an op that already reached
+ * Firestore (e.g. it timed out client-side but was delivered later) is harmless.
  */
 const processGunProfileOperation = async (op: PendingOperation): Promise<void> => {
-    const headers = await getAuthHeaders();
+    const uid = requireUid();
 
     switch (op.type) {
         case 'CREATE': {
-            const response = await fetchWithTimeout(
-                `${API_BASE_URL}/gunProfile/create`,
-                {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify(op.data),
-                }
+            // entityId is the Firestore doc ID generated when the op was queued
+            const docId = op.entityId ?? doc(gunProfilesCol(uid)).id;
+
+            await withTimeout(
+                setDoc(gunProfileDoc(uid, docId), {
+                    ...op.data,
+                    createdAt: op.timestamp,
+                    updatedAt: Date.now(),
+                }),
+                SYNC_TIMEOUT
             );
 
-            if (!response.ok) {
-                const err = await response.json().catch(() => ({}));
-                throw new Error(err.message || `Create failed: ${response.statusText}`);
-            }
-
-            const result = await response.json();
-
             // Replace temp ID with real ID in cache
-            if (op.tempId && result.id) {
-                await apiCache.replaceTempId('gun_profiles_all', op.tempId, result.id);
+            if (op.tempId) {
+                await apiCache.replaceTempId('gun_profiles_all', op.tempId, docId);
             }
             break;
         }
@@ -92,18 +60,14 @@ const processGunProfileOperation = async (op: PendingOperation): Promise<void> =
         case 'UPDATE': {
             if (!op.entityId) throw new Error('No entityId for UPDATE operation');
 
-            const response = await fetchWithTimeout(
-                `${API_BASE_URL}/gunProfile/me/${op.entityId}`,
-                {
-                    method: 'PATCH',
-                    headers,
-                    body: JSON.stringify(op.data),
-                }
-            );
-
-            if (!response.ok) {
-                const err = await response.json().catch(() => ({}));
-                throw new Error(err.message || `Update failed: ${response.statusText}`);
+            try {
+                await withTimeout(
+                    updateDoc(gunProfileDoc(uid, op.entityId), { ...op.data, updatedAt: Date.now() }),
+                    SYNC_TIMEOUT
+                );
+            } catch (error: any) {
+                // Profile was deleted elsewhere - nothing left to update
+                if (error?.code !== 'not-found') throw error;
             }
 
             // Clear pending flag
@@ -114,18 +78,8 @@ const processGunProfileOperation = async (op: PendingOperation): Promise<void> =
         case 'DELETE': {
             if (!op.entityId) throw new Error('No entityId for DELETE operation');
 
-            const response = await fetchWithTimeout(
-                `${API_BASE_URL}/gunProfile/me/${op.entityId}`,
-                {
-                    method: 'DELETE',
-                    headers,
-                }
-            );
-
-            if (!response.ok) {
-                const err = await response.json().catch(() => ({}));
-                throw new Error(err.message || `Delete failed: ${response.statusText}`);
-            }
+            // deleteDoc succeeds even if the doc no longer exists
+            await withTimeout(deleteDoc(gunProfileDoc(uid, op.entityId)), SYNC_TIMEOUT);
             break;
         }
     }
@@ -135,63 +89,23 @@ const processGunProfileOperation = async (op: PendingOperation): Promise<void> =
  * Process a single user profile operation
  */
 const processUserProfileOperation = async (op: PendingOperation): Promise<void> => {
-    const headers = await getAuthHeaders();
+    const uid = requireUid();
 
     switch (op.type) {
-        case 'CREATE': {
-            const response = await fetchWithTimeout(
-                `${API_BASE_URL}/userProfile/create`,
-                {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify(op.data),
-                }
-            );
-
-            if (!response.ok) {
-                const err = await response.json().catch(() => ({}));
-                throw new Error(err.message || `Create failed: ${response.statusText}`);
-            }
-
-            const result = await response.json();
-            await apiCache.set('user_profile_me', result);
-            break;
-        }
-
+        case 'CREATE':
         case 'UPDATE': {
-            const response = await fetchWithTimeout(
-                `${API_BASE_URL}/userProfile/me`,
-                {
-                    method: 'PUT',
-                    headers,
-                    body: JSON.stringify(op.data),
-                }
+            await withTimeout(
+                setDoc(userDoc(uid), { ...op.data, updatedAt: Date.now() }, { merge: true }),
+                SYNC_TIMEOUT
             );
 
-            if (!response.ok) {
-                const err = await response.json().catch(() => ({}));
-                throw new Error(err.message || `Update failed: ${response.statusText}`);
-            }
-
-            const result = await response.json();
-            await apiCache.set('user_profile_me', result);
+            const existing = await apiCache.get<any>('user_profile_me');
+            await apiCache.set('user_profile_me', { ...existing, ...op.data, id: uid, _isPending: undefined });
             break;
         }
 
         case 'DELETE': {
-            const response = await fetchWithTimeout(
-                `${API_BASE_URL}/userProfile/me`,
-                {
-                    method: 'DELETE',
-                    headers,
-                }
-            );
-
-            if (!response.ok) {
-                const err = await response.json().catch(() => ({}));
-                throw new Error(err.message || `Delete failed: ${response.statusText}`);
-            }
-
+            await withTimeout(deleteDoc(userDoc(uid)), SYNC_TIMEOUT);
             await apiCache.clear('user_profile_me');
             break;
         }
@@ -203,24 +117,18 @@ const processUserProfileOperation = async (op: PendingOperation): Promise<void> 
  */
 export const syncService = {
     /**
-     * Check if we can reach the server (quick connectivity test)
+     * Check if we can reach Firebase (quick connectivity test)
      */
     canReachServer: async (timeout: number = 5000): Promise<boolean> => {
+        const uid = auth.currentUser?.uid;
+        if (!uid) return false;
+
         try {
-            const headers = await getAuthHeaders();
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-            // Use a lightweight endpoint or just check if we can connect
-            const response = await fetch(`${API_BASE_URL}/gunProfile/me`, {
-                method: 'GET',
-                headers,
-                signal: controller.signal,
-            });
-
-            clearTimeout(timeoutId);
-            return response.ok || response.status === 401; // 401 means server is reachable
-        } catch (error) {
+            await withTimeout(getDoc(userDoc(uid)), timeout);
+            return true;
+        } catch (error: any) {
+            // A permission error still proves the server answered
+            if (error?.code === 'permission-denied') return true;
             console.log('Server connectivity check failed:', error);
             return false;
         }
@@ -288,9 +196,7 @@ export const syncService = {
                     callbacks?.onOperationFailed?.(op, error.message);
 
                     // If it's a network/timeout error, stop trying other operations
-                    if (error.message.includes('timed out') ||
-                        error.message.includes('Network') ||
-                        error.message.includes('fetch')) {
+                    if (isNetworkOrTimeoutError(error)) {
                         console.log('🛑 Network issue detected, stopping sync');
                         result.success = false;
                         break;

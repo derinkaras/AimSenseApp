@@ -1,113 +1,49 @@
 // app/api/userProfile.ts
-import { supabase } from "@/app/lib/supabase";
+import { EmailAuthProvider, deleteUser, reauthenticateWithCredential } from "firebase/auth";
+import { deleteDoc, getDoc, getDocs, setDoc, writeBatch } from "firebase/firestore";
+import { auth, db } from "@/app/lib/firebase";
 import { apiCache } from "./apiCache";
+import {
+    READ_TIMEOUT_MS,
+    WRITE_TIMEOUT_MS,
+    gunProfilesCol,
+    isNetworkOrTimeoutError,
+    requireUid,
+    userDoc,
+    withTimeout,
+} from "./firestoreUtils";
 import type {
     UserProfile,
     CreateUserProfileData,
     UpdateUserProfileData
 } from "../types/apiTypes";
 
-const API_BASE_URL = "http://10.0.0.78:8080/api/v1";
-
-// Configuration for offline-first behavior
-const CONFIG = {
-    // Shorter timeout for read operations
-    READ_TIMEOUT_MS: 3000,
-
-    // Longer timeout for write operations
-    WRITE_TIMEOUT_MS: 8000,
-};
-
-const getAuthHeaders = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return {
-        'Content-Type': 'application/json',
-        ...(session?.access_token && {
-            'Authorization': `Bearer ${session.access_token}`
-        })
-    };
-};
-
-// Helper to detect network/timeout errors
-const isNetworkOrTimeoutError = (error: any): boolean => {
-    const message = error?.message || '';
-    return message.includes('Network') ||
-        message.includes('fetch') ||
-        message.includes('Failed to fetch') ||
-        message.includes('network request failed') ||
-        message.includes('timed out') ||
-        message.includes('timeout') ||
-        message.includes('AbortError') ||
-        error?.name === 'AbortError';
-};
-
-/**
- * Fetch with timeout - essential for detecting slow connections
- */
-const fetchWithTimeout = async (
-    url: string,
-    options: RequestInit,
-    timeout: number
-): Promise<Response> => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-        controller.abort();
-    }, timeout);
-
-    try {
-        const response = await fetch(url, {
-            ...options,
-            signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-        return response;
-    } catch (error: any) {
-        clearTimeout(timeoutId);
-
-        if (error.name === 'AbortError') {
-            throw new Error('Request timed out - connection too slow');
-        }
-        throw error;
-    }
-};
+// The user profile lives at users/{uid} (the doc ID is the Firebase Auth uid).
 
 export const userProfileApi = {
     /**
      * Create a new user profile
-     * - Online: Creates on server immediately
+     * - Online: Writes to Firestore immediately
      * - Offline/Slow: Queues operation and saves locally
      */
     createProfile: async (data: CreateUserProfileData): Promise<UserProfile> => {
         try {
-            const headers = await getAuthHeaders();
-            const response = await fetchWithTimeout(
-                `${API_BASE_URL}/userProfile/create`,
-                {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify(data),
-                },
-                CONFIG.WRITE_TIMEOUT_MS
+            const uid = requireUid();
+            await withTimeout(
+                setDoc(userDoc(uid), { ...data, updatedAt: Date.now() }, { merge: true }),
+                WRITE_TIMEOUT_MS
             );
 
-            const responseData = await response.json();
+            const created: UserProfile = { ...data, id: uid };
+            await apiCache.set('user_profile_me', created);
 
-            if (!response.ok) {
-                throw new Error(responseData.message || 'Failed to create user profile');
-            }
-
-            // Cache the newly created profile
-            await apiCache.set('user_profile_me', responseData);
-
-            return responseData;
+            return created;
         } catch (error) {
             console.log('Create user profile failed, queueing for later...', error);
 
             if (isNetworkOrTimeoutError(error)) {
-                // Queue the operation for later sync
                 await apiCache.addPendingOperation('CREATE', 'user_profile', data);
 
-                // Save to local cache for immediate UI feedback
                 const optimisticProfile = {
                     ...data,
                     _isPending: true,
@@ -125,42 +61,29 @@ export const userProfileApi = {
 
     /**
      * Get current user's profile
-     * - Online: Fetches from server, caches result
+     * - Online: Fetches from Firestore, caches result
      * - Offline/Slow: Returns cached data immediately
      */
     getMyProfile: async (): Promise<UserProfile | null> => {
         const cacheKey = 'user_profile_me';
 
         try {
-            const headers = await getAuthHeaders();
-            const response = await fetchWithTimeout(
-                `${API_BASE_URL}/userProfile/me`,
-                {
-                    method: 'GET',
-                    headers,
-                },
-                CONFIG.READ_TIMEOUT_MS
-            );
+            const uid = requireUid();
+            const snapshot = await withTimeout(getDoc(userDoc(uid)), READ_TIMEOUT_MS);
 
-            const data = await response.json();
-
-            if (!response.ok) {
-                if (response.status === 404) {
-                    // Clear any cached profile if server says none exists
-                    await apiCache.clear(cacheKey);
-                    return null;
-                }
-                throw new Error(data.message || 'Failed to get user profile');
+            if (!snapshot.exists()) {
+                // Clear any cached profile if the server says none exists
+                await apiCache.clear(cacheKey);
+                return null;
             }
 
-            // Cache successful response
+            const data = { ...snapshot.data(), id: snapshot.id } as UserProfile;
             await apiCache.set(cacheKey, data);
 
             return data;
         } catch (error) {
-            console.log('API call failed or timed out, checking cache...', error);
+            console.log('Firestore call failed or timed out, checking cache...', error);
 
-            // Return cached data if available
             const cached = await apiCache.get<UserProfile>(cacheKey);
             if (cached) {
                 console.log('✅ Returning cached user profile (offline/slow connection)');
@@ -174,47 +97,34 @@ export const userProfileApi = {
                 return null;
             }
 
-            // Real API error - throw it
             throw error;
         }
     },
 
     /**
      * Update user profile
-     * - Online: Updates on server immediately
+     * - Online: Updates Firestore immediately
      * - Offline/Slow: Queues operation and updates locally
      */
     updateProfile: async (data: UpdateUserProfileData): Promise<UserProfile> => {
         try {
-            const headers = await getAuthHeaders();
-            const response = await fetchWithTimeout(
-                `${API_BASE_URL}/userProfile/me`,
-                {
-                    method: 'PUT',
-                    headers,
-                    body: JSON.stringify(data),
-                },
-                CONFIG.WRITE_TIMEOUT_MS
+            const uid = requireUid();
+            await withTimeout(
+                setDoc(userDoc(uid), { ...data, updatedAt: Date.now() }, { merge: true }),
+                WRITE_TIMEOUT_MS
             );
 
-            const responseData = await response.json();
+            const existing = await apiCache.get<UserProfile>('user_profile_me');
+            const updated: UserProfile = { ...existing, ...data, id: uid };
+            await apiCache.set('user_profile_me', updated);
 
-            if (!response.ok) {
-                throw new Error(responseData.message || 'Failed to update profile');
-            }
-
-            // Update cache after successful update
-            await apiCache.set('user_profile_me', responseData);
-
-            return responseData;
+            return updated;
         } catch (error) {
             console.log('Update user profile failed, queueing for later...', error);
 
             if (isNetworkOrTimeoutError(error)) {
-                // Queue the operation for later sync
                 await apiCache.addPendingOperation('UPDATE', 'user_profile', data);
 
-                // Optimistically update local cache
                 const existing = await apiCache.get<UserProfile>('user_profile_me');
                 const updated = {
                     ...existing,
@@ -238,29 +148,14 @@ export const userProfileApi = {
      */
     deleteProfile: async (): Promise<void> => {
         try {
-            const headers = await getAuthHeaders();
-            const response = await fetchWithTimeout(
-                `${API_BASE_URL}/userProfile/me`,
-                {
-                    method: 'DELETE',
-                    headers,
-                },
-                CONFIG.WRITE_TIMEOUT_MS
-            );
+            const uid = requireUid();
+            await withTimeout(deleteDoc(userDoc(uid)), WRITE_TIMEOUT_MS);
 
-            if (!response.ok) {
-                const data = await response.json().catch(() => ({}));
-                throw new Error(data.message || 'Failed to delete profile');
-            }
-
-            // Clear cache after deletion
             await apiCache.clear('user_profile_me');
         } catch (error) {
             console.log('Delete user profile failed:', error);
 
             if (isNetworkOrTimeoutError(error)) {
-                // For security reasons, we might want to require online for deletion
-                // But we can still queue it if desired
                 await apiCache.addPendingOperation('DELETE', 'user_profile');
                 await apiCache.clear('user_profile_me');
 
@@ -274,26 +169,43 @@ export const userProfileApi = {
 
     /**
      * Delete entire account
-     * - This REQUIRES online connection for security
+     * - This REQUIRES an online connection and the user's current password.
+     * - Order matters: Firestore rules need a signed-in user, so data is deleted first and
+     *   the Auth user last. Re-authenticating up front (a) verifies the password before
+     *   anything is deleted and (b) satisfies Firebase's "recent login" rule for deleteUser.
      */
-    deleteAccount: async (): Promise<void> => {
-        // Account deletion should not be queued - require online
-        const headers = await getAuthHeaders();
+    deleteAccount: async (password: string): Promise<void> => {
+        const user = auth.currentUser;
+        if (!user || !user.email) throw new Error('Not signed in');
 
         try {
-            const response = await fetchWithTimeout(
-                `${API_BASE_URL}/userProfile/deleteAccount`,
-                {
-                    method: 'DELETE',
-                    headers,
-                },
-                CONFIG.WRITE_TIMEOUT_MS
+            await withTimeout(
+                reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password)),
+                WRITE_TIMEOUT_MS
             );
-
-            if (!response.ok) {
-                const data = await response.json().catch(() => ({}));
-                throw new Error(data.message || 'Failed to delete account');
+        } catch (error: any) {
+            if (
+                error?.code === 'auth/wrong-password' ||
+                error?.code === 'auth/invalid-credential'
+            ) {
+                throw new Error('Incorrect password');
             }
+            if (isNetworkOrTimeoutError(error)) {
+                throw new Error('Account deletion requires an internet connection. Please try again when online.');
+            }
+            throw error;
+        }
+
+        try {
+            // 1. Delete all gun profiles and the user profile in one atomic batch
+            const guns = await withTimeout(getDocs(gunProfilesCol(user.uid)), WRITE_TIMEOUT_MS);
+            const batch = writeBatch(db);
+            guns.docs.forEach(d => batch.delete(d.ref));
+            batch.delete(userDoc(user.uid));
+            await withTimeout(batch.commit(), WRITE_TIMEOUT_MS);
+
+            // 2. Delete the Firebase Auth user
+            await withTimeout(deleteUser(user), WRITE_TIMEOUT_MS);
 
             // Clear all cache after account deletion
             await apiCache.clear('user_profile_me');

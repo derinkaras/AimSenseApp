@@ -81,7 +81,7 @@ const TabBarButton: React.FC<BottomTabBarButtonProps> = ({
 };
 
 export default function Layout() {
-    const { session, initializing } = useAuth();
+    const { user, initializing } = useAuth();
 
     // ✅ Show loading state while checking initial auth
     if (initializing) {
@@ -92,8 +92,8 @@ export default function Layout() {
         );
     }
 
-    // ✅ Redirect to onboarding if no session (using Redirect component, not useRouter)
-    if (!session) {
+    // ✅ Redirect to onboarding if signed out (using Redirect component, not useRouter)
+    if (!user) {
         return <Redirect href="/(onboarding)" />;
     }
 

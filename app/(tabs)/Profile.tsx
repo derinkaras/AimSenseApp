@@ -220,7 +220,7 @@ const Profile = () => {
         setActiveModal(modalType);
     };
 
-    const handleDeleteAccount = async () => {
+    const handleDeleteAccount = async (password: string) => {
         try {
             if (!user) return;
 
@@ -235,7 +235,7 @@ const Profile = () => {
             }
 
             setLoading(true);
-            await userProfileApi.deleteAccount();
+            await userProfileApi.deleteAccount(password);
 
             Toast.show({
                 type: "success",

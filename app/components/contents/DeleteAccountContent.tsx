@@ -1,13 +1,16 @@
-import React from 'react';
-import { View, Text, Image, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Image, TouchableOpacity, ScrollView, TextInput } from 'react-native';
 import icons from '@/app/constants/icons';
 
 interface DeleteAccountContentProps {
-    onConfirm?: () => void;
+    // Firebase requires a recent sign-in to delete an account, so the password is collected here
+    onConfirm?: (password: string) => void;
     onCancel?: () => void;
 }
 
 const DeleteAccountContent = ({ onConfirm, onCancel }: DeleteAccountContentProps) => {
+    const [password, setPassword] = useState('');
+
     return (
         <View className="gap-6 py-2">
             {/* Icon */}
@@ -59,11 +62,29 @@ const DeleteAccountContent = ({ onConfirm, onCancel }: DeleteAccountContentProps
                 </View>
             </ScrollView>
 
+            {/* Password confirmation */}
+            <View>
+                <Text className="text-white text-sm font-medium mb-2">
+                    Enter your password to confirm
+                </Text>
+                <TextInput
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="Password"
+                    placeholderTextColor="#6b7280"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    className="bg-gray-800/50 border border-gray-700 rounded-xl px-4 py-3 text-white"
+                />
+            </View>
+
             {/* Action Buttons */}
             <View className="gap-3 mt-2">
                 <TouchableOpacity
-                    onPress={onConfirm}
-                    className="bg-red-600 rounded-xl py-4 px-6"
+                    onPress={() => onConfirm?.(password)}
+                    disabled={!password}
+                    className={`bg-red-600 rounded-xl py-4 px-6 ${!password ? 'opacity-50' : ''}`}
                     activeOpacity={0.7}
                 >
                     <Text className="text-white text-center font-semibold text-base">

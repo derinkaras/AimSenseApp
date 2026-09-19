@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, Image, TextInput } from 'react-native';
 import Toast, { BaseToast, ErrorToast } from 'react-native-toast-message';
 import icons from '@/app/constants/icons';
-import supabaseApi from "@/app/api/supabaseService";
+import authService from "@/app/api/authService";
 
 
 interface ForgotPasswordContentProps {
@@ -10,17 +10,37 @@ interface ForgotPasswordContentProps {
     onSuccess?: () => void;
 }
 
-const ForgotPasswordContent = ({ onClose, onSuccess }: ForgotPasswordContentProps) => {
-    const [step, setStep] = useState<'email' | 'verify'>('email');
-    const [email, setEmail] = useState('');
-    const [otpCode, setOtpCode] = useState('');
-    const [newPassword, setNewPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [canResend, setCanResend] = useState(true);
-    const [resendTimer, setResendTimer] = useState(60);
+const RESEND_SECONDS = 60;
 
-    const handleSendCode = async () => {
+const ForgotPasswordContent = ({ onClose, onSuccess }: ForgotPasswordContentProps) => {
+    const [step, setStep] = useState<'email' | 'sent'>('email');
+    const [email, setEmail] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [resendTimer, setResendTimer] = useState(0);
+    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (timerRef.current) clearInterval(timerRef.current);
+        };
+    }, []);
+
+    const startResendTimer = () => {
+        if (timerRef.current) clearInterval(timerRef.current);
+        setResendTimer(RESEND_SECONDS);
+
+        timerRef.current = setInterval(() => {
+            setResendTimer(prev => {
+                if (prev <= 1) {
+                    if (timerRef.current) clearInterval(timerRef.current);
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+    };
+
+    const handleSendLink = async () => {
         if (!email.trim()) {
             Toast.show({
                 type: 'error',
@@ -32,7 +52,7 @@ const ForgotPasswordContent = ({ onClose, onSuccess }: ForgotPasswordContentProp
 
         // Validate email format
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
+        if (!emailRegex.test(email.trim())) {
             Toast.show({
                 type: 'error',
                 text1: 'Invalid Email',
@@ -42,16 +62,11 @@ const ForgotPasswordContent = ({ onClose, onSuccess }: ForgotPasswordContentProp
         }
 
         setLoading(true);
-        const result = await supabaseApi.sendResetCode(email);
+        const result = await authService.sendPasswordReset(email);
         setLoading(false);
 
         if (result.success) {
-            Toast.show({
-                type: 'success',
-                text1: 'Code Sent!',
-                text2: result.message
-            });
-            setStep('verify');
+            setStep('sent');
             startResendTimer();
         } else {
             Toast.show({
@@ -62,109 +77,9 @@ const ForgotPasswordContent = ({ onClose, onSuccess }: ForgotPasswordContentProp
         }
     };
 
-    const handleResetPassword = async () => {
-        if (!otpCode.trim()) {
-            Toast.show({
-                type: 'error',
-                text1: 'Code Required',
-                text2: 'Please enter the verification code'
-            });
-            return;
-        }
-
-        if (!newPassword.trim()) {
-            Toast.show({
-                type: 'error',
-                text1: 'Password Required',
-                text2: 'Please enter a new password'
-            });
-            return;
-        }
-
-        if (newPassword !== confirmPassword) {
-            Toast.show({
-                type: 'error',
-                text1: 'Password Mismatch',
-                text2: 'Passwords do not match'
-            });
-            return;
-        }
-
-        if (newPassword.length < 6) {
-            Toast.show({
-                type: 'error',
-                text1: 'Password Too Short',
-                text2: 'Password must be at least 6 characters'
-            });
-            return;
-        }
-
-        setLoading(true);
-        const result = await supabaseApi.resetPasswordWithCode(email, otpCode, newPassword);
-        setLoading(false);
-
-        if (result.success) {
-            Toast.show({
-                type: 'success',
-                text1: 'Success!',
-                text2: result.message
-            });
-            if (onSuccess) {
-                onSuccess();
-            }
-        } else {
-            Toast.show({
-                type: 'error',
-                text1: 'Error',
-                text2: result.message
-            });
-        }
-    };
-
-    const handleResendCode = async () => {
-        if (!canResend) {
-            Toast.show({
-                type: 'error',
-                text1: 'Please Wait',
-                text2: `Please wait ${resendTimer} seconds before resending`
-            });
-            return;
-        }
-
-        setLoading(true);
-        const result = await supabaseApi.resendResetCode(email);
-        setLoading(false);
-
-        if (result.success) {
-            Toast.show({
-                type: 'success',
-                text1: 'Code Resent!',
-                text2: result.message
-            });
-            startResendTimer();
-        } else {
-            Toast.show({
-                type: 'error',
-                text1: 'Error',
-                text2: result.message
-            });
-        }
-    };
-
-    const startResendTimer = () => {
-        setCanResend(false);
-        setResendTimer(60);
-
-        const interval = setInterval(() => {
-            setResendTimer(prev => {
-                if (prev <= 1) {
-                    clearInterval(interval);
-                    setCanResend(true);
-                    return prev;
-                }
-                return prev - 1;
-            });
-        }, 1000);
+    const handleResend = async () => {
+        if (resendTimer > 0) return;
+        await handleSendLink();
     };
 
     return (
@@ -185,12 +100,12 @@ const ForgotPasswordContent = ({ onClose, onSuccess }: ForgotPasswordContentProp
                 {/* Header */}
                 <View className="gap-2">
                     <Text className="text-white text-xl font-semibold text-center">
-                        {step === 'email' ? 'Reset Password' : 'Verify Code'}
+                        {step === 'email' ? 'Reset Password' : 'Check Your Email'}
                     </Text>
                     <Text className="text-gray-400 text-base text-center px-4">
                         {step === 'email'
-                            ? 'Enter your email address and we\'ll send you a verification code'
-                            : 'Enter the 8-digit code sent to your email'}
+                            ? 'Enter your email address and we\'ll send you a link to reset your password'
+                            : `If an account exists for ${email.trim()}, a reset link is on its way. Open it to choose a new password, then log in.`}
                     </Text>
                 </View>
 
@@ -211,13 +126,13 @@ const ForgotPasswordContent = ({ onClose, onSuccess }: ForgotPasswordContentProp
                         </View>
 
                         <TouchableOpacity
-                            onPress={handleSendCode}
+                            onPress={handleSendLink}
                             disabled={loading}
                             className={`bg-brand-green rounded-xl py-4 px-6 ${loading ? 'opacity-50' : ''}`}
                             activeOpacity={0.7}
                         >
                             <Text className="text-white text-center font-semibold text-base">
-                                {loading ? 'Sending...' : 'Send Reset Code'}
+                                {loading ? 'Sending...' : 'Send Reset Link'}
                             </Text>
                         </TouchableOpacity>
 
@@ -233,62 +148,24 @@ const ForgotPasswordContent = ({ onClose, onSuccess }: ForgotPasswordContentProp
                     </View>
                 ) : (
                     <View className="gap-4">
-                        <View>
-                            <Text className="text-white text-sm font-medium mb-2">Verification Code</Text>
-                            <TextInput
-                                value={otpCode}
-                                onChangeText={setOtpCode}
-                                placeholder="Enter 8-digit code"
-                                placeholderTextColor="#6b7280"
-                                keyboardType="number-pad"
-                                maxLength={8}
-                                className="bg-gray-800/50 border border-gray-700 rounded-xl px-4 py-3 text-white text-center text-lg tracking-widest"
-                            />
-                        </View>
-
-                        <View>
-                            <Text className="text-white text-sm font-medium mb-2">New Password</Text>
-                            <TextInput
-                                value={newPassword}
-                                onChangeText={setNewPassword}
-                                placeholder="Enter new password"
-                                placeholderTextColor="#6b7280"
-                                secureTextEntry
-                                className="bg-gray-800/50 border border-gray-700 rounded-xl px-4 py-3 text-white"
-                            />
-                        </View>
-
-                        <View>
-                            <Text className="text-white text-sm font-medium mb-2">Confirm Password</Text>
-                            <TextInput
-                                value={confirmPassword}
-                                onChangeText={setConfirmPassword}
-                                placeholder="Confirm new password"
-                                placeholderTextColor="#6b7280"
-                                secureTextEntry
-                                className="bg-gray-800/50 border border-gray-700 rounded-xl px-4 py-3 text-white"
-                            />
-                        </View>
-
                         <TouchableOpacity
-                            onPress={handleResetPassword}
-                            disabled={loading}
-                            className={`bg-brand-green rounded-xl py-4 px-6 ${loading ? 'opacity-50' : ''}`}
+                            onPress={onSuccess ?? onClose}
+                            className="bg-brand-green rounded-xl py-4 px-6"
                             activeOpacity={0.7}
                         >
                             <Text className="text-white text-center font-semibold text-base">
-                                {loading ? 'Resetting...' : 'Reset Password'}
+                                Done
                             </Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
-                            onPress={handleResendCode}
-                            disabled={!canResend || loading}
-                            className={`bg-gray-800 rounded-xl py-4 px-6 ${(!canResend || loading) ? 'opacity-50' : ''}`}
+                            onPress={handleResend}
+                            disabled={resendTimer > 0 || loading}
+                            className={`bg-gray-800 rounded-xl py-4 px-6 ${(resendTimer > 0 || loading) ? 'opacity-50' : ''}`}
                             activeOpacity={0.7}
                         >
                             <Text className="text-white text-center font-semibold text-base">
-                                {canResend ? 'Resend Code' : `Resend Code (${resendTimer}s)`}
+                                {resendTimer > 0 ? `Resend Link (${resendTimer}s)` : 'Resend Link'}
                             </Text>
                         </TouchableOpacity>
 
@@ -298,7 +175,7 @@ const ForgotPasswordContent = ({ onClose, onSuccess }: ForgotPasswordContentProp
                             activeOpacity={0.7}
                         >
                             <Text className="text-gray-400 text-center text-sm">
-                                Back to email
+                                Use a different email
                             </Text>
                         </TouchableOpacity>
                     </View>

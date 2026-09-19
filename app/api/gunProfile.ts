@@ -1,121 +1,54 @@
 // app/api/gunProfile.ts
-import { supabase } from "@/app/lib/supabase";
+import { deleteDoc, doc, getDoc, getDocs, setDoc, updateDoc } from "firebase/firestore";
 import { apiCache } from "./apiCache";
+import {
+    READ_TIMEOUT_MS,
+    WRITE_TIMEOUT_MS,
+    gunProfileDoc,
+    gunProfilesCol,
+    isNetworkOrTimeoutError,
+    requireUid,
+    withTimeout,
+} from "./firestoreUtils";
 import type {
     GunProfile,
     CreateGunProfileData,
     UpdateGunProfileData
 } from "../types/apiTypes";
 
-const API_BASE_URL = 'http://10.0.0.78:8080/api/v1';
-
-// Configuration for offline-first behavior
-const CONFIG = {
-    // Timeout for API calls before falling back to cache (milliseconds)
-    // 5 seconds is good for hunting scenarios with spotty connections
-    REQUEST_TIMEOUT_MS: 5000,
-
-    // Shorter timeout for read operations (we can fall back to cache faster)
-    READ_TIMEOUT_MS: 3000,
-
-    // Longer timeout for write operations (we want to try harder)
-    WRITE_TIMEOUT_MS: 8000,
-};
-
-const getAuthHeaders = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        ...(session?.access_token && {
-            "Authorization": `Bearer ${session.access_token}`
-        })
-    };
-};
-
-// Helper to detect network/timeout errors
-const isNetworkOrTimeoutError = (error: any): boolean => {
-    const message = error?.message || '';
-    return message.includes('Network') ||
-        message.includes('fetch') ||
-        message.includes('Failed to fetch') ||
-        message.includes('network request failed') ||
-        message.includes('timed out') ||
-        message.includes('timeout') ||
-        message.includes('AbortError') ||
-        error?.name === 'AbortError';
-};
-
-/**
- * Fetch with timeout - essential for detecting slow connections
- * If the request takes longer than the timeout, it will abort and we fall back to cache
- */
-const fetchWithTimeout = async (
-    url: string,
-    options: RequestInit,
-    timeout: number
-): Promise<Response> => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-        controller.abort();
-    }, timeout);
-
-    try {
-        const response = await fetch(url, {
-            ...options,
-            signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-        return response;
-    } catch (error: any) {
-        clearTimeout(timeoutId);
-
-        if (error.name === 'AbortError') {
-            throw new Error('Request timed out - connection too slow');
-        }
-        throw error;
-    }
-};
+// Gun profiles live at users/{uid}/gunProfiles/{gunId}.
+// Document IDs are generated on the client so a create that is queued offline (or that
+// times out but still reaches Firestore later) can be replayed safely with setDoc.
 
 export const gunProfileApi = {
     /**
      * Create a new gun profile
-     * - Online: Creates on server immediately
+     * - Online: Writes to Firestore immediately
      * - Offline/Slow: Queues operation and saves locally for immediate UI feedback
      */
     createProfile: async (data: CreateGunProfileData): Promise<GunProfile | { id: string; _isPending: true }> => {
+        const uid = requireUid();
+        const ref = doc(gunProfilesCol(uid));
+
         try {
-            const headers = await getAuthHeaders();
-            const response = await fetchWithTimeout(
-                `${API_BASE_URL}/gunProfile/create`,
-                {
-                    headers,
-                    method: 'POST',
-                    body: JSON.stringify(data),
-                },
-                CONFIG.WRITE_TIMEOUT_MS
+            await withTimeout(
+                setDoc(ref, { ...data, createdAt: Date.now(), updatedAt: Date.now() }),
+                WRITE_TIMEOUT_MS
             );
 
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.message || `Error ${response.statusText}`);
-            }
-
-            const result = await response.json();
-
-            // Update cache with the new profile
             await apiCache.clear('gun_profiles_all');
 
-            return result;
+            return { ...data, id: ref.id };
         } catch (error) {
             console.log('Create profile failed, queueing for later...', error);
 
             if (isNetworkOrTimeoutError(error)) {
-                // Queue the operation for later sync
+                // Queue the operation for later sync (entityId = the Firestore doc ID to use on replay)
                 const tempId = await apiCache.addPendingOperation(
                     'CREATE',
                     'gun_profile',
-                    data
+                    data,
+                    ref.id
                 );
 
                 // Optimistically add to local cache for immediate UI feedback
@@ -129,46 +62,36 @@ export const gunProfileApi = {
 
                 console.log('✅ Created profile queued for sync, tempId:', tempId);
 
-                // Return the optimistic data so UI can update immediately
                 return { ...optimisticProfile, id: tempId, _isPending: true };
             }
 
-            // Real API error (validation, auth, etc.) - throw it
+            // Real error (permissions, validation, etc.) - throw it
             throw error;
         }
     },
 
     /**
      * Get all user's gun profiles
-     * - Online: Fetches from server, caches result
+     * - Online: Fetches from Firestore, caches result
      * - Offline/Slow: Returns cached data immediately
      */
     getAllUserGunProfiles: async (): Promise<GunProfile[]> => {
         const cacheKey = 'gun_profiles_all';
 
         try {
-            const headers = await getAuthHeaders();
-            const response = await fetchWithTimeout(
-                `${API_BASE_URL}/gunProfile/me`,
-                {
-                    headers,
-                    method: 'GET',
-                },
-                CONFIG.READ_TIMEOUT_MS
-            );
+            const uid = requireUid();
+            const snapshot = await withTimeout(getDocs(gunProfilesCol(uid)), READ_TIMEOUT_MS);
 
-            if (!response.ok) {
-                throw new Error(`Error ${response.statusText}`);
-            }
-
-            const data = await response.json();
+            const data = snapshot.docs
+                .map(d => ({ ...d.data(), id: d.id }) as GunProfile & { createdAt?: number })
+                .sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
 
             // Cache the successful response
             await apiCache.set(cacheKey, data);
 
             return data;
         } catch (error) {
-            console.log('API call failed or timed out, checking cache...', error);
+            console.log('Firestore call failed or timed out, checking cache...', error);
 
             // Return cached data if available
             const cached = await apiCache.get<GunProfile[]>(cacheKey);
@@ -184,14 +107,13 @@ export const gunProfileApi = {
                 return [];
             }
 
-            // Real API error (server error, auth error, etc.) - throw it
             throw error;
         }
     },
 
     /**
      * Get a specific gun profile by ID
-     * - Online: Fetches from server, caches result
+     * - Online: Fetches from Firestore, caches result
      * - Offline/Slow: Returns cached data if available
      */
     getSpecificGunProfile: async (id: string): Promise<GunProfile> => {
@@ -208,28 +130,21 @@ export const gunProfileApi = {
         }
 
         try {
-            const headers = await getAuthHeaders();
-            const response = await fetchWithTimeout(
-                `${API_BASE_URL}/gunProfile/me/${id}`,
-                {
-                    headers,
-                    method: 'GET',
-                },
-                CONFIG.READ_TIMEOUT_MS
-            );
+            const uid = requireUid();
+            const snapshot = await withTimeout(getDoc(gunProfileDoc(uid, id)), READ_TIMEOUT_MS);
 
-            if (!response.ok) {
-                throw new Error(`Error ${response.statusText}`);
+            if (!snapshot.exists()) {
+                throw new Error('Gun profile not found');
             }
 
-            const data = await response.json();
+            const data = { ...snapshot.data(), id: snapshot.id } as GunProfile;
 
             // Cache the response
             await apiCache.set(cacheKey, data);
 
             return data;
         } catch (error) {
-            console.log('API call failed or timed out, checking cache...', error);
+            console.log('Firestore call failed or timed out, checking cache...', error);
 
             // Return cached data if available
             const cached = await apiCache.get<GunProfile>(cacheKey);
@@ -253,7 +168,7 @@ export const gunProfileApi = {
 
     /**
      * Update a specific gun profile
-     * - Online: Updates on server immediately
+     * - Online: Updates Firestore immediately
      * - Offline/Slow: Queues operation and updates locally for immediate UI feedback
      */
     updateSpecificGunProfile: async (id: string, data: UpdateGunProfileData): Promise<GunProfile> => {
@@ -262,16 +177,13 @@ export const gunProfileApi = {
             console.log('📝 Updating pending profile locally');
             await apiCache.optimisticUpdate<GunProfile>('gun_profiles_all', id, data);
 
-            // Update the pending CREATE operation with new data
+            // Fold the edit into the queued CREATE (keeps its tempId and Firestore doc ID)
             const operations = await apiCache.getPendingOperations();
             const createOp = operations.find(
                 op => op.entity === 'gun_profile' && op.tempId === id && op.type === 'CREATE'
             );
             if (createOp) {
-                createOp.data = { ...createOp.data, ...data };
-                // This is a bit hacky but we need to update the operation
-                await apiCache.removePendingOperation(createOp.id);
-                await apiCache.addPendingOperation('CREATE', 'gun_profile', createOp.data);
+                await apiCache.updatePendingOperationData(createOp.id, data);
             }
 
             const cached = await apiCache.get<GunProfile[]>('gun_profiles_all');
@@ -279,29 +191,17 @@ export const gunProfileApi = {
         }
 
         try {
-            const headers = await getAuthHeaders();
-            const response = await fetchWithTimeout(
-                `${API_BASE_URL}/gunProfile/me/${id}`,
-                {
-                    headers,
-                    method: 'PATCH',
-                    body: JSON.stringify(data),
-                },
-                CONFIG.WRITE_TIMEOUT_MS
+            const uid = requireUid();
+            await withTimeout(
+                updateDoc(gunProfileDoc(uid, id), { ...data, updatedAt: Date.now() }),
+                WRITE_TIMEOUT_MS
             );
-
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.message || `Error ${response.statusText}`);
-            }
-
-            const result = await response.json();
 
             // Clear caches after successful update
             await apiCache.clear(`gun_profile_${id}`);
             await apiCache.clear('gun_profiles_all');
 
-            return result;
+            return { ...data, id } as GunProfile;
         } catch (error) {
             console.log('Update profile failed, queueing for later...', error);
 
@@ -324,14 +224,13 @@ export const gunProfileApi = {
                 return { ...data, id } as GunProfile;
             }
 
-            // Real API error - throw it
             throw error;
         }
     },
 
     /**
      * Delete a specific gun profile
-     * - Online: Deletes on server immediately
+     * - Online: Deletes from Firestore immediately
      * - Offline/Slow: Queues operation and removes locally for immediate UI feedback
      */
     deleteSpecificGunProfile: async (id: string): Promise<void> => {
@@ -352,20 +251,8 @@ export const gunProfileApi = {
         }
 
         try {
-            const headers = await getAuthHeaders();
-            const response = await fetchWithTimeout(
-                `${API_BASE_URL}/gunProfile/me/${id}`,
-                {
-                    headers,
-                    method: 'DELETE',
-                },
-                CONFIG.WRITE_TIMEOUT_MS
-            );
-
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.message || `Error ${response.statusText}`);
-            }
+            const uid = requireUid();
+            await withTimeout(deleteDoc(gunProfileDoc(uid, id)), WRITE_TIMEOUT_MS);
 
             // Clear caches after successful delete
             await apiCache.clear(`gun_profile_${id}`);
@@ -385,7 +272,6 @@ export const gunProfileApi = {
                 return;
             }
 
-            // Real API error - throw it
             throw error;
         }
     },

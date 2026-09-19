@@ -48,10 +48,11 @@ All contexts are mounted at the root in `app/_layout.tsx`.
 
 ### Backend
 
-- **Supabase** (`app/lib/supabase.ts`) — auth, database, realtime
-- Auth methods: email/password + OTP for password reset (`app/api/supabaseService.ts`)
-- Gun profiles and user profiles have CRUD wrappers in `app/api/`
-- Offline-first: failed API calls are queued in `apiCache.ts` and replayed by `app/services/syncService.ts` when connection is restored
+- **Firebase** (`app/lib/firebase.ts`, JS SDK) — Auth + Cloud Firestore; there is no separate backend server. Config comes from `EXPO_PUBLIC_FIREBASE_*` env vars (see `.env.example`); security rules live in `firestore.rules`
+- Auth: email/password; password reset sends a Firebase email link (`app/api/authService.ts`)
+- Data model: `users/{uid}` (profile) and `users/{uid}/gunProfiles/{id}`. CRUD wrappers are in `app/api/gunProfile.ts` and `app/api/userProfile.ts`, with shared helpers in `app/api/firestoreUtils.ts`
+- Offline-first: the Firestore JS SDK has no on-disk cache in React Native, so writes that time out are queued in `apiCache.ts` and replayed by `app/services/syncService.ts`. Gun profile doc IDs are generated client-side so replays are idempotent
+- Account deletion is client-side (re-authenticate, delete Firestore docs, then the Auth user)
 
 ### Sensors & Camera
 

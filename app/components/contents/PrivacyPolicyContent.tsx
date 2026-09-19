@@ -102,9 +102,9 @@ const PrivacyPolicyContent = ({onClose}: PrivacyPolicyContentProps) => {
                                 Data Storage & Security
                             </Text>
                             <Text className="text-gray-400 text-base">
-                                Your account information and rifle profiles are stored securely in Supabase's PostgreSQL
-                                database with industry-standard encryption. Passwords are hashed and never stored in plain
-                                text. We use JWT (JSON Web Token) authentication to protect your account from unauthorized
+                                Your account information and rifle profiles are stored securely in Google Firebase's Cloud Firestore
+                                database with industry-standard encryption in transit and at rest. Passwords are hashed and never stored in plain
+                                text. We use Firebase Authentication to protect your account from unauthorized
                                 access.{'\n\n'}
 
                                 All camera processing happens locally on your device in real-time. Scope calibration data
@@ -121,7 +121,7 @@ const PrivacyPolicyContent = ({onClose}: PrivacyPolicyContentProps) => {
                             <Text className="text-gray-400 text-base">
                                 We use the following trusted services:{'\n\n'}
 
-                                • <Text className="text-white">Supabase</Text> - Secure cloud database and authentication{'\n'}
+                                • <Text className="text-white">Google Firebase</Text> - Secure cloud database and authentication{'\n'}
                                 • <Text className="text-white">Expo</Text> - Mobile app development framework{'\n\n'}
 
                                 These services have their own privacy policies and security measures in place.

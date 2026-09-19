@@ -8,15 +8,21 @@ import React, {
     useState,
 } from "react";
 import Toast from "react-native-toast-message";
-import type { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/app/lib/supabase";
+import {
+    createUserWithEmailAndPassword,
+    onAuthStateChanged,
+    signInWithEmailAndPassword,
+    signOut,
+    type User,
+} from "firebase/auth";
+import { auth } from "@/app/lib/firebase";
+import { getAuthErrorMessage } from "@/app/lib/authErrors";
 import { apiCache } from "@/app/api/apiCache";
 
 type AuthContextType = {
     user: User | null;
-    session: Session | null;
     // ✅ Separate states: initializing = first auth check, loading = operations in progress
-    initializing: boolean;  // True until first session check completes
+    initializing: boolean;  // True until Firebase restores (or clears) the persisted user
     loading: boolean;       // True during login/signup/logout operations
     error: string | null;
     clearError: () => void;
@@ -35,33 +41,29 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Timeout for auth operations
-const AUTH_TIMEOUT_MS = 8000;
-
 /**
- * Check if we can reach Supabase auth (quick connectivity test)
+ * Quick reachability check for Firebase (any HTTP response means we're online)
  */
-const canReachSupabase = async (timeout: number = 5000): Promise<boolean> => {
+const canReachFirebase = async (timeout: number = 5000): Promise<boolean> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-        // Try to get current session - this is a lightweight call
-        const { error } = await supabase.auth.getSession();
-
-        clearTimeout(timeoutId);
-
-        // If no error, we can reach Supabase
-        return !error;
+        await fetch("https://identitytoolkit.googleapis.com/", {
+            method: "HEAD",
+            signal: controller.signal,
+        });
+        return true;
     } catch (error) {
-        console.log('Supabase connectivity check failed:', error);
+        console.log("Firebase connectivity check failed:", error);
         return false;
+    } finally {
+        clearTimeout(timeoutId);
     }
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<User | null>(null);
-    const [session, setSession] = useState<Session | null>(null);
     // ✅ Separate states to avoid conflicts
     const [initializing, setInitializing] = useState(true);  // First auth check
     const [loading, setLoading] = useState(false);           // Operations (login/signup/logout)
@@ -74,61 +76,57 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const clearError = () => setError(null);
 
-    // 🔐 Initialize session once on mount
+    // 🔐 Firebase restores the persisted user (works offline) and keeps us in sync
     useEffect(() => {
-        const initSession = async () => {
-            try {
-                const { data, error } = await supabase.auth.getSession();
-
-                if (error) {
-                    console.log("Supabase getSession error:", error.message);
-                    // ✅ If there's an error getting session, clear everything
-                    setSession(null);
-                    setUser(null);
-                    setError(error.message);
-                    return;
-                }
-
-                console.log("Initial session check:", data.session ? "Session found" : "No session");
-                setSession(data.session ?? null);
-                setUser(data.session?.user ?? null);
-            } catch (e: any) {
-                console.log("initSession catch:", e?.message);
-                setSession(null);
-                setUser(null);
-            } finally {
-                // ✅ Always set initializing to false when init completes
-                setInitializing(false);
-            }
-        };
-
-        initSession();
-
-        // 🔐 Keep user/session synced with Supabase
-        const {
-            data: { subscription },
-        } = supabase.auth.onAuthStateChange((event, newSession) => {
-            console.log("Auth state changed:", event, newSession ? "has session" : "no session");
-
-            // ✅ Handle different auth events
-            if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED' && !newSession) {
-                console.log("User signed out or token refresh failed");
-                setSession(null);
-                setUser(null);
-            } else {
-                setSession(newSession);
-                setUser(newSession?.user ?? null);
-            }
+        const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+            console.log("Auth state changed:", firebaseUser ? "signed in" : "signed out");
+            setUser(firebaseUser);
+            // ✅ The first callback means the initial check has finished
+            setInitializing(false);
         });
 
-        return () => subscription.unsubscribe();
+        return unsubscribe;
     }, []);
 
     /**
      * Check if we can perform auth operations (for UI to disable buttons)
      */
     const checkAuthConnectivity = async (): Promise<boolean> => {
-        return await canReachSupabase();
+        return await canReachFirebase();
+    };
+
+    /**
+     * Shared email/password validation — shows a toast and returns false when invalid
+     */
+    const validateCredentials = (email: string, password: string): boolean => {
+        if (!email || !password) {
+            Toast.show({
+                type: "error",
+                text1: "Missing Fields",
+                text2: "Please enter your email and password.",
+            });
+            return false;
+        }
+
+        if (!validateEmail(email)) {
+            Toast.show({
+                type: "error",
+                text1: "Invalid Email",
+                text2: "Please enter a valid email format.",
+            });
+            return false;
+        }
+
+        if (!validatePassword(password)) {
+            Toast.show({
+                type: "error",
+                text1: "Weak Password",
+                text2: "Password must be at least 6 characters.",
+            });
+            return false;
+        }
+
+        return true;
     };
 
     const signup = async (email: string, password: string) => {
@@ -136,67 +134,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             clearError();
 
             // ✅ Validate BEFORE setting loading or making API call
-            if (!email || !password) {
-                Toast.show({
-                    type: "error",
-                    text1: "Missing Fields",
-                    text2: "Please enter your email and password.",
-                });
-                return { success: false };
-            }
-
-            if (!validateEmail(email)) {
-                Toast.show({
-                    type: "error",
-                    text1: "Invalid Email",
-                    text2: "Please enter a valid email format.",
-                });
-                return { success: false };
-            }
-
-            if (!validatePassword(password)) {
-                Toast.show({
-                    type: "error",
-                    text1: "Weak Password",
-                    text2: "Password must be at least 6 characters.",
-                });
+            if (!validateCredentials(email, password)) {
                 return { success: false };
             }
 
             // ✅ Only set loading AFTER validation passes
             setLoading(true);
 
-            // --- SAFEST POSSIBLE SIGNUP ---
-            const { data, error } = await supabase.auth.signUp({
-                email,
-                password,
-            });
-
-            if (error) {
-                setError(error.message);
-                Toast.show({
-                    type: "error",
-                    text1: "Sign Up Failed",
-                    text2: error.message || "Please try again",
-                });
-                setLoading(false);
-                return { success: false };
-            }
-
-            // Email confirmation enabled (default)
-            if (!data.session) {
-                Toast.show({
-                    type: "success",
-                    text1: "Check Your Email",
-                    text2: "Confirm your account to continue.",
-                });
-                setLoading(false);
-                return { success: true };
-            }
-
-            // If auto-confirmation is ON
-            setSession(data.session);
-            setUser(data.session.user);
+            // Firebase signs the new user in immediately (no email-confirmation gate)
+            const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+            setUser(credential.user);
 
             Toast.show({
                 type: "success",
@@ -207,11 +154,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setLoading(false);
             return { success: true };
         } catch (e: any) {
-            const msg = e?.message ?? "Signup failed";
+            const msg = getAuthErrorMessage(e);
             setError(msg);
             Toast.show({
                 type: "error",
-                text1: "Sign Up Error",
+                text1: "Sign Up Failed",
                 text2: msg,
             });
             setLoading(false);
@@ -219,60 +166,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
-    // 🔓 LOGIN (email/password only — standard Supabase login)
+    // 🔓 LOGIN (email/password)
     const login = async (email: string, password: string) => {
         try {
             clearError();
 
             // ✅ Validate BEFORE setting loading or making API call
-            if (!email || !password) {
-                Toast.show({
-                    type: "error",
-                    text1: "Missing Fields",
-                    text2: "Please enter your email and password.",
-                });
-                return { success: false };
-            }
-
-            if (!validateEmail(email)) {
-                Toast.show({
-                    type: "error",
-                    text1: "Invalid Email",
-                    text2: "Please enter a valid email format.",
-                });
-                return { success: false };
-            }
-
-            if (!validatePassword(password)) {
-                Toast.show({
-                    type: "error",
-                    text1: "Weak Password",
-                    text2: "Password must be at least 6 characters.",
-                });
+            if (!validateCredentials(email, password)) {
                 return { success: false };
             }
 
             // ✅ Only set loading AFTER validation passes
             setLoading(true);
 
-            const { data, error } = await supabase.auth.signInWithPassword({
-                email,
-                password,
-            });
-
-            if (error) {
-                setError(error.message);
-                Toast.show({
-                    type: "error",
-                    text1: "Login Failed",
-                    text2: error.message || "Please try again",
-                });
-                setLoading(false);
-                return { success: false };
-            }
-
-            setSession(data.session);
-            setUser(data.session?.user ?? null);
+            const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+            setUser(credential.user);
 
             Toast.show({
                 type: "success",
@@ -283,8 +191,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setLoading(false);
             return { success: true };
         } catch (e: any) {
-            console.log("Login error:", e);
-            const msg = e?.message ?? "Login failed";
+            console.log("Login error:", e?.code, e?.message);
+            const msg = getAuthErrorMessage(e);
             setError(msg);
             Toast.show({
                 type: "error",
@@ -296,25 +204,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
-    // 🚪 LOGOUT - Always clears local state, attempts server signout
+    // 🚪 LOGOUT - Always clears local state, attempts Firebase signout
     const logout = async (): Promise<{ success: boolean }> => {
         try {
             clearError();
             setLoading(true);
 
-            // ✅ Try to sign out from Supabase (best effort)
+            // ✅ Try to sign out from Firebase (best effort)
             try {
-                await supabase.auth.signOut();
-                console.log("Supabase signOut successful");
+                await signOut(auth);
+                console.log("Firebase signOut successful");
             } catch (signOutError: any) {
                 // Log but don't fail - we'll clear local state anyway
-                console.log("Supabase signOut error (non-fatal):", signOutError?.message);
+                console.log("Firebase signOut error (non-fatal):", signOutError?.message);
             }
 
             // ✅ ALWAYS clear local state regardless of server response
             console.log("Clearing local auth state");
             setUser(null);
-            setSession(null);
 
             // ✅ Clear all cached data
             try {
@@ -337,7 +244,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
             // ✅ Even on error, clear local state to ensure user can "escape"
             setUser(null);
-            setSession(null);
             setLoading(false);
 
             return { success: true }; // Return success since local state is cleared
@@ -348,7 +254,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         <AuthContext.Provider
             value={{
                 user,
-                session,
                 initializing,
                 loading,
                 error,

@@ -156,6 +156,23 @@ export const apiCache = {
     },
 
     /**
+     * Merge new data into a queued operation's payload (keeps its id/tempId/entityId)
+     */
+    updatePendingOperationData: async (operationId: string, data: any): Promise<void> => {
+        try {
+            const operations = await apiCache.getPendingOperations();
+            const updated = operations.map(op =>
+                op.id === operationId
+                    ? { ...op, data: { ...op.data, ...data } }
+                    : op
+            );
+            await AsyncStorage.setItem(PENDING_OPS_KEY, JSON.stringify(updated));
+        } catch (error) {
+            console.log('Update pending operation error:', error);
+        }
+    },
+
+    /**
      * Update retry count for a failed operation
      */
     incrementRetryCount: async (operationId: string): Promise<void> => {
