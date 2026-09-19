@@ -20,7 +20,7 @@ import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Slider from "@react-native-community/slider";
-import { CommonActions, useNavigation } from "@react-navigation/native";
+import { CommonActions, useNavigation } from "expo-router/react-navigation";
 
 import {
   useCalibrationStore,
@@ -41,8 +41,8 @@ import { crosshairStyles, magnifierStyles, guideStyles } from "../calibration/ex
 
 const SCREEN_ID = "step5";
 type StepSize = 1 | 5 | 10;
-const MAX_ROTATION = 45;
-const MIN_ROTATION = -45;
+const MAX_ROTATION = 60;
+const MIN_ROTATION = -60;
 
 // ==================== MAIN COMPONENT ====================
 export default function Step5() {
@@ -180,7 +180,7 @@ export default function Step5() {
 
   // ==================== CROSSHAIR COMPONENT ====================
   const Crosshair = ({ point }: { point: ScopeCenterPx }) => (
-      <View style={[crosshairStyles.container, { left: point.x - 40, top: point.y - 40 }]} pointerEvents="none">
+      <View style={[crosshairStyles.container, { left: point.x - 60, top: point.y - 60 }]} pointerEvents="none">
         <View style={crosshairStyles.top} />
         <View style={crosshairStyles.bottom} />
         <View style={crosshairStyles.left} />
@@ -327,11 +327,11 @@ export default function Step5() {
                   </View>
 
                   <View className="flex-row justify-between items-center px-1 mt-1">
-                    <Text className="text-white/40 text-[9px]">-45°</Text>
+                    <Text className="text-white/40 text-[9px]">-60°</Text>
                     <Pressable onPress={handleResetRotation}>
                       <Text className="text-brand-greenLight/70 text-[9px] font-semibold">Reset</Text>
                     </Pressable>
-                    <Text className="text-white/40 text-[9px]">+45°</Text>
+                    <Text className="text-white/40 text-[9px]">+60°</Text>
                   </View>
                 </SectionCard>
 
@@ -454,11 +454,11 @@ export default function Step5() {
               </View>
 
               <View className="flex-row justify-between items-center px-1 mt-1">
-                <Text className="text-white/40 text-[10px]">-45°</Text>
+                <Text className="text-white/40 text-[10px]">-60°</Text>
                 <Pressable onPress={handleResetRotation}>
                   <Text className="text-brand-greenLight/70 text-[10px] font-semibold">Reset</Text>
                 </Pressable>
-                <Text className="text-white/40 text-[10px]">+45°</Text>
+                <Text className="text-white/40 text-[10px]">+60°</Text>
               </View>
             </SectionCard>
 

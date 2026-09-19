@@ -25,7 +25,7 @@ import { useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
-import { CommonActions, useNavigation, useIsFocused } from "@react-navigation/native";
+import { CommonActions, useNavigation, useIsFocused } from "expo-router/react-navigation";
 import * as ScreenOrientation from "expo-screen-orientation";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
@@ -644,7 +644,7 @@ export default function ActiveHunt() {
         </View>
     ), [isTargetConfirmed, pulseAnim, pulseOpacity]);
 
-    // Holdover crosshair (orange)
+    // Holdover crosshair (orange) - same style as calibration crosshair
     const HoldoverCrosshair = useMemo(() => {
         if (!ballisticsData || !isTargetConfirmed) return null;
 
@@ -653,19 +653,22 @@ export default function ActiveHunt() {
                 style={[
                     styles.holdoverContainer,
                     {
-                        left: ballisticsData.holdoverX - 30,
-                        top: ballisticsData.holdoverY - 30,
+                        left: ballisticsData.holdoverX - 60,
+                        top: ballisticsData.holdoverY - 60,
                         opacity: holdoverOpacity
                     }
                 ]}
                 pointerEvents="none"
             >
-                <View style={styles.holdoverRing} />
-                <View style={styles.holdoverCenter} />
                 <View style={styles.holdoverTop} />
                 <View style={styles.holdoverBottom} />
                 <View style={styles.holdoverLeft} />
                 <View style={styles.holdoverRight} />
+                <View style={styles.holdoverInnerTop} />
+                <View style={styles.holdoverInnerBottom} />
+                <View style={styles.holdoverInnerLeft} />
+                <View style={styles.holdoverInnerRight} />
+                <View style={styles.holdoverCenter} />
             </Animated.View>
         );
     }, [ballisticsData, isTargetConfirmed, holdoverOpacity]);
@@ -856,8 +859,8 @@ export default function ActiveHunt() {
                             style={[
                                 crosshairStyles.container,
                                 {
-                                    left: calibrationData.scopeCenterPx.x - 40,
-                                    top: calibrationData.scopeCenterPx.y - 40,
+                                    left: calibrationData.scopeCenterPx.x - 60,
+                                    top: calibrationData.scopeCenterPx.y - 60,
                                     opacity: crosshairOpacity
                                 }
                             ]}
@@ -1041,59 +1044,104 @@ export default function ActiveHunt() {
 // ==================== STYLES ====================
 
 const styles = StyleSheet.create({
+    // Holdover crosshair - same style as calibration crosshair but orange
     holdoverContainer: {
         position: "absolute",
-        width: 60,
-        height: 60,
+        width: 120,
+        height: 120,
         alignItems: "center",
-        justifyContent: "center"
+        justifyContent: "center",
     },
-    holdoverRing: {
-        position: "absolute",
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        borderWidth: 2.5,
-        borderColor: "#f97316",
-        backgroundColor: "rgba(249, 115, 22, 0.08)"
-    },
-    holdoverCenter: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-        backgroundColor: "#f97316"
-    },
+    // Outer lines - longer, thinner for precise alignment
     holdoverTop: {
         position: "absolute",
-        top: 4,
-        width: 2,
-        height: 10,
+        width: 1,
+        height: 50,
+        top: 0,
         backgroundColor: "#f97316",
-        borderRadius: 1
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 1,
+        shadowRadius: 1,
+        elevation: 2,
     },
     holdoverBottom: {
         position: "absolute",
-        bottom: 4,
-        width: 2,
-        height: 10,
+        width: 1,
+        height: 50,
+        bottom: 0,
         backgroundColor: "#f97316",
-        borderRadius: 1
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 1,
+        shadowRadius: 1,
+        elevation: 2,
     },
     holdoverLeft: {
         position: "absolute",
-        left: 4,
-        width: 10,
-        height: 2,
+        width: 50,
+        height: 1,
+        left: 0,
         backgroundColor: "#f97316",
-        borderRadius: 1
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 1,
+        shadowRadius: 1,
+        elevation: 2,
     },
     holdoverRight: {
         position: "absolute",
-        right: 4,
-        width: 10,
-        height: 2,
+        width: 50,
+        height: 1,
+        right: 0,
         backgroundColor: "#f97316",
-        borderRadius: 1
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 1,
+        shadowRadius: 1,
+        elevation: 2,
+    },
+    // Center dot - tiny 2x2 pixel for exact center indication (red for visibility like calibration)
+    holdoverCenter: {
+        position: "absolute",
+        width: 2,
+        height: 2,
+        borderRadius: 0,
+        backgroundColor: "#ff0000",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 1,
+        shadowRadius: 1,
+        elevation: 3,
+    },
+    // Inner crosshair lines - short lines near center for fine alignment
+    holdoverInnerTop: {
+        position: "absolute",
+        width: 1,
+        height: 8,
+        top: 52,
+        backgroundColor: "#f97316",
+    },
+    holdoverInnerBottom: {
+        position: "absolute",
+        width: 1,
+        height: 8,
+        bottom: 52,
+        backgroundColor: "#f97316",
+    },
+    holdoverInnerLeft: {
+        position: "absolute",
+        width: 8,
+        height: 1,
+        left: 52,
+        backgroundColor: "#f97316",
+    },
+    holdoverInnerRight: {
+        position: "absolute",
+        width: 8,
+        height: 1,
+        right: 52,
+        backgroundColor: "#f97316",
     },
 
     cantBanner: {

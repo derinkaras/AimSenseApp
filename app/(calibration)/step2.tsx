@@ -9,7 +9,7 @@ import { View, Text, Pressable, ScrollView, Image, StyleSheet } from "react-nati
 import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { CommonActions, useNavigation } from "@react-navigation/native";
+import { CommonActions, useNavigation } from "expo-router/react-navigation";
 
 import {
   useCalibrationStore,

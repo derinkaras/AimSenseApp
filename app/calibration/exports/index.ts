@@ -29,17 +29,17 @@ export const MIL_CLICK_OPTIONS: ClickSizeOption[] = [
 
 // ==================== CALIBRATION CLICK COUNT ====================
 // Target angular movement for calibration
-export const TARGET_MOA_MOVEMENT = 4;  // 4 MOA total movement for MOA scopes
+export const TARGET_MOA_MOVEMENT = 5;  // 5 MOA total movement for MOA scopes
 export const TARGET_MIL_MOVEMENT = 1;  // 1 MIL total movement for MIL scopes
 
 /**
  * Calculate how many clicks to request based on scope unit and click size.
- * This ensures the target angular movement (4 MOA or 1 MIL) is achieved.
+ * This ensures the target angular movement (5 MOA or 1 MIL) is achieved.
  *
  * Examples:
- * - ¼ MOA (0.25): 4 / 0.25 = 16 clicks
- * - ½ MOA (0.5): 4 / 0.5 = 8 clicks
- * - ⅛ MOA (0.125): 4 / 0.125 = 32 clicks
+ * - ¼ MOA (0.25): 5 / 0.25 = 20 clicks
+ * - ½ MOA (0.5): 5 / 0.5 = 10 clicks
+ * - ⅛ MOA (0.125): 5 / 0.125 = 40 clicks
  * - 0.1 MIL: 1 / 0.1 = 10 clicks
  * - 0.2 MIL: 1 / 0.2 = 5 clicks
  * - 0.05 MIL: 1 / 0.05 = 20 clicks

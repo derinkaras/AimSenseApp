@@ -14,7 +14,7 @@ import {
 import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { CommonActions, useNavigation } from "@react-navigation/native";
+import { CommonActions, useNavigation } from "expo-router/react-navigation";
 import {
   useCalibrationStore,
   selectMountOrientation,
@@ -196,7 +196,7 @@ export default function Step6() {
   };
 
   const Crosshair = ({ point }: { point: ScopeCenterPx }) => (
-      <View style={[crosshairStyles.container, { left: point.x - 40, top: point.y - 40 }]} pointerEvents="none">
+      <View style={[crosshairStyles.container, { left: point.x - 60, top: point.y - 60 }]} pointerEvents="none">
         <View style={crosshairStyles.top} />
         <View style={crosshairStyles.bottom} />
         <View style={crosshairStyles.left} />
@@ -365,6 +365,9 @@ export default function Step6() {
 
   // ==================== VERIFY PHASE ====================
   if (phase === "verify") {
+    // Get the elevation end position from store to show where user marked
+    const elevationEndPx = useCalibrationStore.getState().elevationEndPx;
+
     return (
         <View className="flex-1 bg-brand-black">
           <View
@@ -379,6 +382,7 @@ export default function Step6() {
                   <View style={[StyleSheet.absoluteFill, rotationTransform]}>
                     <CameraView style={StyleSheet.absoluteFill} facing="back" zoom={cameraZoom} autofocus={focusLocked ? "off" : "on"} />
                   </View>
+                  {/* Original zero position - GREEN */}
                   {scopeCenterPx && (
                       <>
                         <Crosshair point={scopeCenterPx} />
@@ -397,7 +401,43 @@ export default function Step6() {
                             pointerEvents="none"
                         >
                           <Text style={{ color: "#22c55e", fontSize: 11, fontFamily: "monospace", fontWeight: "600" }}>
-                            ({scopeCenterPx.x}, {scopeCenterPx.y})
+                            ZERO ({scopeCenterPx.x}, {scopeCenterPx.y})
+                          </Text>
+                        </View>
+                      </>
+                  )}
+                  {/* Marked position after dial - ORANGE (only show if different from zero) */}
+                  {elevationEndPx && scopeCenterPx && (elevationEndPx.x !== scopeCenterPx.x || elevationEndPx.y !== scopeCenterPx.y) && (
+                      <>
+                        <View
+                            style={[
+                              crosshairStyles.container,
+                              { left: elevationEndPx.x - 60, top: elevationEndPx.y - 60 }
+                            ]}
+                            pointerEvents="none"
+                        >
+                          <View style={[crosshairStyles.top, { backgroundColor: "#f97316" }]} />
+                          <View style={[crosshairStyles.bottom, { backgroundColor: "#f97316" }]} />
+                          <View style={[crosshairStyles.left, { backgroundColor: "#f97316" }]} />
+                          <View style={[crosshairStyles.right, { backgroundColor: "#f97316" }]} />
+                          <View style={crosshairStyles.center} />
+                        </View>
+                        <View
+                            style={{
+                              position: "absolute",
+                              left: elevationEndPx.x - 40,
+                              top: elevationEndPx.y + 45,
+                              backgroundColor: "rgba(0,0,0,0.75)",
+                              paddingHorizontal: 8,
+                              paddingVertical: 4,
+                              borderRadius: 6,
+                              borderWidth: 1,
+                              borderColor: "rgba(249,115,22,0.5)",
+                            }}
+                            pointerEvents="none"
+                        >
+                          <Text style={{ color: "#f97316", fontSize: 11, fontFamily: "monospace", fontWeight: "600" }}>
+                            DIALED ({elevationEndPx.x}, {elevationEndPx.y})
                           </Text>
                         </View>
                       </>
@@ -417,7 +457,7 @@ export default function Step6() {
                     <HeaderCard icon={icons.target} title="Verify Reset" subtitle="Confirm crosshair alignment" compact />
                     <SectionCard variant="secondary" compact className="mt-2">
                       <Text className="text-white/80 text-[10px] leading-3.5 text-center">
-                        The green marker shows your original zero. Verify your scope's crosshair aligns with it.
+                        The green marker shows your original zero. The orange marker shows where you dialed. After dialing back, your scope should align with green.
                       </Text>
                     </SectionCard>
                     {scopeCenterPx && (
@@ -430,7 +470,7 @@ export default function Step6() {
                     )}
                     <View className="bg-brand-greenLight/10 border border-brand-greenLight/30 rounded-xl p-2 mt-2">
                       <Text className="text-brand-greenLight/90 text-[10px] text-center font-medium">
-                        If aligned, tap Continue. If not, go back and re-dial.
+                        If aligned with GREEN, tap Continue. If not, go back and re-dial.
                       </Text>
                     </View>
                   </ScrollView>
@@ -453,7 +493,7 @@ export default function Step6() {
                   <HeaderCard icon={icons.target} title="Verify Turret Reset" subtitle="Confirm your crosshair is back to zero" compact />
                   <SectionCard variant="secondary" className="mt-3">
                     <Text className="text-white/80 text-xs leading-4 text-center">
-                      The green marker shows your original zero position. Verify your scope's crosshair aligns with it.
+                      The green marker shows your original zero. The orange marker shows where you dialed. After dialing back, your scope should align with green.
                     </Text>
                   </SectionCard>
                   {scopeCenterPx && (
@@ -466,7 +506,7 @@ export default function Step6() {
                   )}
                   <View className="bg-brand-greenLight/10 border border-brand-greenLight/30 rounded-xl p-3 mt-3">
                     <Text className="text-brand-greenLight/90 text-xs text-center font-medium">
-                      If aligned correctly, tap Continue. If not, go back and carefully re-dial.
+                      If aligned with GREEN, tap Continue. If not, go back and re-dial.
                     </Text>
                   </View>
                   <View className="flex-row items-center justify-center gap-4 mt-4">

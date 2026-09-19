@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Tabs, Redirect } from "expo-router";
 import * as Haptics from "expo-haptics";
-import type { BottomTabBarButtonProps } from "@react-navigation/bottom-tabs";
+import type { BottomTabBarButtonProps } from "expo-router/js-tabs";
 import icons from "@/app/constants/icons";
 import { useAuth } from "@/app/contexts/AuthContext";
 

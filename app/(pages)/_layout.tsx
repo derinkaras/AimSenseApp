@@ -6,7 +6,7 @@ import {StatusBar} from "expo-status-bar";
 const _layout = () => {
     return (
         <View className="flex-1 bg-brand-black">
-            <StatusBar style="light" backgroundColor="#121212" />
+            <StatusBar style="light" />
             <Stack>
                 <Stack.Screen
                     name="AddGunProfile"

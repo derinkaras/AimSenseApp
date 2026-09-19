@@ -3,8 +3,8 @@ import { View, Text, Image, StyleSheet, AppState, TouchableOpacity } from "react
 import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions, Camera } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useIsFocused } from "@react-navigation/native";
+import { useBottomTabBarHeight } from "expo-router/js-tabs";
+import { useIsFocused } from "expo-router/react-navigation";
 import * as ScreenOrientation from "expo-screen-orientation";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";

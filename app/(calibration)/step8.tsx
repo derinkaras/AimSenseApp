@@ -10,7 +10,7 @@ import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
-import { CommonActions, useNavigation } from "@react-navigation/native";
+import { CommonActions, useNavigation } from "expo-router/react-navigation";
 
 import {
   useCalibrationStore,
@@ -123,6 +123,19 @@ export default function Step8() {
   const hasPixelScale = pxPerUnitX > 0 && pxPerUnitY > 0;
   const hasReference = Number.isFinite(roll0) && Number.isFinite(pitch0);
   const isComplete = hasScopeCenter && hasPixelScale && hasReference;
+
+  // Debug logging - remove after fixing
+  console.log("📊 Step8 Validation:", {
+    hasScopeCenter,
+    scopeCenterPx,
+    hasPixelScale,
+    pxPerUnitX,
+    pxPerUnitY,
+    hasReference,
+    roll0,
+    pitch0,
+    isComplete
+  });
 
   // Focus effect
   useFocusEffect(

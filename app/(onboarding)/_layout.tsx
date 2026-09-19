@@ -11,7 +11,7 @@ export default function Layout() {
     if (initializing) {
         return (
             <View className="flex-1 bg-brand-black items-center justify-center">
-                <StatusBar style="light" backgroundColor="#121212" />
+                <StatusBar style="light" />
                 <ActivityIndicator size="large" color="#0b7f4f" />
             </View>
         );
@@ -25,7 +25,7 @@ export default function Layout() {
     // No session → normal onboarding stack (index + Authentication)
     return (
         <View className="flex-1 bg-brand-black">
-            <StatusBar style="light" backgroundColor="#121212" />
+            <StatusBar style="light" />
             <Stack>
                 <Stack.Screen
                     name="index"

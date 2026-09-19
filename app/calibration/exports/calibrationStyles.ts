@@ -236,7 +236,7 @@ export const magnifierStyles = StyleSheet.create({
 // ==================== GUIDE OVERLAY STYLES ====================
 export const guideStyles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
   },

@@ -14,7 +14,7 @@ import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
-import { CommonActions, useIsFocused, useNavigation } from "@react-navigation/native";
+import { CommonActions, useIsFocused, useNavigation } from "expo-router/react-navigation";
 
 import {
   useCalibrationStore,
@@ -112,8 +112,12 @@ export default function Step4() {
 
   // ==================== HANDLERS ====================
   const handleCapture = () => {
+    // Ensure we have valid IMU values before capturing
+    const safeRoll = typeof rollNow === 'number' && Number.isFinite(rollNow) ? rollNow : 0;
+    const safePitch = typeof pitchNow === 'number' && Number.isFinite(pitchNow) ? pitchNow : 0;
+
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    captureBaseline(rollNow, pitchNow);
+    captureBaseline(safeRoll, safePitch);
     router.push("/(calibration)/step5");
   };
 
@@ -339,7 +343,7 @@ export default function Step4() {
                 <IconButton
                     icon={icons.chevronRight}
                     onPress={handleCapture}
-                    disabled={!isStable}
+                    disabled={!isStable || typeof rollNow !== 'number' || typeof pitchNow !== 'number'}
                     size={compact ? "sm" : "md"}
                     variant="primary"
                     tintColor="#ffffff"

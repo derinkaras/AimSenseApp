@@ -5,7 +5,7 @@ import { router, useFocusEffect } from "expo-router";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Slider from "@react-native-community/slider";
-import { CommonActions, useNavigation } from "@react-navigation/native";
+import { CommonActions, useNavigation } from "expo-router/react-navigation";
 import { useCalibrationStore, selectMountOrientation, selectCameraZoom, selectFocusPoint, selectScreenRotation, isLandscape, FocusPoint, getCameraLayoutConfig, clampValue } from "../calibration/exports";
 import icons from "@/app/constants/icons";
 import { useCameraContext } from "./_layout";
@@ -13,8 +13,8 @@ import { cn, getSafeAreaEdges } from "../calibration/exports/styles";
 import { HeaderCard, IconButton, SectionCard, PillButton, StatusBadge } from "../calibration/exports/components";
 
 const SCREEN_ID = "step3";
-const MAX_ROTATION = 45;
-const MIN_ROTATION = -45;
+const MAX_ROTATION = 60;
+const MIN_ROTATION = -60;
 
 export default function Step3() {
   const [permission] = useCameraPermissions();
@@ -347,11 +347,11 @@ export default function Step3() {
                     thumbTintColor="#22c55e"
                 />
                 <View className="flex-row justify-between">
-                  <Text className="text-white/40 text-[9px]">-45°</Text>
+                  <Text className="text-white/40 text-[9px]">-60°</Text>
                   <Pressable onPress={handleResetRotation}>
                     <Text className="text-brand-greenLight/70 text-[9px] font-semibold">Reset</Text>
                   </Pressable>
-                  <Text className="text-white/40 text-[9px]">+45°</Text>
+                  <Text className="text-white/40 text-[9px]">+60°</Text>
                 </View>
               </SectionCard>
 
@@ -513,7 +513,7 @@ export default function Step3() {
 
 const styles = StyleSheet.create({
   guideOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
   },
