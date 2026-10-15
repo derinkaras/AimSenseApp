@@ -11,8 +11,8 @@ import {
 import { Tabs, Redirect } from "expo-router";
 import * as Haptics from "expo-haptics";
 import type { BottomTabBarButtonProps } from "expo-router/js-tabs";
-import icons from "@/app/constants/icons";
-import { useAuth } from "@/app/contexts/AuthContext";
+import icons from "@/constants/icons";
+import { useAuth } from "@/contexts/AuthContext";
 
 const ICON_BOX = 28;   // outer box
 const ICON_SIZE = 22;  // base inner size

@@ -2,7 +2,7 @@ import React from "react";
 import { View, ActivityIndicator } from "react-native";
 import { Stack, Redirect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useAuth } from "@/app/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Layout() {
     const { user, initializing } = useAuth();

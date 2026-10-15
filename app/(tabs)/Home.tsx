@@ -9,10 +9,10 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { CameraPermissionBanner } from "@/app/components/CameraPermissionBanner";
-import { lockToPortrait } from "@/app/calibration/exports";
-import icons from "@/app/constants/icons";
-import { SlideToStartCalibration } from "@/app/components/SlideToStartCalibration";
+import { CameraPermissionBanner } from "@/components/CameraPermissionBanner";
+import { lockToPortrait } from "@/calibration";
+import icons from "@/constants/icons";
+import { SlideToStartCalibration } from "@/components/SlideToStartCalibration";
 
 const STORAGE_KEYS = {
     DISMISS_HARDWARE_BANNER: "aimsense.dismissBanner.hardware.v1",
@@ -135,7 +135,7 @@ export default function Home() {
         };
     }, []);
 
-    const handleStart = () => router.push("/(calibration)/step1");
+    const handleStart = () => router.push("/(calibration)/rifle");
 
     return (
         <View className="flex-1 bg-brand-black">

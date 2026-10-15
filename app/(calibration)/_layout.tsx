@@ -2,7 +2,8 @@
 // _layout.tsx - Calibration Flow Layout
 // ============================================================
 // Manages camera context so only one screen renders camera at a time.
-// Supports 8-step calibration flow with shared state.
+// Flow: rifle (choose rifle, scope details, phone mount) -> lineup -> measure -> hunt.
+// A rifle calibrated before goes rifle -> lineup (quick check) -> hunt.
 
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { Stack } from "expo-router";
@@ -21,7 +22,7 @@ const CameraContext = createContext<CameraContextType>({
 
 // ==================== LAYOUT COMPONENT ====================
 export default function CalibrationLayout() {
-  const [activeScreen, setActiveScreen] = useState<string | null>("step1");
+  const [activeScreen, setActiveScreen] = useState<string | null>("rifle");
 
   // Memoize setActiveScreen to prevent unnecessary rerenders
   const handleSetActiveScreen = useCallback((screen: string | null) => {

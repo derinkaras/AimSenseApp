@@ -17,9 +17,11 @@ import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import Toast from "react-native-toast-message";
 
-import icons from "@/app/constants/icons";
-import { gunProfileApi } from "@/app/api/gunProfile";
-import { useGunProfilesDirty } from "@/app/contexts/GunProfilesDirtyContext";
+import icons from "@/constants/icons";
+import { gunProfileApi } from "@/services/gunProfile";
+import { useGunProfilesDirty } from "@/contexts/GunProfilesDirtyContext";
+import { ClickValuePicker, MagnificationField } from "@/calibration/ScopeSetupFields";
+import type { ScopeUnit } from "@/calibration";
 
 type UnitSystem = "METRIC" | "IMPERIAL";
 
@@ -40,6 +42,10 @@ const AddGunProfile = () => {
     const [scopeHeight, setScopeHeight] = useState("");
     const [unitSystem, setUnitSystem] = useState<UnitSystem>("IMPERIAL");
     const [gunPhotoUri, setGunPhotoUri] = useState<string | undefined>(undefined);
+    // Scope details (optional here; calibration asks for them if they are missing)
+    const [scopeUnit, setScopeUnit] = useState<ScopeUnit | null>(null);
+    const [clickSize, setClickSize] = useState<number | null>(null);
+    const [scopeMagnification, setScopeMagnification] = useState<number | null>(null);
 
     const [submitting, setSubmitting] = useState(false);
     const [loadingExisting, setLoadingExisting] = useState(false);
@@ -63,6 +69,9 @@ const AddGunProfile = () => {
                 setScopeHeight(String(p.scopeHeight ?? ""));
                 setUnitSystem(p.unitSystem ?? "IMPERIAL");
                 setGunPhotoUri(p.gunPhotoUri ?? undefined);
+                setScopeUnit(p.scopeUnit ?? null);
+                setClickSize(p.clickSize ?? null);
+                setScopeMagnification(p.scopeMagnification ?? null);
             } catch (e) {
                 console.error("Failed to load profile", e);
                 setError("Couldn't load this profile.");
@@ -131,6 +140,9 @@ const AddGunProfile = () => {
             scopeHeight: scopeHeightNum,
             unitSystem,
             gunPhotoUri,
+            scopeUnit: scopeUnit ?? undefined,
+            clickSize: clickSize ?? undefined,
+            scopeMagnification: scopeMagnification ?? undefined,
         };
 
         setError(null);
@@ -342,6 +354,27 @@ const AddGunProfile = () => {
                                     : "e.g. 3.8 cm (converted)",
                             keyboardType: "numeric",
                         })}
+
+                        <View className="mb-4">
+                            <Text className="text-gray-300 text-sm mb-2">Turret clicks</Text>
+                            <ClickValuePicker
+                                scopeUnit={scopeUnit}
+                                clickSize={clickSize}
+                                onChange={(unit, size) => {
+                                    setScopeUnit(unit);
+                                    setClickSize(size);
+                                }}
+                            />
+                            <Text className="text-xs text-gray-500 mt-2">Printed on the turret cap.</Text>
+                        </View>
+
+                        <View className="mb-4">
+                            <Text className="text-gray-300 text-sm mb-2">Hunting magnification</Text>
+                            <MagnificationField value={scopeMagnification} onChange={setScopeMagnification} />
+                            <Text className="text-xs text-gray-500 mt-2">
+                                The power you hunt at. Calibration is done at this magnification.
+                            </Text>
+                        </View>
 
                         {/* Unit system toggle */}
                         <View className="mt-4 mb-4">

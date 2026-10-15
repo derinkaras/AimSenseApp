@@ -12,23 +12,24 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import Toast from "react-native-toast-message";
 
-import icons from "@/app/constants/icons";
-import { useAuth } from "@/app/contexts/AuthContext";
-import { useNetworkStatus } from "@/app/contexts/NetworkStatusContext";
-import EditNameModal from "@/app/components/EditNameModal";
-import { userProfileApi } from "@/app/api/userProfile";
-import UniversalModal from "@/app/components/UniversalModal";
-import LogoutContent from "@/app/components/contents/LogoutContent";
-import PrivacyPolicyContent from "@/app/components/contents/PrivacyPolicyContent";
-import DeleteAccountContent from "@/app/components/contents/DeleteAccountContent";
-import TermsOfServiceContent from "@/app/components/contents/TermsOfServiceContent";
-import PremiumBadge from "@/app/components/profile/PremiumBadge";
-import TrialBadge from "@/app/components/profile/TrialBadge";
-import FreeBadge from "@/app/components/profile/FreeBadge";
-import { OfflineBanner } from "@/app/components/OfflineBanner";
-import { DebugPanel } from "@/app/components/DebugPanel";
+import icons from "@/constants/icons";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNetworkStatus } from "@/contexts/NetworkStatusContext";
+import EditNameModal from "@/components/EditNameModal";
+import { userProfileApi } from "@/services/userProfile";
+import UniversalModal from "@/components/UniversalModal";
+import LogoutContent from "@/components/contents/LogoutContent";
+import PrivacyPolicyContent from "@/components/contents/PrivacyPolicyContent";
+import DeleteAccountContent from "@/components/contents/DeleteAccountContent";
+import TermsOfServiceContent from "@/components/contents/TermsOfServiceContent";
+import GuideSheet from "@/help/GuideSheet";
+import PremiumBadge from "@/components/profile/PremiumBadge";
+import TrialBadge from "@/components/profile/TrialBadge";
+import FreeBadge from "@/components/profile/FreeBadge";
+import { OfflineBanner } from "@/components/OfflineBanner";
+import { DebugPanel } from "@/components/DebugPanel";
 
-type ActiveModal = "" | "Privacy" | "Terms of Service" | "Logout" | "Delete Account";
+type ActiveModal = "" | "How it works & limits" | "Privacy" | "Terms of Service" | "Logout" | "Delete Account";
 type SubscriptionTier = "premium" | "trial" | "free";
 
 const Profile = () => {
@@ -288,6 +289,7 @@ const Profile = () => {
 
     // ✅ Match the UI you said you want to keep
     const options = Object.entries({
+        "How it works & limits": { icon: icons.info },
         Privacy: { icon: icons.privacy },
         "Terms of Service": { icon: icons.file },
         Logout: { icon: icons.power },
@@ -331,6 +333,8 @@ const Profile = () => {
                 <UniversalModal visible={activeModal === "Terms of Service"} onClose={closeModal}>
                     <TermsOfServiceContent onClose={closeModal} />
                 </UniversalModal>
+
+                <GuideSheet visible={activeModal === "How it works & limits"} onClose={closeModal} />
 
                 <UniversalModal visible={activeModal === "Delete Account"} onClose={closeModal}>
                     <DeleteAccountContent onCancel={closeModal} onConfirm={handleDeleteAccount} />

@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
-import icons from "@/app/constants/icons";
+import icons from "@/constants/icons";
 
 // TODO: Replace with your actual store URL
 const STORE_URL = "https://your-store-url.com";

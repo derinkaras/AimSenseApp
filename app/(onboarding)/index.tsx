@@ -1,6 +1,6 @@
 import React, { useCallback } from "react";
 import { View, Text, Image, Pressable } from "react-native";
-import images from "@/app/constants/images";
+import images from "@/constants/images";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 

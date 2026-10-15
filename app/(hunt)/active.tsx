@@ -7,6 +7,9 @@
 // - Locked pitch for angle correction
 // - Live cant rotation
 // - Proper IMU mapping for portrait AND landscape
+//
+// All calculations live in src/hunt (aim.ts, ballistics.ts, units.ts);
+// this file only wires sensor readings and UI state into them.
 
 import React, { useCallback, useState, useEffect, useRef, useMemo } from "react";
 import {
@@ -18,11 +21,12 @@ import {
     Modal,
     Animated,
     Easing,
-    TextInput,
     Keyboard,
+    type LayoutChangeEvent,
 } from "react-native";
-import { useFocusEffect } from "expo-router";
-import { CameraView, useCameraPermissions } from "expo-camera";
+import { router, useFocusEffect } from "expo-router";
+import { useCameraPermissions } from "expo-camera";
+import { ScopeCamera } from "@/calibration/components";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { CommonActions, useNavigation, useIsFocused } from "expo-router/react-navigation";
@@ -30,172 +34,43 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
     useCalibrationStore,
+    clearCalibration,
     isLandscape,
     lockOrientation,
     DEFAULT_TILT_CONFIG,
     type MountOrientation,
-} from "@/app/calibration/exports";
+} from "@/calibration";
 import {
     useHuntStore,
     selectSelectedGun,
     selectCalibrationResult,
-} from "@/app/hunt/store";
-import { useTiltLevel } from "@/app/hooks/useTiltLevel";
-import icons from "@/app/constants/icons";
+    computeDropSolution,
+    computeAimSolution,
+    filterCant,
+    formatDrop,
+    mapIMUToRifleAxes,
+    rifleCantDeg,
+    riflePitchDeg,
+    isHoldoverOffScreen,
+    toSolverConditions,
+    describeConditions,
+    NO_CONDITIONS,
+    type ShotConditions,
+    type RangefinderMode,
+} from "@/hunt";
+import { useTiltLevel } from "@/hooks/useTiltLevel";
+import icons from "@/constants/icons";
 import { useCameraContext } from "./_layout";
-import { crosshairStyles } from "@/app/calibration/exports/calibrationStyles";
+import { crosshairStyles } from "@/calibration/calibrationStyles";
+import ShotSetupModal from "@/hunt/ShotSetupModal";
+import HelpButton from "@/help/HelpButton";
+import GuideSheet from "@/help/GuideSheet";
+import AppSheet, { OptionCard, SheetButton } from "@/components/AppSheet";
+import { MAX_FONT_SCALE } from "@/constants/fontScale";
+import { loadSavedConditions, saveConditions } from "@/hunt/conditionsStorage";
 
 const SCREEN_ID = "active";
 const STORAGE_KEY_RANGEFINDER_MODE = "aimsense.hunt.rangefinderMode";
-
-// Soft dead zone threshold for cant (degrees)
-const CANT_DEAD_ZONE_DEG = 0.5;
-
-// Rangefinder mode types
-type RangefinderMode = "LOS" | "COMPENSATED";
-
-// ============================================================
-// UNIT CONVERSIONS
-// ============================================================
-
-const YARDS_PER_METER = 1.0936133;
-const INCHES_PER_CM = 0.393701;
-
-function toYards(distance: number, isImperial: boolean): number {
-    return isImperial ? distance : distance * YARDS_PER_METER;
-}
-
-function toInches(height: number, isImperial: boolean): number {
-    return isImperial ? height : height * INCHES_PER_CM;
-}
-
-function formatDrop(dropInches: number, isImperial: boolean): string {
-    if (isImperial) {
-        return `${Math.round(dropInches)}"`;
-    }
-    return `${Math.round(dropInches / INCHES_PER_CM)} cm`;
-}
-
-// ============================================================
-// BALLISTICS ENGINE - G1 Drag Model
-// ============================================================
-
-interface BallisticsResult {
-    dropMOA: number;
-    dropMIL: number;
-    dropInches: number;
-}
-
-function computeBallistics(
-    rangeYards: number,
-    muzzleVelocityFps: number,
-    ballisticCoefficient: number,
-    scopeHeightInches: number,
-    zeroRangeYards: number
-): BallisticsResult {
-    if (rangeYards <= 0) {
-        return { dropMOA: 0, dropMIL: 0, dropInches: 0 };
-    }
-
-    const GRAVITY = 32.174; // ft/s²
-    const rangeFt = rangeYards * 3;
-    const zeroRangeFt = zeroRangeYards * 3;
-    const scopeHeightFt = scopeHeightInches / 12;
-    const bc = Math.max(0.1, ballisticCoefficient);
-
-    // G1 drag coefficient by Mach number
-    const getG1Cd = (v: number): number => {
-        const mach = v / 1116; // Speed of sound ~1116 fps
-        if (mach < 0.7) return 0.12 + 0.08 * mach;
-        if (mach < 0.9) return 0.17 + 0.25 * (mach - 0.7);
-        if (mach < 1.0) return 0.22 + 0.50 * (mach - 0.9);
-        if (mach < 1.1) return 0.72 - 0.30 * (mach - 1.0);
-        return 0.42 - 0.02 * Math.min(mach - 1.1, 1);
-    };
-
-    const dt = 0.0005; // Time step for integration
-
-    // Find launch angle that zeros at zeroRange
-    let launchAngle = 0;
-    const avgVel = muzzleVelocityFps * 0.9;
-    const timeToZero = zeroRangeFt / avgVel;
-    const dropNoAngle = 0.5 * GRAVITY * timeToZero * timeToZero;
-    launchAngle = Math.atan((dropNoAngle + scopeHeightFt) / zeroRangeFt);
-
-    // Iterative refinement of launch angle
-    for (let iter = 0; iter < 5; iter++) {
-        let x = 0, y = scopeHeightFt, t = 0;
-        let vx = muzzleVelocityFps * Math.cos(launchAngle);
-        let vy = muzzleVelocityFps * Math.sin(launchAngle);
-
-        while (x < zeroRangeFt && t < 3) {
-            const v = Math.sqrt(vx * vx + vy * vy);
-            const cd = getG1Cd(v);
-            const drag = (cd / bc) * v * v * 0.00003;
-            vx -= drag * (vx / v) * dt;
-            vy -= (GRAVITY + drag * (vy / v)) * dt;
-            x += vx * dt;
-            y += vy * dt;
-            t += dt;
-        }
-        launchAngle += (y / zeroRangeFt) * 0.5;
-    }
-
-    // Simulate trajectory to target range
-    let x = 0, y = scopeHeightFt, t = 0;
-    let vx = muzzleVelocityFps * Math.cos(launchAngle);
-    let vy = muzzleVelocityFps * Math.sin(launchAngle);
-
-    while (x < rangeFt && t < 5) {
-        const v = Math.sqrt(vx * vx + vy * vy);
-        const cd = getG1Cd(v);
-        const drag = (cd / bc) * v * v * 0.00003;
-        vx -= drag * (vx / v) * dt;
-        vy -= (GRAVITY + drag * (vy / v)) * dt;
-        x += vx * dt;
-        y += vy * dt;
-        t += dt;
-    }
-
-    // Convert drop to angular units
-    const dropInches = Math.max(0, -y * 12);
-    const dropMOA = rangeYards > 0 ? (dropInches / rangeYards) * (100 / 1.047) : 0;
-    const dropMIL = rangeYards > 0 ? dropInches / (rangeYards * 0.036) : 0;
-
-    return { dropMOA, dropMIL, dropInches };
-}
-
-// ============================================================
-// IMU AXIS MAPPING
-// ============================================================
-/**
- * CANONICAL DEFINITIONS (after useTiltLevel remapGravityToPortrait):
- * - imuRoll  = phone long-axis rotation
- * - imuPitch = phone forward/back tilt
- *
- * For scope-mounted phone (screen toward shooter), we interpret:
- * - elevationNow = imuRoll
- * - cantNow      = imuPitch
- *
- * Baselines captured at Step 4:
- * - roll0  = imuRoll at level
- * - pitch0 = imuPitch at level
- *
- * True rifle angles (degrees):
- * - riflePitchDeg = elevationNow - roll0      // UP/DOWN, lock this at confirm
- * - rifleCantDeg  = cantNow - pitch0          // LEFT/RIGHT roll, keep live
- */
-
-function mapIMUToRifleAxes(
-    imuRoll: number,
-    imuPitch: number,
-    _mountOrientation: MountOrientation
-): { cantNow: number; elevationNow: number } {
-    return {
-        cantNow: imuPitch,
-        elevationNow: imuRoll,
-    };
-}
 
 // ============================================================
 // MAIN COMPONENT
@@ -215,6 +90,7 @@ export default function ActiveHunt() {
     const [showDistanceInput, setShowDistanceInput] = useState(false);
     const [showCalibrationTip, setShowCalibrationTip] = useState(true);
     const [showRangefinderModal, setShowRangefinderModal] = useState(false);
+    const [showGuide, setShowGuide] = useState(false);
 
     // Rangefinder mode - critical for angle correction
     const [rangefinderMode, setRangefinderMode] = useState<RangefinderMode | null>(null);
@@ -227,7 +103,8 @@ export default function ActiveHunt() {
 
     // Shot State
     const [targetDistance, setTargetDistance] = useState<number | null>(null);
-    const [distanceInputText, setDistanceInputText] = useState("");
+    // Optional wind + air conditions entered with the distance (wind is per shot, the rest is remembered)
+    const [conditions, setConditions] = useState<ShotConditions>(NO_CONDITIONS);
     const [isTargetConfirmed, setIsTargetConfirmed] = useState(false);
     const [pitchLocked, setPitchLocked] = useState<number | null>(null);
 
@@ -238,6 +115,7 @@ export default function ActiveHunt() {
     const selectedGun = useHuntStore(selectSelectedGun);
     const calibrationResult = useHuntStore(selectCalibrationResult);
     const endHunt = useHuntStore((s) => s.endHunt);
+    const validateCameraInvariants = useHuntStore((s) => s.validateCameraInvariants);
     const resetCalibration = useCalibrationStore((s) => s.resetCalibration);
 
     // Extract calibration values (memoized)
@@ -247,9 +125,11 @@ export default function ActiveHunt() {
         screenRotation: calibrationResult?.screenRotation ?? 0,
         focusPoint: calibrationResult?.focusPoint ?? null,
         scopeCenterPx: calibrationResult?.scopeCenterPx ?? null,
-        pxPerUnitX: calibrationResult?.pxPerUnitX ?? 0,
-        pxPerUnitY: calibrationResult?.pxPerUnitY ?? 0,
+        pxPerUnit: calibrationResult?.pxPerUnit ?? 0,
+        upAxis: calibrationResult?.upAxis ?? { x: 0, y: -1 },
+        cameraViewSize: calibrationResult?.cameraViewSize ?? null,
         scopeUnit: calibrationResult?.scopeUnit ?? "MOA",
+        scopeMagnification: calibrationResult?.scopeMagnification ?? null,
         roll0: calibrationResult?.roll0 ?? 0,
         pitch0: calibrationResult?.pitch0 ?? 0,
         cameraLayout: calibrationResult?.cameraLayout ?? {
@@ -283,11 +163,7 @@ export default function ActiveHunt() {
     );
 
     // Map IMU axes to rifle-meaningful values
-    const { cantNow, elevationNow } = mapIMUToRifleAxes(
-        imuRoll ?? 0,
-        imuPitch ?? 0,
-        calibrationData.mountOrientation as MountOrientation
-    );
+    const { cantNow, elevationNow } = mapIMUToRifleAxes(imuRoll ?? 0, imuPitch ?? 0);
 
     // ==================== BALLISTICS COMPUTATION ====================
     // Split into two memos for performance:
@@ -304,7 +180,7 @@ export default function ActiveHunt() {
             cantFilteredRef.current = 0;
         } else {
             // Seed with current raw cant at moment of confirmation
-            cantFilteredRef.current = cantNow - calibrationData.pitch0;
+            cantFilteredRef.current = rifleCantDeg(cantNow, calibrationData.pitch0);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isTargetConfirmed, calibrationData.pitch0]);
@@ -312,8 +188,8 @@ export default function ActiveHunt() {
     // Update filtered cant value (only when confirmed)
     useEffect(() => {
         if (!isTargetConfirmed) return;
-        const rawCant = cantNow - calibrationData.pitch0;
-        cantFilteredRef.current = cantFilteredRef.current * 0.85 + rawCant * 0.15;
+        const rawCant = rifleCantDeg(cantNow, calibrationData.pitch0);
+        cantFilteredRef.current = filterCant(cantFilteredRef.current, rawCant);
     }, [cantNow, calibrationData.pitch0, isTargetConfirmed]);
 
     // MEMO 1: Ballistics drop calculation (heavy, runs rarely)
@@ -323,43 +199,26 @@ export default function ActiveHunt() {
         }
 
         // Block if calibration incomplete
-        if (calibrationData.pxPerUnitX === 0 || calibrationData.pxPerUnitY === 0) {
+        if (!(calibrationData.pxPerUnit > 0)) {
             console.warn("Calibration incomplete: pxPerUnit is 0");
             return null;
         }
 
-        // Convert distance to yards
-        const rangeYards = toYards(targetDistance, gunData.isImperial);
-        const zeroYards = toYards(gunData.zeroDistance, gunData.isImperial);
-        const scopeHeightIn = toInches(gunData.scopeHeight, gunData.isImperial);
+        const { wind, atmosphere } = toSolverConditions(conditions, gunData.isImperial);
 
-        // Apply cosine correction ONLY for LOS rangefinders
-        // COMPENSATED rangefinders already give horizontal distance - never apply cosine
-        const shouldApplyCosine = rangefinderMode === "LOS" && pitchLocked !== null;
-        const rangeHorizontal = shouldApplyCosine
-            ? rangeYards * Math.cos((pitchLocked * Math.PI) / 180)
-            : rangeYards;
-
-        // Heavy G1 ballistics computation
-        const result = computeBallistics(
-            rangeHorizontal,
-            gunData.muzzleVelocityFps,
-            gunData.ballisticCoefficient,
-            scopeHeightIn,
-            zeroYards
-        );
-
-        // Get drop in scope units
-        const D = calibrationData.scopeUnit === "MOA" ? result.dropMOA : result.dropMIL;
-        const W = 0; // Wind correction (not implemented)
-
-        return {
-            D,
-            W,
-            dropMOA: result.dropMOA,
-            dropMIL: result.dropMIL,
-            dropInches: result.dropInches,
-        };
+        return computeDropSolution({
+            targetDistance,
+            isImperial: gunData.isImperial,
+            zeroDistance: gunData.zeroDistance,
+            scopeHeight: gunData.scopeHeight,
+            muzzleVelocityFps: gunData.muzzleVelocityFps,
+            ballisticCoefficient: gunData.ballisticCoefficient,
+            rangefinderMode,
+            pitchLockedDeg: pitchLocked,
+            scopeUnit: calibrationData.scopeUnit,
+            wind,
+            atmosphere,
+        });
     }, [
         isTargetConfirmed,
         targetDistance,
@@ -371,8 +230,8 @@ export default function ActiveHunt() {
         gunData.zeroDistance,
         gunData.scopeHeight,
         calibrationData.scopeUnit,
-        calibrationData.pxPerUnitX,
-        calibrationData.pxPerUnitY,
+        calibrationData.pxPerUnit,
+        conditions,
     ]);
 
     // MEMO 2: Cant rotation + pixel positioning (light, runs at IMU rate)
@@ -381,54 +240,23 @@ export default function ActiveHunt() {
             return null;
         }
 
-        const { D, W } = dropSolution;
-
         // Rotation uses FILTERED cant (smooth crosshair movement)
         // Warnings use UNFILTERED cant (instant feedback)
-        const cantDegFiltered = cantFilteredRef.current;
-        const cantDegUnfiltered = cantNow - calibrationData.pitch0;
-
-        // Soft dead zone: subtract threshold instead of snapping
-        const sign = Math.sign(cantDegFiltered);
-        const mag = Math.max(0, Math.abs(cantDegFiltered) - CANT_DEAD_ZONE_DEG);
-        const cantDegUsedForRotation = sign * mag;
-
-        const cantRad = (cantDegUsedForRotation * Math.PI) / 180;
-
-        // Rotate correction vector by cant angle (Spec Section 7, Step 4)
-        const xRot = W * Math.cos(cantRad) + D * Math.sin(cantRad);
-        const yRot = D * Math.cos(cantRad) - W * Math.sin(cantRad);
-
-        // Convert to pixels (Spec Section 7, Step 5)
-        const offsetPxX = xRot * calibrationData.pxPerUnitX;
-        const offsetPxY = yRot * calibrationData.pxPerUnitY;
-
-        // Compute aim point (Spec Section 7, Step 6)
-        // NOTE: We intentionally do NOT clamp the aim point.
-        // Extreme holds imply unethical / unrealistic shots.
-        // If aim goes off-screen, UI may warn but math stays pure.
-        const aimX = calibrationData.scopeCenterPx.x + offsetPxX;
-        const aimY = calibrationData.scopeCenterPx.y - offsetPxY;
-
-        // Warnings use unfiltered cant for instant response
-        const absCantRaw = Math.abs(cantDegUnfiltered);
-        let cantWarning: "ok" | "warn" | "bad" = "ok";
-        if (absCantRaw > 6) cantWarning = "bad";
-        else if (absCantRaw > 3) cantWarning = "warn";
-
-        return {
-            holdoverX: aimX,
-            holdoverY: aimY,
-            cantDegUnfiltered,      // Raw cant for display/warnings
-            cantDegUsedForRotation, // Filtered + deadzoned for rotation
-            cantWarning,
-        };
+        return computeAimSolution({
+            D: dropSolution.D,
+            W: dropSolution.W,
+            cantDegFiltered: cantFilteredRef.current,
+            cantDegUnfiltered: rifleCantDeg(cantNow, calibrationData.pitch0),
+            pxPerUnit: calibrationData.pxPerUnit,
+            scopeCenter: calibrationData.scopeCenterPx,
+            upAxis: calibrationData.upAxis,
+        });
     }, [
         dropSolution,
         cantNow,
         calibrationData.pitch0,
-        calibrationData.pxPerUnitX,
-        calibrationData.pxPerUnitY,
+        calibrationData.pxPerUnit,
+        calibrationData.upAxis,
         calibrationData.scopeCenterPx?.x,
         calibrationData.scopeCenterPx?.y,
     ]);
@@ -453,20 +281,34 @@ export default function ActiveHunt() {
 
     // ==================== INITIALIZATION ====================
 
-    // Load saved preferences and ALWAYS show rangefinder modal on page load
+    // Load saved preferences on page load
     useEffect(() => {
         // Always show the zero info card on page load (user can dismiss each session)
         setShowCalibrationTip(true);
 
-        // Load rangefinder mode
+        // Rangefinder type doesn't change mid-hunt, so only ask when nothing is saved yet.
+        // Once set, trust it every time the hunt screen reopens (the row below still lets
+        // the shooter change it manually if they ever need to).
         AsyncStorage.getItem(STORAGE_KEY_RANGEFINDER_MODE).then((val) => {
             if (val === "LOS" || val === "COMPENSATED") {
                 setRangefinderMode(val);
+            } else {
+                setShowRangefinderModal(true);
             }
-            // Always show modal when entering hunt mode to confirm rangefinder type
-            setShowRangefinderModal(true);
         });
     }, []);
+
+    // Altitude / temperature / pressure rarely change between shots, so they are remembered (wind is not)
+    useEffect(() => {
+        loadSavedConditions(gunData.isImperial).then((saved) =>
+            setConditions((c) => ({
+                ...c,
+                altitude: saved.altitude,
+                temperature: saved.temperature,
+                pressure: saved.pressure,
+            }))
+        );
+    }, [gunData.isImperial]);
 
     // Lock orientation on focus
     useFocusEffect(
@@ -536,31 +378,39 @@ export default function ActiveHunt() {
 
     const handleOpenDistanceInput = useCallback(() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        setDistanceInputText(targetDistance ? String(targetDistance) : "");
         setShowDistanceInput(true);
-    }, [targetDistance]);
+    }, []);
 
-    const handleConfirmDistance = useCallback(() => {
-        Keyboard.dismiss();
-        const dist = parseFloat(distanceInputText);
-        if (!isNaN(dist) && dist > 0 && dist < 3000) {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            setTargetDistance(dist);
-            setShowDistanceInput(false);
+    // Submitting the distance sheet is what actually starts tracking (shows the holdover) --
+    // but only once the aim has been locked in first. If the sheet is opened directly (e.g.
+    // to tweak the distance while already tracking), it just updates the numbers in place.
+    const handleConfirmDistance = useCallback((distance: number, entered: ShotConditions) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setTargetDistance(distance);
+        setConditions(entered);
+        saveConditions(gunData.isImperial, entered);
+        setShowDistanceInput(false);
+        if (pitchLocked !== null) {
+            setIsTargetConfirmed(true);
         }
-    }, [distanceInputText]);
+    }, [gunData.isImperial, pitchLocked]);
 
     const handleCancelDistance = useCallback(() => {
         Keyboard.dismiss();
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         setShowDistanceInput(false);
-    }, []);
-
-    const handleConfirmTarget = useCallback(() => {
-        if (!targetDistance) {
-            handleOpenDistanceInput();
-            return;
+        // Backing out before ever confirming a distance means the confirm was never completed --
+        // require aiming again rather than leaving a stale pitch lock sitting around.
+        if (!isTargetConfirmed) {
+            setPitchLocked(null);
         }
+    }, [isTargetConfirmed]);
+
+    // Step 1 of confirming a target: aim the scope's crosshair on it, then tap Confirm. That
+    // locks the rifle's current elevation (pitch) right at the moment of aiming -- the one
+    // thing that has to happen while the phone is actually pointed at the target -- and only
+    // then asks for the distance, which can be typed in at leisure afterwards.
+    const handleConfirmAim = useCallback(() => {
         if (!rangefinderMode) {
             setShowRangefinderModal(true);
             return;
@@ -571,15 +421,19 @@ export default function ActiveHunt() {
         // elevationNow = up/down angle of rifle (from IMU roll after mapping)
         // Subtract roll0 baseline to get true rifle pitch angle
         // Cant is NOT locked - it uses calibration baseline (pitch0) continuously
-        setPitchLocked(elevationNow - calibrationData.roll0);
-        setIsTargetConfirmed(true);
-    }, [targetDistance, rangefinderMode, elevationNow, calibrationData.roll0, handleOpenDistanceInput]);
+        setPitchLocked(riflePitchDeg(elevationNow, calibrationData.roll0));
+        setShowDistanceInput(true);
+    }, [rangefinderMode, elevationNow, calibrationData.roll0]);
 
-    const handleUnlockTarget = useCallback(() => {
+    // A new target needs a fresh aim (and pitch lock), so send the shooter back to Step 1.
+    // Wind is per-shot and cleared; altitude/temperature/pressure are environment and stay.
+    // The old distance is kept as a pre-fill so re-ranging the SAME target is a one-tap confirm.
+    const handleNewTarget = useCallback(() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         setIsTargetConfirmed(false);
         setPitchLocked(null);
         setCantLevel("ok");
+        setConditions((c) => ({ ...c, windSpeed: null, windClock: null }));
     }, []);
 
     const handleEndHuntPress = useCallback(() => {
@@ -603,6 +457,74 @@ export default function ActiveHunt() {
 
     const shouldRenderCamera = cameraEnabled && activeScreen === SCREEN_ID;
 
+    // ==================== CAMERA MATCH ====================
+    // Calibration pixels only line up if the camera area is the same size as when it was
+    // calibrated (spec 14.2). Zoom, rotation and orientation are restored from the calibration
+    // itself; the area size is the one thing the screen can change, so it is checked on layout.
+    const [cameraMismatch, setCameraMismatch] = useState(false);
+    const handleCameraAreaLayout = useCallback((event: LayoutChangeEvent) => {
+        const { width, height } = event.nativeEvent.layout;
+        const check = validateCameraInvariants(
+            calibrationData.cameraZoom,
+            calibrationData.screenRotation,
+            calibrationData.mountOrientation,
+            { width, height }
+        );
+        if (!check.valid) console.warn("Camera does not match calibration:", check.errors);
+        setCameraMismatch(!check.valid);
+    }, [validateCameraInvariants, calibrationData.cameraZoom, calibrationData.screenRotation, calibrationData.mountOrientation]);
+
+    // The saved calibration does not fit this screen any more: forget it and set the rifle up again
+    const handleRecalibrate = useCallback(async () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        const gunId = calibrationResult?.gunId;
+        endHunt();
+        if (gunId) await clearCalibration(gunId);
+        await resetCalibration();
+        router.replace(gunId ? { pathname: "/(calibration)/rifle", params: { setup: gunId } } : "/(calibration)/rifle");
+    }, [calibrationResult?.gunId, endHunt, resetCalibration]);
+
+    // ==================== GUIDED FLOW ====================
+    // This screen is a repeating loop, not a one-time wizard: aim & confirm -> enter distance ->
+    // holdover shows -> shoot -> next target. The aim has to be confirmed FIRST (that's the one
+    // moment the phone must actually be pointed at the target, to lock the pitch angle); only
+    // then does it ask for the distance, which can be typed in without staying perfectly aimed.
+    const awaitingDistance = pitchLocked !== null && !isTargetConfirmed;
+    const canConfirmAim = !!rangefinderMode;
+
+    const primaryActionLabel = isTargetConfirmed
+        ? "NEW TARGET"
+        : awaitingDistance
+            ? "ENTER DISTANCE"
+            : "CONFIRM TARGET";
+    const primaryActionLabelCompact = isTargetConfirmed
+        ? "NEW TARGET"
+        : awaitingDistance
+            ? "DISTANCE"
+            : "CONFIRM";
+
+    const guidanceText = isTargetConfirmed
+        ? ""
+        : awaitingDistance
+            ? "Enter the target distance to continue"
+            : "Aim your scope crosshair on the target, then tap Confirm";
+
+    const ctaColorClasses = isTargetConfirmed
+        ? "bg-orange-600 border-orange-500"
+        : !awaitingDistance && canConfirmAim
+            ? "bg-brand-green border-brand-greenLight/50"
+            : "bg-brand-greenDark border-brand-green/50";
+
+    const handlePrimaryAction = isTargetConfirmed
+        ? handleNewTarget
+        : awaitingDistance
+            ? handleOpenDistanceInput
+            : handleConfirmAim;
+
+    // The distance pill only makes sense once an aim has been confirmed at least once --
+    // before that, tapping it would skip the "aim first" step entirely.
+    const distancePillEnabled = pitchLocked !== null;
+
     // Format display values
     const holdoverText = ballisticsData
         ? (calibrationData.scopeUnit === "MOA"
@@ -610,6 +532,21 @@ export default function ActiveHunt() {
             : `${ballisticsData.dropMIL.toFixed(2)} MIL`)
         : "—";
     const dropText = ballisticsData ? formatDrop(ballisticsData.dropInches, gunData.isImperial) : "—";
+
+    // Wind / air conditions applied to this shot (shown so the shooter can double-check them)
+    const conditionsText = describeConditions(conditions, gunData.isImperial);
+    const windDrift = ballisticsData
+        ? (calibrationData.scopeUnit === "MOA" ? ballisticsData.driftMOA : ballisticsData.driftMIL)
+        : 0;
+    const windText = windDrift !== 0
+        ? `${Math.abs(windDrift).toFixed(calibrationData.scopeUnit === "MOA" ? 1 : 2)} ${calibrationData.scopeUnit} ${windDrift > 0 ? "right" : "left"}`
+        : null;
+
+    // The holdover crosshair is drawn wherever the math puts it; warn if that is beyond the camera view
+    const holdoverOffScreen =
+        ballisticsData !== null &&
+        calibrationData.cameraViewSize !== null &&
+        isHoldoverOffScreen(ballisticsData.holdoverX, ballisticsData.holdoverY, calibrationData.cameraViewSize);
 
     // ==================== SUB-COMPONENTS ====================
 
@@ -624,7 +561,7 @@ export default function ActiveHunt() {
                             height: compact ? 10 : 14,
                             borderRadius: compact ? 5 : 7,
                             borderWidth: 2,
-                            borderColor: isTargetConfirmed ? "#f97316" : "#22c55e"
+                            borderColor: isTargetConfirmed ? "#f97316" : "#0b7f4f"
                         },
                         { transform: [{ scale: pulseAnim }], opacity: pulseOpacity }
                     ]}
@@ -634,11 +571,11 @@ export default function ActiveHunt() {
                         width: compact ? 6 : 8,
                         height: compact ? 6 : 8,
                         borderRadius: compact ? 3 : 4,
-                        backgroundColor: isTargetConfirmed ? "#f97316" : "#22c55e"
+                        backgroundColor: isTargetConfirmed ? "#f97316" : "#0b7f4f"
                     }}
                 />
             </View>
-            <Text className={`font-semibold ${compact ? "text-xs" : "text-sm"} ${isTargetConfirmed ? "text-orange-500" : "text-green-500"}`}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className={`font-semibold ${compact ? "text-xs" : "text-sm"} ${isTargetConfirmed ? "text-orange-500" : "text-brand-greenLight"}`}>
                 {isTargetConfirmed ? "TRACKING" : "READY"}
             </Text>
         </View>
@@ -646,7 +583,7 @@ export default function ActiveHunt() {
 
     // Holdover crosshair (orange) - same style as calibration crosshair
     const HoldoverCrosshair = useMemo(() => {
-        if (!ballisticsData || !isTargetConfirmed) return null;
+        if (!ballisticsData || !isTargetConfirmed || cameraMismatch) return null;
 
         return (
             <Animated.View
@@ -671,7 +608,7 @@ export default function ActiveHunt() {
                 <View style={styles.holdoverCenter} />
             </Animated.View>
         );
-    }, [ballisticsData, isTargetConfirmed, holdoverOpacity]);
+    }, [ballisticsData, isTargetConfirmed, holdoverOpacity, cameraMismatch]);
 
     // Cant warning banner
     const CantWarningBanner = useMemo(() => {
@@ -685,12 +622,52 @@ export default function ActiveHunt() {
 
         return (
             <View style={[styles.cantBanner, { top: insets.top + 8, left: isLandscapeMode ? 48 : 16, backgroundColor: bgColor, borderColor }]}>
-                <Text style={[styles.cantBannerText, { color: textColor }]}>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={[styles.cantBannerText, { color: textColor }]}>
                     {isRed ? `⚠ LEVEL RIFLE! (${cantDegrees}°)` : `⚠ CHECK CANT (${cantDegrees}°)`}
                 </Text>
             </View>
         );
     }, [cantLevel, isTargetConfirmed, ballisticsData, insets.top, isLandscapeMode]);
+
+    // Camera area differs from calibration: block the holdover and offer a recalibration
+    const CameraMismatchBanner = useMemo(() => {
+        if (!cameraMismatch) return null;
+
+        return (
+            <View style={[styles.cantBanner, styles.mismatchBanner, { top: insets.top + 8, left: isLandscapeMode ? 48 : 16 }]}>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={[styles.cantBannerText, { color: "#fca5a5", textAlign: "center" }]}>
+                    The camera view has changed since you calibrated, so holdovers would be wrong.
+                </Text>
+                <Pressable onPress={handleRecalibrate} accessibilityRole="button" style={styles.mismatchButton}>
+                    <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.mismatchButtonText}>Recalibrate</Text>
+                </Pressable>
+            </View>
+        );
+    }, [cameraMismatch, insets.top, isLandscapeMode, handleRecalibrate]);
+
+    // Reminder of the magnification the pixel scale is valid for
+    const MagnificationBadge = useMemo(() => {
+        if (!calibrationData.scopeMagnification || cameraMismatch) return null;
+
+        return (
+            <View style={[styles.magnificationBadge, { top: insets.top + 8 }]} pointerEvents="none">
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.magnificationBadgeText}>{`SCOPE ${calibrationData.scopeMagnification}×`}</Text>
+            </View>
+        );
+    }, [calibrationData.scopeMagnification, cameraMismatch, insets.top]);
+
+    // Holdover off-screen banner
+    const OffScreenBanner = useMemo(() => {
+        if (!holdoverOffScreen || !isTargetConfirmed || cameraMismatch) return null;
+
+        return (
+            <View style={[styles.cantBanner, { bottom: 12, left: isLandscapeMode ? 48 : 16, backgroundColor: "rgba(127, 29, 29, 0.95)", borderColor: "#dc2626" }]}>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={[styles.cantBannerText, { color: "#fca5a5" }]}>
+                    {`⚠ HOLDOVER OFF SCREEN (${holdoverText})`}
+                </Text>
+            </View>
+        );
+    }, [holdoverOffScreen, isTargetConfirmed, isLandscapeMode, holdoverText, cameraMismatch]);
 
     // Zero verification info card - shows in center of camera view
     const ZeroInfoCard = useMemo(() => {
@@ -703,15 +680,15 @@ export default function ActiveHunt() {
                         <View style={styles.zeroInfoIconWrap}>
                             <Image source={icons.target} style={styles.zeroInfoIcon} resizeMode="contain" />
                         </View>
-                        <Text style={styles.zeroInfoTitle}>Verify Zero Button</Text>
+                        <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.zeroInfoTitle}>Verify Zero Button</Text>
                         <Pressable onPress={handleDismissTip} style={styles.zeroInfoClose} hitSlop={12}>
                             <Image source={icons.cancel} style={styles.zeroInfoCloseIcon} resizeMode="contain" />
                         </Pressable>
                     </View>
-                    <Text style={styles.zeroInfoText}>
-                        Tap the <Text style={styles.zeroInfoHighlight}>crosshair button</Text> in the control panel to show your calibrated scope center. Use this to verify alignment hasn't drifted during your hunt.
+                    <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.zeroInfoText}>
+                        Tap the <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.zeroInfoHighlight}>crosshair button</Text> in the control panel to show your calibrated scope center. Use this to verify alignment hasn't drifted during your hunt.
                     </Text>
-                    <Text style={styles.zeroInfoSubtext}>
+                    <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.zeroInfoSubtext}>
                         Minor drift is normal — only recalibrate if significantly off target.
                     </Text>
                 </View>
@@ -723,117 +700,66 @@ export default function ActiveHunt() {
 
     // Rangefinder Mode Selection Modal
     const RangefinderModal = useMemo(() => (
-        <Modal
+        <AppSheet
             visible={showRangefinderModal}
-            animationType="fade"
-            transparent
-            onRequestClose={() => {}}
-            supportedOrientations={["portrait", "landscape", "landscape-left", "landscape-right"]}
+            // A first-time choice is required; once one is saved, the sheet can just be closed
+            onClose={rangefinderMode ? () => setShowRangefinderModal(false) : undefined}
+            eyebrow="Rangefinder"
+            title="How does it show distance?"
         >
-            <View style={styles.modalOverlay}>
-                <View style={[styles.modalContent, isLandscapeMode ? styles.rangefinderModalLandscape : { maxWidth: 380 }]}>
-                    <View style={[styles.modalIconCircle, { backgroundColor: "rgba(34, 197, 94, 0.15)", width: isLandscapeMode ? 40 : 56, height: isLandscapeMode ? 40 : 56, borderRadius: isLandscapeMode ? 20 : 28, marginBottom: isLandscapeMode ? 10 : 16 }]}>
-                        <Image source={icons.distance} style={[styles.modalIcon, { tintColor: "#22c55e", width: isLandscapeMode ? 18 : 24, height: isLandscapeMode ? 18 : 24 }]} resizeMode="contain" />
-                    </View>
-                    <Text style={[styles.modalTitle, isLandscapeMode && { fontSize: 15, marginBottom: 4 }]}>Rangefinder Type</Text>
-                    <Text style={[styles.modalMessage, { marginBottom: isLandscapeMode ? 10 : 16 }, isLandscapeMode && { fontSize: 11 }]}>
-                        How does your rangefinder display distance?
-                    </Text>
-
-                    <View style={isLandscapeMode ? styles.rangefinderOptionsRow : undefined}>
-                        <Pressable
-                            onPress={() => handleSelectRangefinderMode("LOS")}
-                            style={[styles.rangefinderOption, rangefinderMode === "LOS" && styles.rangefinderOptionSelected, isLandscapeMode && styles.rangefinderOptionLandscape]}
-                        >
-                            <View style={styles.rangefinderOptionHeader}>
-                                <Text style={[styles.rangefinderOptionTitle, isLandscapeMode && { fontSize: 13 }]}>Line-of-Sight (LOS)</Text>
-                                {rangefinderMode === "LOS" && <Text style={styles.rangefinderCheckmark}>✓</Text>}
-                            </View>
-                            <Text style={[styles.rangefinderOptionDesc, isLandscapeMode && { fontSize: 10 }]}>
-                                Straight-line distance. Most basic rangefinders.
-                            </Text>
-                        </Pressable>
-
-                        <Pressable
-                            onPress={() => handleSelectRangefinderMode("COMPENSATED")}
-                            style={[styles.rangefinderOption, rangefinderMode === "COMPENSATED" && styles.rangefinderOptionSelected, isLandscapeMode && styles.rangefinderOptionLandscape]}
-                        >
-                            <View style={styles.rangefinderOptionHeader}>
-                                <Text style={[styles.rangefinderOptionTitle, isLandscapeMode && { fontSize: 13 }]}>Angle-Compensated</Text>
-                                {rangefinderMode === "COMPENSATED" && <Text style={styles.rangefinderCheckmark}>✓</Text>}
-                            </View>
-                            <Text style={[styles.rangefinderOptionDesc, isLandscapeMode && { fontSize: 10 }]}>
-                                "Shoot-to" distance. Already corrects for angles.
-                            </Text>
-                        </Pressable>
-                    </View>
-
-                    {!isLandscapeMode && (
-                        <Text style={styles.rangefinderHelp}>
-                            Check your rangefinder manual if unsure. Using the wrong setting can cause missed shots on angled terrain.
-                        </Text>
-                    )}
-                </View>
+            <View className="gap-3">
+                <OptionCard
+                    title="Line of sight"
+                    description="The straight-line distance. Most basic rangefinders. AimSense corrects for the shot angle."
+                    selected={rangefinderMode === "LOS"}
+                    onPress={() => handleSelectRangefinderMode("LOS")}
+                />
+                <OptionCard
+                    title="Angle-compensated"
+                    description="A shoot-to distance that already corrects for the angle."
+                    selected={rangefinderMode === "COMPENSATED"}
+                    onPress={() => handleSelectRangefinderMode("COMPENSATED")}
+                />
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-white/45 text-xs leading-5 mt-1">
+                    Not sure? Check your rangefinder&apos;s manual. The wrong choice can cause misses on steep uphill or downhill shots.
+                </Text>
             </View>
-        </Modal>
-    ), [showRangefinderModal, rangefinderMode, handleSelectRangefinderMode, isLandscapeMode]);
+        </AppSheet>
+    ), [showRangefinderModal, rangefinderMode, handleSelectRangefinderMode]);
 
     const EndHuntModal = useMemo(() => (
-        <Modal visible={showEndConfirm} animationType="fade" transparent onRequestClose={handleCancelEndHunt} supportedOrientations={["portrait", "landscape", "landscape-left", "landscape-right"]}>
-            <View style={styles.modalOverlay}>
-                <View style={styles.modalContent}>
-                    <View style={styles.modalIconCircle}>
-                        <Image source={icons.cancel} style={styles.modalIcon} resizeMode="contain" />
-                    </View>
-                    <Text style={styles.modalTitle}>End Hunt?</Text>
-                    <Text style={styles.modalMessage}>You'll need to recalibrate to start a new hunt.</Text>
-                    <View style={styles.modalButtonRow}>
-                        <Pressable onPress={handleCancelEndHunt} style={styles.modalCancelBtn}>
-                            <Text style={styles.modalCancelText}>Cancel</Text>
-                        </Pressable>
-                        <Pressable onPress={handleConfirmEndHunt} style={styles.modalConfirmBtn}>
-                            <Text style={styles.modalConfirmText}>End Hunt</Text>
-                        </Pressable>
-                    </View>
-                </View>
-            </View>
-        </Modal>
+        <AppSheet
+            visible={showEndConfirm}
+            onClose={handleCancelEndHunt}
+            eyebrow="End hunt"
+            title="Finish this hunt?"
+            footer={
+                <>
+                    <SheetButton label="End hunt" variant="danger" onPress={handleConfirmEndHunt} />
+                    <SheetButton label="Keep hunting" variant="secondary" onPress={handleCancelEndHunt} />
+                </>
+            }
+        >
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-white/65 text-[15px] leading-[22px]">
+                Your rifle stays calibrated. Next time, pick it and do a quick crosshair check.
+            </Text>
+        </AppSheet>
     ), [showEndConfirm, handleCancelEndHunt, handleConfirmEndHunt]);
 
-    const DistanceModal = useMemo(() => (
-        <Modal visible={showDistanceInput} animationType="fade" transparent onRequestClose={handleCancelDistance} supportedOrientations={["portrait", "landscape", "landscape-left", "landscape-right"]}>
-            <Pressable style={styles.modalOverlay} onPress={handleCancelDistance}>
-                <Pressable style={styles.distanceModal} onPress={() => Keyboard.dismiss()}>
-                    <Text style={styles.distanceTitle}>Target Distance</Text>
-                    <View style={styles.distanceInputRow}>
-                        <TextInput
-                            style={styles.distanceInput}
-                            value={distanceInputText}
-                            onChangeText={setDistanceInputText}
-                            keyboardType="numeric"
-                            placeholder="0"
-                            placeholderTextColor="#6b7280"
-                            autoFocus
-                            selectTextOnFocus
-                            returnKeyType="done"
-                            onSubmitEditing={handleConfirmDistance}
-                        />
-                        <View style={styles.distanceUnitBox}>
-                            <Text style={styles.distanceUnitText}>{distanceUnit}</Text>
-                        </View>
-                    </View>
-                    <View style={styles.distanceButtonRow}>
-                        <Pressable onPress={handleCancelDistance} style={styles.distanceCancelBtn}>
-                            <Text style={styles.distanceCancelText}>Cancel</Text>
-                        </Pressable>
-                        <Pressable onPress={handleConfirmDistance} style={styles.distanceConfirmBtn}>
-                            <Text style={styles.distanceConfirmText}>Confirm</Text>
-                        </Pressable>
-                    </View>
-                </Pressable>
-            </Pressable>
-        </Modal>
-    ), [showDistanceInput, distanceInputText, distanceUnit, handleCancelDistance, handleConfirmDistance]);
+    // The full "How it works & limits" guide
+    const GuideModal = <GuideSheet visible={showGuide} onClose={() => setShowGuide(false)} />;
+
+    // Distance + optional wind and air conditions
+    const DistanceModal = (
+        <ShotSetupModal
+            visible={showDistanceInput}
+            isImperial={gunData.isImperial}
+            initialDistance={targetDistance}
+            initialConditions={conditions}
+            onCancel={handleCancelDistance}
+            onConfirm={handleConfirmDistance}
+        />
+    );
 
     // ==================== RENDER ====================
 
@@ -843,14 +769,9 @@ export default function ActiveHunt() {
     const CameraContent = (
         <>
             {shouldRenderCamera && (
-                <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+                <View style={StyleSheet.absoluteFill} pointerEvents="box-none" onLayout={handleCameraAreaLayout}>
                     <View style={[StyleSheet.absoluteFill, rotationTransform]} pointerEvents="none">
-                        <CameraView
-                            style={StyleSheet.absoluteFill}
-                            facing="back"
-                            zoom={calibrationData.cameraZoom}
-                            autofocus={focusLocked ? "off" : "on"}
-                        />
+                        <ScopeCamera zoom={calibrationData.cameraZoom} focusLocked={focusLocked} />
                     </View>
 
                     {/* Zero Crosshair (green) */}
@@ -875,7 +796,10 @@ export default function ActiveHunt() {
                     )}
 
                     {HoldoverCrosshair}
+                    {MagnificationBadge}
                     {CantWarningBanner}
+                    {OffScreenBanner}
+                    {CameraMismatchBanner}
                     {ZeroInfoCard}
                 </View>
             )}
@@ -891,68 +815,76 @@ export default function ActiveHunt() {
                 </View>
 
                 <SafeAreaView className="absolute top-0 bottom-0 right-0" edges={["top", "bottom", "right"]} style={{ width: calibrationData.cameraLayout.sidePanelWidth }}>
-                    <View className="flex-1 bg-brand-black border-l border-zinc-800">
-                        <View className="px-3 pt-3 pb-2 border-b border-zinc-800/50">
+                    <View className="flex-1 bg-brand-black border-l border-brand-green/40">
+                        <View className="px-3 pt-3 pb-2 border-b border-brand-green/30">
                             <View className="flex-row items-center justify-between">
                                 <StatusIndicator compact />
-                                <Pressable onPress={handleOpenDistanceInput} className="flex-row items-center bg-zinc-900 rounded-lg px-3 py-1.5 border border-zinc-700">
-                                    <Text className="text-white font-bold text-lg mr-1">{targetDistance ?? "—"}</Text>
-                                    <Text className="text-zinc-400 text-sm">{distanceUnit}</Text>
+                                <Pressable
+                                    onPress={handleOpenDistanceInput}
+                                    disabled={!distancePillEnabled}
+                                    className={`flex-row items-center bg-brand-greenDark/60 rounded-lg px-3 py-1.5 border border-brand-green/50 ${distancePillEnabled ? "" : "opacity-40"}`}
+                                >
+                                    <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-white font-bold text-lg mr-1">{targetDistance ?? "—"}</Text>
+                                    <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-zinc-400 text-sm">{distanceUnit}</Text>
                                 </Pressable>
                             </View>
                         </View>
 
                         {isTargetConfirmed ? (
-                            <View className="px-3 py-3 border-b border-zinc-800/50">
+                            <View className="px-3 py-3 border-b border-brand-green/30">
                                 <View className="bg-orange-950/40 rounded-xl p-3 border border-orange-900/40">
-                                    <Text className="text-orange-400/70 text-[10px] uppercase tracking-wider mb-1">Holdover</Text>
-                                    <Text className="text-orange-400 font-bold text-2xl">{holdoverText}</Text>
-                                    <Text className="text-orange-400/60 text-xs mt-1">{dropText} drop</Text>
+                                    <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-orange-400/70 text-[10px] uppercase tracking-wider mb-1">Holdover</Text>
+                                    <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-orange-400 font-bold text-2xl">{holdoverText}</Text>
+                                    <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-orange-400/60 text-xs mt-1">{dropText} drop</Text>
+                                    {windText && <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-orange-400/60 text-xs mt-0.5">Wind drift {windText}</Text>}
+                                    {conditionsText !== "" && <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-orange-400/40 text-[10px] mt-0.5">{conditionsText}</Text>}
                                 </View>
                             </View>
                         ) : (
-                            <View className="px-3 py-3 border-b border-zinc-800/50">
-                                <View className="bg-zinc-900/60 rounded-xl p-3 border border-zinc-700/40">
-                                    <Text className="text-zinc-500 text-xs text-center">
-                                        {targetDistance
-                                            ? "Aim at your target, then confirm"
-                                            : "Set distance to begin"}
-                                    </Text>
+                            <View className="px-3 py-3 border-b border-brand-green/30">
+                                <View className="bg-brand-greenDark/40 rounded-xl p-3 border border-brand-green/30">
+                                    <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-zinc-500 text-xs text-center">{guidanceText}</Text>
                                 </View>
                             </View>
                         )}
 
                         <View className="px-3 py-2">
                             <Pressable
-                                onPress={isTargetConfirmed ? handleUnlockTarget : handleConfirmTarget}
-                                className={`rounded-xl py-3 items-center border ${isTargetConfirmed ? "bg-orange-600 border-orange-500" : targetDistance ? "bg-green-600 border-green-500" : "bg-zinc-800 border-zinc-700"}`}
+                                onPress={handlePrimaryAction}
+                                className={`rounded-xl py-3 items-center border ${ctaColorClasses}`}
                             >
-                                <Text className="text-white font-bold text-sm">{isTargetConfirmed ? "UNLOCK" : "CONFIRM"}</Text>
+                                <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-white font-bold text-sm">{primaryActionLabelCompact}</Text>
                             </Pressable>
                         </View>
 
                         <View className="flex-1" />
 
-                        <View className="px-3 pb-3 pt-2 border-t border-zinc-800/50">
+                        <View className="px-3 pb-3 pt-2 border-t border-brand-green/30">
                             <Pressable
                                 onPress={() => setShowRangefinderModal(true)}
-                                className="rounded-xl py-2 mb-2 flex-row items-center justify-center border bg-zinc-900 border-zinc-700"
+                                className="rounded-xl py-2 mb-2 flex-row items-center justify-center border bg-brand-greenDark/60 border-brand-green/50"
                             >
-                                <Text className="text-zinc-400 text-xs">
+                                <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-zinc-400 text-xs">
                                     RF: {rangefinderMode === "LOS" ? "Line-of-Sight" : rangefinderMode === "COMPENSATED" ? "Angle-Comp" : "Not Set"}
                                 </Text>
                             </Pressable>
                             <Pressable
                                 onPress={handleToggleCrosshair}
-                                className={`rounded-xl py-2.5 mb-2 flex-row items-center justify-center border ${showCrosshair ? "bg-green-900/50 border-green-700" : "bg-zinc-900 border-zinc-700"}`}
+                                className={`rounded-xl py-2.5 mb-2 flex-row items-center justify-center border ${showCrosshair ? "bg-brand-greenDark border-brand-greenLight" : "bg-brand-greenDark/60 border-brand-green/50"}`}
                             >
-                                <Image source={icons.target} className="w-4 h-4 mr-2" resizeMode="contain" style={{ tintColor: showCrosshair ? "#22c55e" : "#9ca3af" }} />
-                                <Text className={`text-xs font-semibold ${showCrosshair ? "text-green-400" : "text-zinc-400"}`}>
+                                <Image source={icons.target} className="w-4 h-4 mr-2" resizeMode="contain" style={{ tintColor: showCrosshair ? "#0b7f4f" : "#9ca3af" }} />
+                                <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className={`text-xs font-semibold ${showCrosshair ? "text-brand-greenLight" : "text-zinc-400"}`}>
                                     {showCrosshair ? "Hide Zero" : "Verify Zero"}
                                 </Text>
                             </Pressable>
+                            <Pressable
+                                onPress={() => setShowGuide(true)}
+                                className="rounded-xl py-2 mb-2 flex-row items-center justify-center border bg-brand-greenDark/60 border-brand-green/50"
+                            >
+                                <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-zinc-400 text-xs">How it works & limits</Text>
+                            </Pressable>
                             <Pressable onPress={handleEndHuntPress} className="rounded-xl py-2.5 bg-red-950/60 border border-red-900/40 items-center">
-                                <Text className="text-red-400 font-semibold text-xs">End Hunt</Text>
+                                <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-red-400 font-semibold text-xs">End Hunt</Text>
                             </Pressable>
                         </View>
                     </View>
@@ -961,6 +893,7 @@ export default function ActiveHunt() {
                 {RangefinderModal}
                 {EndHuntModal}
                 {DistanceModal}
+                {GuideModal}
             </View>
         );
     }
@@ -972,63 +905,68 @@ export default function ActiveHunt() {
                 {CameraContent}
             </View>
 
-            <SafeAreaView className="absolute bottom-0 left-0 right-0 bg-brand-black border-t border-zinc-800" edges={["bottom"]} style={{ height: calibrationData.cameraLayout.bottomPanelTotalHeight }}>
+            <SafeAreaView className="absolute bottom-0 left-0 right-0 bg-brand-black border-t border-brand-green/40" edges={["bottom"]} style={{ height: calibrationData.cameraLayout.bottomPanelTotalHeight }}>
                 <View className="flex-1 px-4 pt-3" style={{ paddingBottom: calibrationData.cameraLayout.bottomPadding }}>
                     <View className="flex-row items-center mb-3">
                         <StatusIndicator />
-                        <Pressable onPress={handleOpenDistanceInput} className="flex-row items-center bg-zinc-900 rounded-xl px-4 py-2 border border-zinc-700">
-                            <Text className="text-white font-bold text-xl mr-1.5">{targetDistance ?? "—"}</Text>
-                            <Text className="text-zinc-400 text-base">{distanceUnit}</Text>
+                        <View className="mr-2">
+                            <HelpButton onPress={() => setShowGuide(true)} />
+                        </View>
+                        <Pressable
+                            onPress={handleOpenDistanceInput}
+                            disabled={!distancePillEnabled}
+                            className={`flex-row items-center bg-brand-greenDark/60 rounded-xl px-4 py-2 border border-brand-green/50 ${distancePillEnabled ? "" : "opacity-40"}`}
+                        >
+                            <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-white font-bold text-xl mr-1.5">{targetDistance ?? "—"}</Text>
+                            <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-zinc-400 text-base">{distanceUnit}</Text>
                         </Pressable>
                     </View>
 
                     {isTargetConfirmed ? (
                         <View className="bg-orange-950/40 rounded-xl p-3 mb-3 border border-orange-900/40 flex-row items-center">
                             <View className="flex-1">
-                                <Text className="text-orange-400/70 text-[10px] uppercase tracking-wider">Holdover</Text>
-                                <Text className="text-orange-400 font-bold text-2xl">{holdoverText}</Text>
+                                <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-orange-400/70 text-[10px] uppercase tracking-wider">Holdover</Text>
+                                <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-orange-400 font-bold text-2xl">{holdoverText}</Text>
+                                {conditionsText !== "" && <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-orange-400/40 text-[10px]" numberOfLines={1}>{conditionsText}</Text>}
                             </View>
                             <View className="items-end">
-                                <Text className="text-orange-400/60 text-sm">{dropText}</Text>
-                                <Text className="text-orange-400/40 text-xs">drop</Text>
+                                <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-orange-400/60 text-sm">{dropText}</Text>
+                                <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-orange-400/40 text-xs">drop</Text>
+                                {windText && <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-orange-400/60 text-xs">wind {windText}</Text>}
                             </View>
                         </View>
                     ) : (
-                        <View className="bg-zinc-900/60 rounded-xl p-3 mb-3 border border-zinc-700/40">
-                            <Text className="text-zinc-500 text-sm text-center">
-                                {targetDistance
-                                    ? "Place your scope crosshair on target, then confirm"
-                                    : "Set distance, then aim and confirm"}
-                            </Text>
+                        <View className="bg-brand-greenDark/40 rounded-xl p-3 mb-3 border border-brand-green/30">
+                            <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-zinc-500 text-sm text-center">{guidanceText}</Text>
                         </View>
                     )}
 
                     {/* Rangefinder Mode Indicator */}
                     <Pressable
                         onPress={() => setShowRangefinderModal(true)}
-                        className="bg-zinc-900/60 rounded-lg px-3 py-2 mb-3 border border-zinc-700/40 flex-row items-center justify-between"
+                        className="bg-brand-greenDark/40 rounded-lg px-3 py-2 mb-3 border border-brand-green/30 flex-row items-center justify-between"
                     >
-                        <Text className="text-zinc-500 text-xs">Rangefinder Mode</Text>
-                        <Text className="text-zinc-300 text-xs font-medium">
+                        <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-zinc-500 text-xs">Rangefinder Mode</Text>
+                        <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-zinc-300 text-xs font-medium">
                             {rangefinderMode === "LOS" ? "Line-of-Sight" : rangefinderMode === "COMPENSATED" ? "Angle-Compensated" : "Tap to Set"}
                         </Text>
                     </Pressable>
 
                     <View className="flex-row gap-2">
                         <Pressable
-                            onPress={isTargetConfirmed ? handleUnlockTarget : handleConfirmTarget}
-                            className={`flex-1 rounded-xl py-3.5 items-center justify-center border ${isTargetConfirmed ? "bg-orange-600 border-orange-500" : targetDistance ? "bg-green-600 border-green-500" : "bg-zinc-800 border-zinc-700"}`}
+                            onPress={handlePrimaryAction}
+                            className={`flex-1 rounded-xl py-3.5 items-center justify-center border ${ctaColorClasses}`}
                         >
-                            <Text className="text-white font-bold text-base">{isTargetConfirmed ? "UNLOCK" : "CONFIRM TARGET"}</Text>
+                            <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-white font-bold text-base">{primaryActionLabel}</Text>
                         </Pressable>
                         <Pressable
                             onPress={handleToggleCrosshair}
-                            className={`rounded-xl py-3.5 px-4 items-center justify-center border ${showCrosshair ? "bg-green-900/50 border-green-700" : "bg-zinc-900 border-zinc-700"}`}
+                            className={`rounded-xl py-3.5 px-4 items-center justify-center border ${showCrosshair ? "bg-brand-greenDark border-brand-greenLight" : "bg-brand-greenDark/60 border-brand-green/50"}`}
                         >
-                            <Image source={icons.target} className="w-6 h-6" resizeMode="contain" style={{ tintColor: showCrosshair ? "#22c55e" : "#9ca3af" }} />
+                            <Image source={icons.target} className="w-6 h-6" resizeMode="contain" style={{ tintColor: showCrosshair ? "#0b7f4f" : "#9ca3af" }} />
                         </Pressable>
                         <Pressable onPress={handleEndHuntPress} className="rounded-xl py-3.5 px-4 bg-red-950/60 border border-red-900/40 items-center justify-center">
-                            <Text className="text-red-400 font-bold text-sm">END</Text>
+                            <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-red-400 font-bold text-sm">END</Text>
                         </Pressable>
                     </View>
                 </View>
@@ -1037,6 +975,7 @@ export default function ActiveHunt() {
             {RangefinderModal}
             {EndHuntModal}
             {DistanceModal}
+                {GuideModal}
         </View>
     );
 }
@@ -1158,6 +1097,40 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: "700",
     },
+    mismatchBanner: {
+        backgroundColor: "rgba(127, 29, 29, 0.97)",
+        borderColor: "#dc2626",
+        gap: 10,
+    },
+    mismatchButton: {
+        backgroundColor: "#284a37", // brand-green
+        borderWidth: 1,
+        borderColor: "rgba(11, 127, 79, 0.5)",
+        borderRadius: 10,
+        paddingVertical: 10,
+        paddingHorizontal: 24,
+    },
+    mismatchButtonText: {
+        color: "#ffffff",
+        fontSize: 15,
+        fontWeight: "700",
+    },
+    magnificationBadge: {
+        position: "absolute",
+        right: 12,
+        backgroundColor: "rgba(0, 0, 0, 0.7)",
+        borderColor: "rgba(11, 127, 79, 0.6)",
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingVertical: 4,
+        paddingHorizontal: 8,
+    },
+    magnificationBadgeText: {
+        color: "#0b7f4f", // brand-greenLight
+        fontSize: 12,
+        fontWeight: "700",
+        letterSpacing: 0.5,
+    },
 
     // Zero Info Card - centered in camera view
     zeroInfoOverlay: {
@@ -1171,13 +1144,13 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
     },
     zeroInfoCard: {
-        backgroundColor: "rgba(24, 24, 27, 0.97)",
+        backgroundColor: "rgba(14, 32, 24, 0.97)",
         borderRadius: 16,
         padding: 16,
         maxWidth: 320,
         width: "100%",
         borderWidth: 1,
-        borderColor: "rgba(34, 197, 94, 0.4)",
+        borderColor: "rgba(40, 74, 55, 0.6)", // brand-green/60
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
@@ -1193,7 +1166,7 @@ const styles = StyleSheet.create({
         width: 36,
         height: 36,
         borderRadius: 10,
-        backgroundColor: "rgba(34, 197, 94, 0.15)",
+        backgroundColor: "rgba(11, 127, 79, 0.15)", // brand-greenLight/15
         alignItems: "center",
         justifyContent: "center",
         marginRight: 10,
@@ -1201,11 +1174,11 @@ const styles = StyleSheet.create({
     zeroInfoIcon: {
         width: 20,
         height: 20,
-        tintColor: "#22c55e",
+        tintColor: "#0b7f4f",
     },
     zeroInfoTitle: {
         flex: 1,
-        color: "#22c55e",
+        color: "#0b7f4f",
         fontSize: 16,
         fontWeight: "700",
     },
@@ -1224,7 +1197,7 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     zeroInfoHighlight: {
-        color: "#22c55e",
+        color: "#0b7f4f",
         fontWeight: "600",
     },
     zeroInfoSubtext: {
@@ -1232,205 +1205,5 @@ const styles = StyleSheet.create({
         fontSize: 12,
         lineHeight: 16,
         fontStyle: "italic",
-    },
-
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: "rgba(0, 0, 0, 0.9)",
-        justifyContent: "center",
-        alignItems: "center",
-        padding: 24
-    },
-    modalContent: {
-        backgroundColor: "#1c1c1e",
-        borderRadius: 20,
-        padding: 24,
-        width: "100%",
-        maxWidth: 320,
-        alignItems: "center",
-    },
-    modalIconCircle: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: "rgba(239, 68, 68, 0.15)",
-        alignItems: "center",
-        justifyContent: "center",
-        marginBottom: 16
-    },
-    modalIcon: {
-        width: 24,
-        height: 24,
-        tintColor: "#ef4444"
-    },
-    modalTitle: {
-        color: "white",
-        fontSize: 18,
-        fontWeight: "700",
-        marginBottom: 8
-    },
-    modalMessage: {
-        color: "rgba(255, 255, 255, 0.5)",
-        fontSize: 14,
-        textAlign: "center",
-        marginBottom: 24
-    },
-    modalButtonRow: {
-        flexDirection: "row",
-        gap: 12,
-        width: "100%"
-    },
-    modalCancelBtn: {
-        flex: 1,
-        paddingVertical: 14,
-        borderRadius: 12,
-        backgroundColor: "#2c2c2e",
-        alignItems: "center"
-    },
-    modalCancelText: {
-        color: "white",
-        fontWeight: "600",
-        fontSize: 15
-    },
-    modalConfirmBtn: {
-        flex: 1,
-        paddingVertical: 14,
-        borderRadius: 12,
-        backgroundColor: "#ef4444",
-        alignItems: "center"
-    },
-    modalConfirmText: {
-        color: "white",
-        fontWeight: "600",
-        fontSize: 15
-    },
-
-    // Rangefinder modal
-    rangefinderOption: {
-        width: "100%",
-        padding: 16,
-        borderRadius: 12,
-        backgroundColor: "#2c2c2e",
-        marginBottom: 12,
-        borderWidth: 2,
-        borderColor: "transparent",
-    },
-    rangefinderOptionSelected: {
-        borderColor: "#22c55e",
-        backgroundColor: "rgba(34, 197, 94, 0.1)",
-    },
-    rangefinderOptionHeader: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 4,
-    },
-    rangefinderOptionTitle: {
-        color: "white",
-        fontSize: 15,
-        fontWeight: "600",
-    },
-    rangefinderCheckmark: {
-        color: "#22c55e",
-        fontSize: 18,
-        fontWeight: "700",
-    },
-    rangefinderOptionDesc: {
-        color: "rgba(255, 255, 255, 0.5)",
-        fontSize: 12,
-        lineHeight: 16,
-    },
-    rangefinderHelp: {
-        color: "rgba(255, 255, 255, 0.4)",
-        fontSize: 11,
-        textAlign: "center",
-        marginTop: 8,
-        lineHeight: 15,
-    },
-    rangefinderModalLandscape: {
-        maxWidth: 500,
-        paddingVertical: 16,
-        paddingHorizontal: 20,
-    },
-    rangefinderOptionsRow: {
-        flexDirection: "row",
-        gap: 12,
-        width: "100%",
-    },
-    rangefinderOptionLandscape: {
-        flex: 1,
-        padding: 12,
-        marginBottom: 0,
-    },
-
-    distanceModal: {
-        backgroundColor: "#1c1c1e",
-        borderRadius: 20,
-        padding: 24,
-        width: "100%",
-        maxWidth: 300
-    },
-    distanceTitle: {
-        color: "white",
-        fontSize: 18,
-        fontWeight: "700",
-        textAlign: "center",
-        marginBottom: 20
-    },
-    distanceInputRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginBottom: 20
-    },
-    distanceInput: {
-        flex: 1,
-        backgroundColor: "#2c2c2e",
-        borderRadius: 14,
-        paddingVertical: 14,
-        paddingHorizontal: 16,
-        fontSize: 28,
-        fontWeight: "700",
-        color: "white",
-        textAlign: "center"
-    },
-    distanceUnitBox: {
-        marginLeft: 12,
-        paddingVertical: 14,
-        paddingHorizontal: 14,
-        backgroundColor: "#2c2c2e",
-        borderRadius: 14
-    },
-    distanceUnitText: {
-        color: "#9ca3af",
-        fontSize: 16,
-        fontWeight: "600"
-    },
-    distanceButtonRow: {
-        flexDirection: "row",
-        gap: 12
-    },
-    distanceCancelBtn: {
-        flex: 1,
-        paddingVertical: 14,
-        borderRadius: 12,
-        backgroundColor: "#2c2c2e",
-        alignItems: "center"
-    },
-    distanceCancelText: {
-        color: "white",
-        fontWeight: "600",
-        fontSize: 15
-    },
-    distanceConfirmBtn: {
-        flex: 1,
-        paddingVertical: 14,
-        borderRadius: 12,
-        backgroundColor: "#22c55e",
-        alignItems: "center"
-    },
-    distanceConfirmText: {
-        color: "white",
-        fontWeight: "700",
-        fontSize: 15
     },
 });

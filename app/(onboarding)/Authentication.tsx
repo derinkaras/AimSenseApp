@@ -1,12 +1,12 @@
 import React, { useState } from "react";
 import { View, Text, Image, TouchableOpacity, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import icons from "@/app/constants/icons";
+import icons from "@/constants/icons";
 import { useRouter } from "expo-router";
-import CustomTextInput from "@/app/components/CustomTextInput";
-import { useAuth } from "@/app/contexts/AuthContext";
-import UniversalModal from "@/app/components/UniversalModal";
-import ForgotPasswordContent from "@/app/components/contents/ForgotPasswordContent";
+import CustomTextInput from "@/components/CustomTextInput";
+import { useAuth } from "@/contexts/AuthContext";
+import UniversalModal from "@/components/UniversalModal";
+import ForgotPasswordContent from "@/components/contents/ForgotPasswordContent";
 
 const Authentication = () => {
     const router = useRouter();

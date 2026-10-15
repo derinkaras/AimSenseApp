@@ -13,15 +13,15 @@ import * as Haptics from "expo-haptics";
 import { useFocusEffect, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { gunProfileApi } from "@/app/api/gunProfile";
-import { useApi } from "@/app/hooks/useApi";
-import { useGunProfilesDirty } from "@/app/contexts/GunProfilesDirtyContext";
+import { gunProfileApi } from "@/services/gunProfile";
+import { useApi } from "@/hooks/useApi";
+import { useGunProfilesDirty } from "@/contexts/GunProfilesDirtyContext";
 
-import AddCircle from "@/app/components/AddCircle";
-import icons from "@/app/constants/icons";
-import type { GunProfile } from "../types/apiTypes";
-import { OfflineBanner } from "@/app/components/OfflineBanner";
-import { DebugPanel } from "@/app/components/DebugPanel";
+import AddCircle from "@/components/AddCircle";
+import icons from "@/constants/icons";
+import type { GunProfile } from "@/types/apiTypes";
+import { OfflineBanner } from "@/components/OfflineBanner";
+import { DebugPanel } from "@/components/DebugPanel";
 
 
 const STORAGE_KEYS = {

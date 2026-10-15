@@ -12,8 +12,10 @@ import React, { createContext, useContext, useState, useEffect, useRef } from "r
 import { View, Text, ActivityIndicator } from "react-native";
 import { Stack, useRouter } from "expo-router";
 
-import { useHuntStore, selectCalibrationResult, selectHuntStatus } from "@/app/hunt/store";
-import { lockOrientation } from "@/app/calibration/exports";
+import { useHuntStore, selectCalibrationResult, selectHuntStatus } from "@/hunt";
+import { lockOrientation } from "@/calibration";
+import HuntBriefing from "@/help/HuntBriefing";
+import { acceptHuntBriefing, hasAcceptedHuntBriefing } from "@/help/helpStorage";
 
 // ==================== CAMERA CONTEXT ====================
 
@@ -33,14 +35,20 @@ export const useCameraContext = () => useContext(CameraContext);
 
 export default function HuntLayout() {
     const router = useRouter();
-    const [activeScreen, setActiveScreen] = useState<string | null>("select-gun");
+    const [activeScreen, setActiveScreen] = useState<string | null>("active");
     const [isInitializing, setIsInitializing] = useState(true);
     const [initError, setInitError] = useState<string | null>(null);
     const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const hasInitialized = useRef(false);
 
+    // One-time "before you hunt" briefing (null = still checking whether it was already accepted)
+    const [briefingAccepted, setBriefingAccepted] = useState<boolean | null>(null);
+    useEffect(() => {
+        hasAcceptedHuntBriefing().then(setBriefingAccepted);
+    }, []);
+
     // Get calibration result from HUNT STORE (not calibration store!)
-    // This was set by beginHunt() in step8.tsx via initializeHunt()
+    // Set by startSession() when calibration (or a quick check) finishes
     const huntCalibration = useHuntStore(selectCalibrationResult);
     const huntStatus = useHuntStore(selectHuntStatus);
 
@@ -107,10 +115,10 @@ export default function HuntLayout() {
     }, [huntCalibration, huntStatus]);
 
     // Show loading state during initialization
-    if (isInitializing) {
+    if (isInitializing || briefingAccepted === null) {
         return (
             <View className="flex-1 bg-brand-black justify-center items-center">
-                <ActivityIndicator size="large" color="#22c55e" />
+                <ActivityIndicator size="large" color="#0b7f4f" />
                 <Text className="text-white mt-4 text-lg">Initializing Hunt Mode...</Text>
                 <Text className="text-gray-500 mt-2 text-sm">Preparing camera and sensors</Text>
             </View>
@@ -130,19 +138,31 @@ export default function HuntLayout() {
                 <Text className="text-gray-400 text-center mb-6">{initError}</Text>
                 <View className="flex-row gap-4">
                     <View
-                        className="px-6 py-3 rounded-xl bg-zinc-800 border border-zinc-700"
+                        className="px-6 py-3 rounded-xl bg-brand-greenDark/60 border border-brand-green/50"
                         onTouchEnd={() => router.replace("/(tabs)/Home")}
                     >
                         <Text className="text-white font-semibold">Go Back</Text>
                     </View>
                     <View
-                        className="px-6 py-3 rounded-xl bg-brand-greenLight border border-brand-green/60"
-                        onTouchEnd={() => router.replace("/(calibration)/step1")}
+                        className="px-6 py-3 rounded-xl bg-brand-green border border-brand-greenLight/50"
+                        onTouchEnd={() => router.replace("/(calibration)/rifle")}
                     >
                         <Text className="text-white font-semibold">Recalibrate</Text>
                     </View>
                 </View>
             </View>
+        );
+    }
+
+    // Show the key limits before the first hunt (the full guide is one tap away)
+    if (!briefingAccepted) {
+        return (
+            <HuntBriefing
+                onAccept={() => {
+                    acceptHuntBriefing();
+                    setBriefingAccepted(true);
+                }}
+            />
         );
     }
 

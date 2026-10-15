@@ -18,7 +18,15 @@
       "react-native-edge-to-edge",
       "expo-status-bar",
       "expo-web-browser",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "AimSense uses the microphone so you can speak the target distance and wind instead of typing while your hands are on the rifle.",
+          "speechRecognitionPermission": "AimSense uses speech recognition to turn your spoken shot setup into distance and wind values.",
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
