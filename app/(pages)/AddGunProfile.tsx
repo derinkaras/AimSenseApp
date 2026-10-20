@@ -240,7 +240,7 @@ const AddGunProfile = () => {
     if (loadingExisting && isEdit) {
         return (
             <View className="flex-1 bg-brand-black justify-center items-center">
-                <ActivityIndicator size="large" color="#22c55e" />
+                <ActivityIndicator size="large" color="#0b7f4f" />
                 <Text className="text-gray-400 mt-3">Loading profile...</Text>
             </View>
         );
@@ -259,7 +259,7 @@ const AddGunProfile = () => {
                             <Image
                                 source={icons.leftArrow}
                                 className="size-7"
-                                tintColor="#22c55e"
+                                tintColor="#0b7f4f"
                                 resizeMode="contain"
                             />
                         </TouchableOpacity>
@@ -398,7 +398,7 @@ const AddGunProfile = () => {
                                     <Text
                                         className={
                                             unitSystem === "IMPERIAL"
-                                                ? "text-emerald-200 text-[10px]"
+                                                ? "text-white/70 text-[10px]"
                                                 : "text-gray-500 text-[10px]"
                                         }
                                     >
@@ -424,7 +424,7 @@ const AddGunProfile = () => {
                                     <Text
                                         className={
                                             unitSystem === "METRIC"
-                                                ? "text-emerald-200 text-[10px]"
+                                                ? "text-white/70 text-[10px]"
                                                 : "text-gray-500 text-[10px]"
                                         }
                                     >
@@ -451,7 +451,7 @@ const AddGunProfile = () => {
                                         className="w-full h-40 rounded-xl mb-3"
                                         resizeMode="cover"
                                     />
-                                    <Text className="text-emerald-300 text-sm font-medium">
+                                    <Text className="text-brand-greenLight text-sm font-medium">
                                         Change rifle photo
                                     </Text>
                                     <Text className="text-gray-500 text-xs mt-1">
@@ -490,9 +490,9 @@ const AddGunProfile = () => {
                             activeOpacity={0.9}
                         >
                             {submitting ? (
-                                <ActivityIndicator color="#22c55e" />
+                                <ActivityIndicator color="#0b7f4f" />
                             ) : (
-                                <Text className="text-lg font-semibold text-emerald-50">
+                                <Text className="text-lg font-semibold text-white">
                                     {isEdit ? "Update profile" : "Save profile"}
                                 </Text>
                             )}

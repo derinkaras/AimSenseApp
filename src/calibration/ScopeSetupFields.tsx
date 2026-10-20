@@ -58,6 +58,10 @@ interface MagnificationFieldProps {
     onChange: (value: number | null) => void;
 }
 
+// The number and the "×" share one font size with no line height or font padding, set here
+// rather than with text-xl, whose line height makes Android draw the TextInput text lower
+const MAGNIFICATION_TEXT = { fontSize: 20, includeFontPadding: false } as const;
+
 /** The magnification a typed text stands for, or null if it is not usable. */
 function parseMagnification(text: string): number | null {
     const parsed = parseFloat(text);
@@ -67,6 +71,7 @@ function parseMagnification(text: string): number | null {
 /** Stepper with a typed value in the middle. Reports null until the value is usable. */
 export function MagnificationField({ value, onChange }: MagnificationFieldProps) {
     const [text, setText] = useState(value ? String(value) : "");
+    const [inputWidth, setInputWidth] = useState(16);
 
     // Follow outside changes (e.g. a profile loading in) without fighting the user's typing
     if (value !== null && value !== parseMagnification(text)) {
@@ -98,6 +103,16 @@ export function MagnificationField({ value, onChange }: MagnificationFieldProps)
                         invalid ? "border-red-500/70" : "border-brand-green/50"
                     )}
                 >
+                    {/* Invisible copy of the digits: its width sizes the input so "9×" centers as one unit
+                        (a TextInput does not shrink to its content on its own) */}
+                    <Text
+                        maxFontSizeMultiplier={MAX_FONT_SCALE}
+                        className="font-semibold absolute opacity-0"
+                        style={MAGNIFICATION_TEXT}
+                        onLayout={(e) => setInputWidth(Math.ceil(e.nativeEvent.layout.width) + 2)}
+                    >
+                        {text || "9"}
+                    </Text>
                     <TextInput
                         value={text}
                         onChangeText={commit}
@@ -107,9 +122,17 @@ export function MagnificationField({ value, onChange }: MagnificationFieldProps)
                         returnKeyType="done"
                         maxLength={4}
                         accessibilityLabel="Scope magnification"
-                        className="text-white text-xl font-semibold text-center min-w-[48px]"
+                        maxFontSizeMultiplier={MAX_FONT_SCALE}
+                        className="text-white font-semibold text-center"
+                        style={[MAGNIFICATION_TEXT, { width: inputWidth, padding: 0, margin: 0, textAlignVertical: "center" }]}
                     />
-                    <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-white/50 text-xl font-semibold">×</Text>
+                    <Text
+                        maxFontSizeMultiplier={MAX_FONT_SCALE}
+                        className="text-white/50 font-semibold"
+                        style={MAGNIFICATION_TEXT}
+                    >
+                        ×
+                    </Text>
                 </View>
                 <StepButton label="+" accessibilityLabel="Raise magnification" onPress={() => step(1)} />
             </View>

@@ -38,7 +38,7 @@ const Store = () => {
                             source={icons.store}
                             className="size-7"
                             resizeMode="contain"
-                            tintColor="#22c55e"
+                            tintColor="#0b7f4f"
                         />
                     </View>
                     <Text className="text-white text-2xl font-semibold">
@@ -59,7 +59,7 @@ const Store = () => {
                                     source={icons.store}
                                     className="size-10"
                                     resizeMode="contain"
-                                    tintColor="#22c55e"
+                                    tintColor="#0b7f4f"
                                 />
                             </View>
                         </View>

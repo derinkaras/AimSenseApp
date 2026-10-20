@@ -8,7 +8,7 @@ export const toastConfig = {
             style={{
                 backgroundColor: "#0f1815",     // SOLID dark surface
                 borderLeftWidth: 4,
-                borderLeftColor: "#22c55e",     // emerald accent
+                borderLeftColor: "#0b7f4f",     // brand-greenLight accent
                 borderRadius: 14,
                 paddingVertical: 10,
 

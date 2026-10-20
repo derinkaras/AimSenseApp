@@ -99,7 +99,7 @@ const Guns = () => {
     if (loading && !hasLoadedOnce) {
         return (
             <View className="flex-1 bg-brand-black justify-center items-center">
-                <ActivityIndicator size="large" color="#22c55e" />
+                <ActivityIndicator size="large" color="#0b7f4f" />
                 <Text className="text-gray-400 mt-3">
                     Loading your rifles...
                 </Text>
@@ -115,7 +115,7 @@ const Guns = () => {
                     onPress={refetch}
                     className="px-4 py-2 rounded-xl bg-brand-green"
                 >
-                    <Text className="text-emerald-50 font-semibold">Retry</Text>
+                    <Text className="text-white font-semibold">Retry</Text>
                 </TouchableOpacity>
             </View>
         );
@@ -156,8 +156,8 @@ const Guns = () => {
                             {item.name}
                         </Text>
 
-                        <View className="px-2 py-0.5 rounded-full bg-emerald-900/70">
-                            <Text className="text-[10px] text-emerald-100 font-medium">
+                        <View className="px-2 py-0.5 rounded-full bg-brand-green/70">
+                            <Text className="text-[10px] text-white font-medium">
                                 {isImperial ? "Imperial" : "Metric"}
                             </Text>
                         </View>
@@ -215,7 +215,7 @@ const Guns = () => {
                                     source={icons.riflePfp}
                                     className="size-7"
                                     resizeMode="contain"
-                                    tintColor="#22c55e"
+                                    tintColor="#0b7f4f"
                                 />
                             </View>
                             <Text className="text-white text-2xl font-semibold">

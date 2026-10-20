@@ -83,6 +83,7 @@ export default function ShotSetupModal({
     const [openSection, setOpenSection] = useState<Section | null>(null);
     const [showHelp, setShowHelp] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [distanceWidth, setDistanceWidth] = useState(24);
 
     // Voice input: speak the distance/wind/conditions instead of typing them
     const [isListening, setIsListening] = useState(false);
@@ -294,12 +295,35 @@ export default function ShotSetupModal({
     );
 
     // ==================== DISTANCE ====================
+    // Landscape: a section header like the conditions column, and a smaller card, so both columns line up
     const distanceDisplay = (
         <View>
-            <Pressable style={styles.distanceCard} onPress={() => distanceInputRef.current?.focus()}>
+            {landscape && (
+                <View style={[styles.sectionHeader, { marginBottom: 8 }]}>
+                    <Text style={styles.sectionLabel} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+                        DISTANCE
+                    </Text>
+                    <Text style={styles.sectionHint} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+                        Tap the number to type
+                    </Text>
+                </View>
+            )}
+            <Pressable
+                style={[styles.distanceCard, landscape && styles.distanceCardLandscape]}
+                onPress={() => distanceInputRef.current?.focus()}
+            >
+                    {/* Invisible copy of the digits: its width sizes the input so "300 yd" centers as one unit
+                        (a TextInput does not shrink to its content on its own) */}
+                    <Text
+                        style={[styles.distanceInput, landscape && styles.distanceInputLandscape, styles.measure]}
+                        maxFontSizeMultiplier={MAX_FONT_SCALE}
+                        onLayout={(e) => setDistanceWidth(Math.ceil(e.nativeEvent.layout.width) + 4)}
+                    >
+                        {distanceText || "0"}
+                    </Text>
                     <TextInput
                         ref={distanceInputRef}
-                        style={styles.distanceInput}
+                        style={[styles.distanceInput, landscape && styles.distanceInputLandscape, { width: distanceWidth }]}
                         value={distanceText}
                         onChangeText={(t) => {
                             setDistanceText(t.replace(/[^0-9]/g, ""));
@@ -315,11 +339,11 @@ export default function ShotSetupModal({
                         maxFontSizeMultiplier={MAX_FONT_SCALE}
                         accessibilityLabel={`Target distance in ${distanceUnit === "yd" ? "yards" : "meters"}`}
                     />
-                    <Text style={styles.distanceUnit} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+                    <Text style={[styles.distanceUnit, landscape && styles.distanceUnitLandscape]} maxFontSizeMultiplier={MAX_FONT_SCALE}>
                         {distanceUnit}
                     </Text>
             </Pressable>
-            {distanceText === "" && (
+            {distanceText === "" && !landscape && (
                 <Text style={styles.distanceHint} maxFontSizeMultiplier={MAX_FONT_SCALE}>
                     Tap to enter the exact distance
                 </Text>
@@ -334,7 +358,7 @@ export default function ShotSetupModal({
                             onPress={() => pickDistance(d)}
                             accessibilityRole="button"
                             accessibilityLabel={`${d} ${distanceUnit}`}
-                            style={[styles.quickChip, selected && styles.quickChipSelected]}
+                            style={[styles.quickChip, landscape && styles.quickChipLandscape, selected && styles.quickChipSelected]}
                         >
                             <Text
                                 style={[styles.quickChipText, selected && styles.quickChipTextSelected]}
@@ -674,6 +698,7 @@ const styles = StyleSheet.create({
     },
     columns: {
         flexDirection: "row",
+        alignItems: "flex-start",
         gap: 14,
     },
     helpBox: {
@@ -697,14 +722,30 @@ const styles = StyleSheet.create({
         borderColor: BORDER,
         paddingHorizontal: 12,
     },
+    // Landscape: header (≈16) + gap + card + gap + chips matches the two collapsed condition cards
+    distanceCardLandscape: {
+        height: 52,
+    },
     distanceInput: {
-        minWidth: 64,
         fontSize: 32,
         fontWeight: "700",
         color: "white",
         textAlign: "center",
         fontVariant: ["tabular-nums"],
-        paddingVertical: 0,
+        padding: 0,
+        margin: 0,
+        includeFontPadding: false,
+        textAlignVertical: "center",
+    },
+    distanceInputLandscape: {
+        fontSize: 26,
+    },
+    distanceUnitLandscape: {
+        fontSize: 15,
+    },
+    measure: {
+        position: "absolute",
+        opacity: 0,
     },
     distanceHint: {
         color: "rgba(255,255,255,0.4)",
@@ -732,6 +773,9 @@ const styles = StyleSheet.create({
         borderColor: BORDER,
         alignItems: "center",
         justifyContent: "center",
+    },
+    quickChipLandscape: {
+        height: 36,
     },
     quickChipSelected: {
         backgroundColor: SELECTED_BG,

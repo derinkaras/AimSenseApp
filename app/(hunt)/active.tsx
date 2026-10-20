@@ -842,7 +842,7 @@ export default function ActiveHunt() {
                             </View>
                         ) : (
                             <View className="px-3 py-3 border-b border-brand-green/30">
-                                <View className="bg-brand-greenDark/40 rounded-xl p-3 border border-brand-green/30">
+                                <View className="bg-brand-greenDark/40 rounded-xl p-3 border border-brand-green/30 items-center justify-center">
                                     <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-zinc-500 text-xs text-center">{guidanceText}</Text>
                                 </View>
                             </View>
@@ -851,7 +851,7 @@ export default function ActiveHunt() {
                         <View className="px-3 py-2">
                             <Pressable
                                 onPress={handlePrimaryAction}
-                                className={`rounded-xl py-3 items-center border ${ctaColorClasses}`}
+                                className={`rounded-xl py-3 items-center justify-center border ${ctaColorClasses}`}
                             >
                                 <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-white font-bold text-sm">{primaryActionLabelCompact}</Text>
                             </Pressable>
@@ -906,7 +906,7 @@ export default function ActiveHunt() {
             </View>
 
             <SafeAreaView className="absolute bottom-0 left-0 right-0 bg-brand-black border-t border-brand-green/40" edges={["bottom"]} style={{ height: calibrationData.cameraLayout.bottomPanelTotalHeight }}>
-                <View className="flex-1 px-4 pt-3" style={{ paddingBottom: calibrationData.cameraLayout.bottomPadding }}>
+                <View className="flex-1 px-4 pt-3 justify-center" style={{ paddingBottom: calibrationData.cameraLayout.bottomPadding }}>
                     <View className="flex-row items-center mb-3">
                         <StatusIndicator />
                         <View className="mr-2">
@@ -936,7 +936,7 @@ export default function ActiveHunt() {
                             </View>
                         </View>
                     ) : (
-                        <View className="bg-brand-greenDark/40 rounded-xl p-3 mb-3 border border-brand-green/30">
+                        <View className="bg-brand-greenDark/40 rounded-xl p-3 mb-3 border border-brand-green/30 items-center justify-center">
                             <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-zinc-500 text-sm text-center">{guidanceText}</Text>
                         </View>
                     )}

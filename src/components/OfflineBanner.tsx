@@ -45,13 +45,13 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({ compact = false })
     // Sync completed successfully (briefly show success state)
     if (syncStatus === 'success') {
         return (
-            <View className="mb-3 px-3 py-2.5 rounded-2xl bg-green-900/80 border border-green-700/50 flex-row items-center">
-                <View className="w-8 h-8 rounded-full bg-green-800/60 items-center justify-center mr-2.5">
+            <View className="mb-3 px-3 py-2.5 rounded-2xl bg-brand-green/80 border border-brand-greenLight/50 flex-row items-center">
+                <View className="w-8 h-8 rounded-full bg-brand-greenDark/60 items-center justify-center mr-2.5">
                     <Text className="text-lg">✅</Text>
                 </View>
 
                 <View className="flex-1">
-                    <Text className="text-green-100 text-sm font-semibold">
+                    <Text className="text-white text-sm font-semibold">
                         All changes synced!
                     </Text>
                 </View>
@@ -117,24 +117,24 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({ compact = false })
             <TouchableOpacity
                 onPress={triggerSync}
                 activeOpacity={0.8}
-                className="mb-3 px-3 py-2.5 rounded-2xl bg-emerald-900/80 border border-emerald-700/50"
+                className="mb-3 px-3 py-2.5 rounded-2xl bg-brand-green/80 border border-brand-greenLight/50"
             >
                 <View className="flex-row items-center">
-                    <View className="w-8 h-8 rounded-full bg-emerald-800/60 items-center justify-center mr-2.5">
+                    <View className="w-8 h-8 rounded-full bg-brand-greenDark/60 items-center justify-center mr-2.5">
                         <Text className="text-lg">☁️</Text>
                     </View>
 
                     <View className="flex-1">
-                        <Text className="text-emerald-100 text-sm font-semibold mb-0.5">
+                        <Text className="text-white text-sm font-semibold mb-0.5">
                             {pendingOperationsCount} change{pendingOperationsCount > 1 ? 's' : ''} to sync
                         </Text>
-                        <Text className="text-emerald-200/90 text-xs leading-4">
+                        <Text className="text-white/70 text-xs leading-4">
                             Tap to sync now
                         </Text>
                     </View>
 
-                    <View className="px-3 py-1.5 rounded-full bg-emerald-700/60">
-                        <Text className="text-emerald-100 text-xs font-semibold">Sync</Text>
+                    <View className="px-3 py-1.5 rounded-full bg-brand-greenLight/60">
+                        <Text className="text-white text-xs font-semibold">Sync</Text>
                     </View>
                 </View>
             </TouchableOpacity>
@@ -172,9 +172,9 @@ export const OfflineIndicator: React.FC = () => {
 
     if (pendingOperationsCount > 0) {
         return (
-            <View className="flex-row items-center px-2 py-1 rounded-full bg-emerald-900/50">
-                <View className="w-2 h-2 rounded-full bg-emerald-500 mr-1.5" />
-                <Text className="text-emerald-200 text-xs">{pendingOperationsCount} pending</Text>
+            <View className="flex-row items-center px-2 py-1 rounded-full bg-brand-green/50">
+                <View className="w-2 h-2 rounded-full bg-brand-greenLight mr-1.5" />
+                <Text className="text-white/70 text-xs">{pendingOperationsCount} pending</Text>
             </View>
         );
     }

@@ -302,7 +302,7 @@ const Profile = () => {
     if (loading && !firstName && !lastName) {
         return (
             <View className="flex-1 bg-brand-black justify-center items-center">
-                <ActivityIndicator size="large" color="#22c55e" />
+                <ActivityIndicator size="large" color="#0b7f4f" />
             </View>
         );
     }
