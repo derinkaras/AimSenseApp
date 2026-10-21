@@ -91,7 +91,7 @@ export const userProfileApi = {
             }
 
             // If network error with no cache, return null (not an error)
-            // User sees default "First Last" name, which is acceptable
+            // User sees the "Add your name" prompt, which is acceptable
             if (isNetworkOrTimeoutError(error)) {
                 console.log('📡 Offline/slow with no cache - returning null');
                 return null;

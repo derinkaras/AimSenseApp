@@ -1,43 +1,56 @@
-import React from "react";
-import { View, Text, TouchableOpacity, Image } from "react-native";
+import React, { useState } from "react";
+import { View, Text, TouchableOpacity, Image, ActivityIndicator } from "react-native";
 import icons from "@/constants/icons";
 
 interface LogoutContentProps {
-    onConfirm?: () => void;
+    onConfirm?: () => Promise<unknown> | void;
     onCancel?: () => void;
 }
 
 const LogoutContent = ({ onConfirm, onCancel }: LogoutContentProps) => {
+    const [busy, setBusy] = useState(false);
+
+    const handleConfirm = async () => {
+        setBusy(true);
+        try {
+            await onConfirm?.();
+        } finally {
+            setBusy(false);
+        }
+    };
+
     return (
         <View>
             {/* Icon */}
-            <View className="items-center">
-                <View className="size-16 rounded-2xl bg-brand-greenDark border border-brand-green/60 items-center justify-center">
-                    <Image source={icons.power} className="size-7" tintColor="#0b7f4f" resizeMode="contain" />
-                </View>
+            <View className="size-12 rounded-full bg-white/5 border border-white/10 items-center justify-center self-center">
+                <Image source={icons.power} className="size-5" tintColor="rgba(255,255,255,0.85)" resizeMode="contain" />
             </View>
 
             {/* Message */}
-            <Text className="text-white text-xl font-bold text-center mt-4">Log out?</Text>
-            <Text className="text-white/60 text-sm leading-5 text-center mt-2 px-2">
-                You&apos;ll need to sign in again to use AimSense. Your rifle profiles stay saved to your account.
+            <Text className="text-white text-lg font-semibold text-center mt-4">Log out of AimSense?</Text>
+            <Text className="text-white/55 text-sm leading-5 text-center mt-1.5 px-2">
+                You&apos;ll need to sign in again. Your rifles stay saved to your account.
             </Text>
 
-            {/* Actions */}
-            <View className="gap-2.5 mt-6">
-                <TouchableOpacity
-                    onPress={onConfirm}
-                    activeOpacity={0.85}
-                    className="rounded-2xl bg-red-600/90 border border-red-400/40 py-3.5 items-center"
-                >
-                    <Text className="text-white font-bold text-base">Log out</Text>
-                </TouchableOpacity>
+            {/* Actions: the quiet choice on the left, the action on the right */}
+            <View className="flex-row gap-2.5 mt-6">
                 <TouchableOpacity
                     onPress={onCancel}
-                    activeOpacity={0.85}
-                    className="rounded-2xl bg-brand-green border border-brand-greenLight/60 py-3.5 items-center"
+                    disabled={busy}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    className="flex-1 h-12 rounded-2xl bg-white/5 border border-white/10 items-center justify-center"
                 >
-                    <Text className="text-white font-semibold text-base">Cancel</Text>
+                    <Text className="text-white/85 font-semibold text-base">Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    onPress={handleConfirm}
+                    disabled={busy}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    className="flex-1 h-12 rounded-2xl bg-brand-green border border-brand-greenLight/50 items-center justify-center"
+                >
+                    {busy ? <ActivityIndicator color="#ffffff" /> : <Text className="text-white font-semibold text-base">Log out</Text>}
                 </TouchableOpacity>
             </View>
         </View>

@@ -7,7 +7,18 @@
 //   buttons brand-green, accents brand-greenLight, cards brand-greenDark with brand-green borders.
 
 import React, { ReactNode } from "react";
-import { ActivityIndicator, Image, Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import {
+    ActivityIndicator,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    Text,
+    View,
+    useWindowDimensions,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import icons from "@/constants/icons";
@@ -24,9 +35,11 @@ interface AppSheetProps {
     children: ReactNode;
     /** Actions pinned under the scrolling body */
     footer?: ReactNode;
+    /** The body has text inputs: shrink the sheet above the keyboard instead of under it */
+    avoidKeyboard?: boolean;
 }
 
-export default function AppSheet({ visible, onClose, eyebrow, title, children, footer }: AppSheetProps) {
+export default function AppSheet({ visible, onClose, eyebrow, title, children, footer, avoidKeyboard = false }: AppSheetProps) {
     const window = useWindowDimensions();
     const insets = useSafeAreaInsets();
     const frame = getSheetFrame(window, insets);
@@ -39,7 +52,12 @@ export default function AppSheet({ visible, onClose, eyebrow, title, children, f
             onRequestClose={onClose ?? (() => {})}
             supportedOrientations={["portrait", "landscape", "landscape-left", "landscape-right"]}
         >
-            <View className="flex-1 justify-end" style={frame.rootStyle}>
+            <KeyboardAvoidingView
+                className="flex-1 justify-end"
+                style={frame.rootStyle}
+                behavior={avoidKeyboard && Platform.OS === "ios" ? "padding" : undefined}
+                enabled={avoidKeyboard}
+            >
                 <Pressable
                     className="absolute inset-0 bg-black/70"
                     onPress={onClose}
@@ -91,7 +109,7 @@ export default function AppSheet({ visible, onClose, eyebrow, title, children, f
                         </View>
                     )}
                 </View>
-            </View>
+            </KeyboardAvoidingView>
         </Modal>
     );
 }

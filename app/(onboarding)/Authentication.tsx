@@ -7,8 +7,8 @@ import CustomTextInput from "@/components/CustomTextInput";
 import { useAuth } from "@/contexts/AuthContext";
 import UniversalModal from "@/components/UniversalModal";
 import ForgotPasswordContent from "@/components/contents/ForgotPasswordContent";
-import PrivacyPolicyContent from "@/components/contents/PrivacyPolicyContent";
-import TermsOfServiceContent from "@/components/contents/TermsOfServiceContent";
+import LegalSheet from "@/legal/LegalSheet";
+import { PRIVACY_POLICY, TERMS_OF_SERVICE } from "@/legal/content";
 
 const Authentication = () => {
     const router = useRouter();
@@ -48,12 +48,8 @@ const Authentication = () => {
             />
         </UniversalModal>
 
-        <UniversalModal visible={legalModal === "privacy"} onClose={() => setLegalModal(null)}>
-            <PrivacyPolicyContent onClose={() => setLegalModal(null)} />
-        </UniversalModal>
-        <UniversalModal visible={legalModal === "terms"} onClose={() => setLegalModal(null)}>
-            <TermsOfServiceContent onClose={() => setLegalModal(null)} />
-        </UniversalModal>
+        <LegalSheet document={PRIVACY_POLICY} visible={legalModal === "privacy"} onClose={() => setLegalModal(null)} />
+        <LegalSheet document={TERMS_OF_SERVICE} visible={legalModal === "terms"} onClose={() => setLegalModal(null)} />
 
         <SafeAreaView className="flex-1">
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>

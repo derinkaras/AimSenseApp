@@ -1,17 +1,23 @@
 import React, { ReactNode } from "react";
-import { View, Modal, Pressable } from "react-native";
+import { View, Modal, Pressable, KeyboardAvoidingView, Platform } from "react-native";
 
 type universalModalProps = {
     visible: boolean;
     onClose: () => void;
     children: ReactNode;
+    /** The content has text inputs: keep the card above the keyboard */
+    avoidKeyboard?: boolean;
 };
 
 const UniversalModal = (props: universalModalProps) => {
-    const { visible, onClose, children } = props;
+    const { visible, onClose, children, avoidKeyboard = false } = props;
     return (
         <Modal visible={visible} transparent onRequestClose={onClose} animationType="fade">
-            <View className="flex-1 justify-center items-center">
+            <KeyboardAvoidingView
+                className="flex-1 justify-center items-center"
+                behavior={avoidKeyboard && Platform.OS === "ios" ? "padding" : undefined}
+                enabled={avoidKeyboard}
+            >
                 <Pressable onPress={onClose} className="absolute inset-0 bg-black/75" accessibilityLabel="Close" />
                 <View
                     className="w-11/12 max-w-md bg-brand-black rounded-3xl p-6 border border-brand-green/60"
@@ -26,7 +32,7 @@ const UniversalModal = (props: universalModalProps) => {
                 >
                     {children}
                 </View>
-            </View>
+            </KeyboardAvoidingView>
         </Modal>
     );
 };

@@ -21,10 +21,10 @@ import EditNameModal from "@/components/EditNameModal";
 import { userProfileApi } from "@/services/userProfile";
 import UniversalModal from "@/components/UniversalModal";
 import LogoutContent from "@/components/contents/LogoutContent";
-import PrivacyPolicyContent from "@/components/contents/PrivacyPolicyContent";
 import DeleteAccountContent from "@/components/contents/DeleteAccountContent";
 import ForgotPasswordContent from "@/components/contents/ForgotPasswordContent";
-import TermsOfServiceContent from "@/components/contents/TermsOfServiceContent";
+import LegalSheet from "@/legal/LegalSheet";
+import { PRIVACY_POLICY, TERMS_OF_SERVICE } from "@/legal/content";
 import GuideSheet from "@/help/GuideSheet";
 import PremiumBadge from "@/components/profile/PremiumBadge";
 import TrialBadge from "@/components/profile/TrialBadge";
@@ -96,9 +96,10 @@ const Profile = () => {
 
     const handleSaveName = async (newFirst: string, newLast: string) => {
         try {
+            // Always send both names, so clearing one actually removes it
             const data: any = {
-                ...(newFirst && { firstName: newFirst }),
-                ...(newLast && { lastName: newLast }),
+                firstName: newFirst,
+                lastName: newLast,
                 ...(profilePhotoUri && { profilePhotoUri }),
             };
 
@@ -109,8 +110,7 @@ const Profile = () => {
 
                 Toast.show({
                     type: "success",
-                    text1: "Profile Created",
-                    text2: "Your profile has been saved.",
+                    text1: "Name saved",
                 });
             } else {
                 await userProfileApi.updateProfile(data);
@@ -118,8 +118,7 @@ const Profile = () => {
 
                 Toast.show({
                     type: "success",
-                    text1: "Profile Updated",
-                    text2: "Changes saved successfully.",
+                    text1: "Name saved",
                 });
             }
 
@@ -132,7 +131,7 @@ const Profile = () => {
             console.log("handleSaveName error:", message);
             Toast.show({
                 type: "error",
-                text1: "Save failed",
+                text1: "Couldn't save your name",
                 text2: message,
             });
         }
@@ -143,8 +142,8 @@ const Profile = () => {
         if (status !== "granted") {
             Toast.show({
                 type: "error",
-                text1: "Permission Denied",
-                text2: "We need access to your photos to set a profile picture.",
+                text1: "Photo access needed",
+                text2: "Allow photo access in Settings to add a profile photo.",
             });
             return;
         }
@@ -181,13 +180,12 @@ const Profile = () => {
 
             Toast.show({
                 type: "success",
-                text1: "Profile Updated",
-                text2: "Profile picture saved.",
+                text1: "Photo saved",
             });
         } catch (error: any) {
             Toast.show({
                 type: "error",
-                text1: "Failed to save photo",
+                text1: "Couldn't save your photo",
                 text2: error?.message || "Please try again.",
             });
         }
@@ -202,13 +200,12 @@ const Profile = () => {
 
             Toast.show({
                 type: "success",
-                text1: "Photo Removed",
-                text2: "Your profile picture has been cleared.",
+                text1: "Photo removed",
             });
         } catch (error: any) {
             Toast.show({
                 type: "error",
-                text1: "Failed to remove photo",
+                text1: "Couldn't remove your photo",
                 text2: error?.message || "Please try again.",
             });
         }
@@ -220,7 +217,8 @@ const Profile = () => {
             if (!hasStableConnection) {
                 Toast.show({
                     type: "error",
-                    text1: "No Connection",
+                    text1: "No connection",
+                    text2: "Connect to the internet to do this.",
                 });
                 return;
             }
@@ -235,8 +233,8 @@ const Profile = () => {
             if (!hasStableConnection) {
                 Toast.show({
                     type: "error",
-                    text1: "No Connection",
-
+                    text1: "No connection",
+                    text2: "Connect to the internet to delete your account.",
                 });
                 setActiveModal("");
                 return;
@@ -247,7 +245,7 @@ const Profile = () => {
 
             Toast.show({
                 type: "success",
-                text1: "Account Deleted",
+                text1: "Account deleted",
                 text2: "Your account has been permanently deleted.",
             });
 
@@ -258,7 +256,7 @@ const Profile = () => {
             console.log("handleDeleteAccount error:", message);
             Toast.show({
                 type: "error",
-                text1: "Delete Failed",
+                text1: "Couldn't delete your account",
                 text2: message,
             });
         } finally {
@@ -270,8 +268,8 @@ const Profile = () => {
         if (!hasStableConnection) {
             Toast.show({
                 type: "error",
-                text1: "No Connection",
-                text2: "You need a stable internet connection to log out.",
+                text1: "No connection",
+                text2: "Connect to the internet to log out.",
             });
             setActiveModal("");
             return;
@@ -279,19 +277,11 @@ const Profile = () => {
 
         const result = await logout();
 
-        if (result?.success) {
-            setActiveModal("");
-            Toast.show({
-                type: "success",
-                text1: "Logged Out",
-                text2: "See you soon!",
-            });
-        }
-        // If AuthContext shows error toast, no need to duplicate.
+        // AuthContext shows the "Logged out" toast (and any error toast)
+        if (result?.success) setActiveModal("");
     };
 
-    const displayFirst = firstName.trim() || "First";
-    const displayLast = lastName.trim() || "Last";
+    const displayName = [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
     const closeModal = () => setActiveModal("");
 
     // ✅ Match the UI you said you want to keep
@@ -364,8 +354,6 @@ const Profile = () => {
                     onClose={() => setShowEditNameModal(false)}
                     firstName={firstName}
                     lastName={lastName}
-                    setFirstName={setFirstName}
-                    setLastName={setLastName}
                     handleSave={handleSaveName}
                 />
 
@@ -374,13 +362,9 @@ const Profile = () => {
                     <LogoutContent onCancel={closeModal} onConfirm={handleLogout} />
                 </UniversalModal>
 
-                <UniversalModal visible={activeModal === "Privacy"} onClose={closeModal}>
-                    <PrivacyPolicyContent onClose={closeModal} />
-                </UniversalModal>
+                <LegalSheet document={PRIVACY_POLICY} visible={activeModal === "Privacy"} onClose={closeModal} />
 
-                <UniversalModal visible={activeModal === "Terms of Service"} onClose={closeModal}>
-                    <TermsOfServiceContent onClose={closeModal} />
-                </UniversalModal>
+                <LegalSheet document={TERMS_OF_SERVICE} visible={activeModal === "Terms of Service"} onClose={closeModal} />
 
                 <GuideSheet visible={activeModal === "How it works & limits"} onClose={closeModal} />
 
@@ -435,12 +419,28 @@ const Profile = () => {
                                     </TouchableOpacity>
 
                                     <View className="flex-1 ml-4">
-                                        <Text className="text-white text-xl font-bold" numberOfLines={1}>
-                                            {displayFirst} {displayLast}
-                                        </Text>
-                                        <Text className="text-white/55 text-sm mt-0.5" numberOfLines={1}>
-                                            {user?.email || "aimsense@app.com"}
-                                        </Text>
+                                        {displayName ? (
+                                            <Text className="text-white text-xl font-bold" numberOfLines={1}>
+                                                {displayName}
+                                            </Text>
+                                        ) : (
+                                            // No name yet: invite the user to add one instead of showing placeholder text
+                                            <TouchableOpacity
+                                                onPress={() => setShowEditNameModal(true)}
+                                                activeOpacity={0.7}
+                                                accessibilityRole="button"
+                                                accessibilityLabel="Add your name"
+                                            >
+                                                <Text className="text-white/60 text-xl font-semibold" numberOfLines={1}>
+                                                    Add your name
+                                                </Text>
+                                            </TouchableOpacity>
+                                        )}
+                                        {!!user?.email && (
+                                            <Text className="text-white/55 text-sm mt-0.5" numberOfLines={1}>
+                                                {user.email}
+                                            </Text>
+                                        )}
                                         <View className="flex-row mt-2.5">
                                             {subscription === "premium" && <PremiumBadge />}
                                             {subscription === "trial" && <TrialBadge />}
@@ -457,7 +457,7 @@ const Profile = () => {
                                         className="flex-1 flex-row items-center justify-center rounded-xl bg-brand-black/50 border border-brand-green/60 py-2.5"
                                     >
                                         <Image source={icons.pencil} className="size-3.5 mr-2" tintColor={ACCENT} resizeMode="contain" />
-                                        <Text className="text-white text-sm font-semibold">Edit name</Text>
+                                        <Text className="text-white text-sm font-semibold">{displayName ? "Edit name" : "Add name"}</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity
                                         onPress={profilePhotoUri ? handleRemovePhoto : handlePickPhoto}
