@@ -46,8 +46,8 @@ const ForgotPasswordContent = ({ onClose, onSuccess, initialEmail }: ForgotPassw
         if (!email.trim()) {
             Toast.show({
                 type: 'error',
-                text1: 'Email Required',
-                text2: 'Please enter your email address'
+                text1: 'Enter your email',
+                text2: 'We will send the reset link there.'
             });
             return;
         }
@@ -57,8 +57,8 @@ const ForgotPasswordContent = ({ onClose, onSuccess, initialEmail }: ForgotPassw
         if (!emailRegex.test(email.trim())) {
             Toast.show({
                 type: 'error',
-                text1: 'Invalid Email',
-                text2: 'Please enter a valid email address'
+                text1: 'Check your email address',
+                text2: "That doesn't look like a valid email."
             });
             return;
         }
@@ -73,7 +73,7 @@ const ForgotPasswordContent = ({ onClose, onSuccess, initialEmail }: ForgotPassw
         } else {
             Toast.show({
                 type: 'error',
-                text1: 'Error',
+                text1: "Couldn't send the reset link",
                 text2: result.message
             });
         }

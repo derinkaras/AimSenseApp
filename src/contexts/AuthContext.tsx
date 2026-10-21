@@ -103,7 +103,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (!email || !password) {
             Toast.show({
                 type: "error",
-                text1: "Missing Fields",
+                text1: "Missing details",
                 text2: "Please enter your email and password.",
             });
             return false;
@@ -112,8 +112,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (!validateEmail(email)) {
             Toast.show({
                 type: "error",
-                text1: "Invalid Email",
-                text2: "Please enter a valid email format.",
+                text1: "Check your email address",
+                text2: "That doesn't look like a valid email.",
             });
             return false;
         }
@@ -121,7 +121,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (!validatePassword(password)) {
             Toast.show({
                 type: "error",
-                text1: "Weak Password",
+                text1: "Password too short",
                 text2: "Password must be at least 8 characters.",
             });
             return false;
@@ -148,8 +148,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
             Toast.show({
                 type: "success",
-                text1: "Account Created",
-                text2: "Welcome!",
+                text1: "Account created",
+                text2: "Welcome to AimSense.",
             });
 
             setLoading(false);
@@ -159,7 +159,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setError(msg);
             Toast.show({
                 type: "error",
-                text1: "Sign Up Failed",
+                text1: "Couldn't create your account",
                 text2: msg,
             });
             setLoading(false);
@@ -185,7 +185,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
             Toast.show({
                 type: "success",
-                text1: "Login Successful",
+                text1: "Signed in",
                 text2: "Welcome back!",
             });
 
@@ -197,7 +197,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setError(msg);
             Toast.show({
                 type: "error",
-                text1: "Login Failed",
+                text1: "Couldn't sign you in",
                 text2: msg,
             });
             setLoading(false);
@@ -235,8 +235,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
             Toast.show({
                 type: "success",
-                text1: "Logged Out",
-                text2: "See you next time!",
+                text1: "Logged out",
+                text2: "See you next time.",
             });
 
             return { success: true };
