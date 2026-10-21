@@ -25,13 +25,13 @@ export const HELP_TOPICS: Record<HelpTopicKey, HelpTopic> = {
     calibrationIntro: {
         title: "How setup works",
         intro:
-            "Setup teaches the app how your phone and scope line up, so hunt mode can put its aiming mark in exactly the right place. You do it once per rifle.",
+            "Setup teaches the app how your phone and scope line up, so hunt mode can put its aiming mark in exactly the right place. You do it once per rifle and scope.",
         points: [
             "Pick your rifle, its turret click value and the magnification you hunt at, and how the phone sits in its mount.",
             "Line up: zoom until the scope view fills the screen, rotate until the crosshair looks square, and tap the crosshair center. Zooming in a bit further makes holdovers more precise, but leaves less room on screen for long shots.",
             "Measure: with the rifle rested and the crosshair on a sharp mark, turn the elevation turret UP a set number of clicks and tap where the mark moved. The crosshair stays in the middle and the picture moves behind it. That one move tells the app how big one MOA or MIL is on your screen.",
             "Next time you pick that rifle, you only check the green marker is still on your crosshair.",
-            "If you change the scope, its magnification, or how the phone is mounted, choose Recalibrate.",
+            "A saved setup only works with the scope and phone it was made with. If you put a different scope on the rifle, hunt at a different magnification, use a different phone, or change how the phone is mounted, choose Recalibrate.",
         ],
     },
 
@@ -65,7 +65,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     {
         title: "What AimSense does",
         body:
-            "AimSense turns your phone into an aiming aid for your scope. You calibrate once. In hunt mode it works out how much to hold over for the bullet drop (and for wind, if you enter it) and shows it as an orange crosshair on the phone screen. Line your target up under the orange crosshair. Your scope's own crosshair will then sit above the target, and into the wind, by the right amount.",
+            "AimSense turns your phone into an aiming aid for your scope. You calibrate once for each rifle and scope. In hunt mode it works out how much to hold over for the bullet drop (and for wind, if you enter it) and shows it as an orange crosshair on the phone screen. Line your target up under the orange crosshair. Your scope's own crosshair will then sit above the target, and into the wind, by the right amount.",
     },
     {
         title: "How it works",
@@ -138,7 +138,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
 // ==================== BEFORE-YOU-HUNT BRIEFING ====================
 
 /** Bump this whenever the briefing changes in a way users must see again. */
-export const BRIEFING_VERSION = 2;
+export const BRIEFING_VERSION = 3;
 
 export const BRIEFING_TITLE = "Before you hunt";
 
@@ -147,7 +147,7 @@ export const BRIEFING_INTRO = "A quick reminder of what AimSense can and can't d
 export const BRIEFING_POINTS: string[] = [
     "AimSense is an aiming aid. It does not replace your judgment, your knowledge of your rifle, your effective range, or safe shooting practice.",
     "Check your zero with Verify Zero, and confirm your drops with live fire before you rely on them.",
-    "Hunt with the same scope magnification and phone zoom you calibrated with. If anything moved, calibrate again.",
+    "Hunt with the same scope, scope magnification, phone and phone zoom you calibrated with. If any of them changed or moved, calibrate again.",
     "Keep the rifle level. If you see CHECK CANT or LEVEL RIFLE, it is tilted sideways. Roll it back upright before you shoot.",
     "Results depend on your inputs: muzzle velocity, ballistic coefficient, distance and wind.",
     "The app assumes standard air unless you enter conditions, and it cannot measure wind.",

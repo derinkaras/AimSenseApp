@@ -241,7 +241,7 @@ export default function LineUpScreen() {
         {...common}
         stepLabel="Quick check"
         title="Is green on your crosshair?"
-        message={`${gun?.name ?? "Your rifle"} at ${store.scope?.scopeMagnification ?? ""}×. If the phone shifted in its mount, tap the crosshair center to move the marker.`}
+        message={`${gun?.name ?? "Your rifle"} at ${store.scope?.scopeMagnification ?? ""}×. Only use this with the same scope and phone you set it up with. If either changed, go back and choose Recalibrate. If the phone shifted in its mount, tap the crosshair center to move the marker.`}
         primary={{
           label: isStable ? "Start hunting" : "Hold still…",
           onPress: handleConfirm,

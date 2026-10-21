@@ -205,7 +205,8 @@ export default function RifleScreen() {
       <ScrollView className="flex-1 px-5" contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
         <Text className="text-white text-3xl font-bold">Choose your rifle</Text>
         <Text className="text-white/60 text-base mt-2 leading-6">
-          You set up each rifle once. After that, starting a hunt takes seconds.
+          You set up each rifle once. After that, starting a hunt takes seconds, as long as it has the same scope,
+          magnification and phone. If any of those change, tap Recalibrate.
         </Text>
 
         <View className="mt-6 gap-3">
