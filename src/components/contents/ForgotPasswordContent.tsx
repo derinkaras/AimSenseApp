@@ -8,13 +8,15 @@ import authService from "@/services/authService";
 interface ForgotPasswordContentProps {
     onClose?: () => void;
     onSuccess?: () => void;
+    /** Pre-fills the email, e.g. the signed-in user's on the Profile screen */
+    initialEmail?: string;
 }
 
 const RESEND_SECONDS = 60;
 
-const ForgotPasswordContent = ({ onClose, onSuccess }: ForgotPasswordContentProps) => {
+const ForgotPasswordContent = ({ onClose, onSuccess, initialEmail }: ForgotPasswordContentProps) => {
     const [step, setStep] = useState<'email' | 'sent'>('email');
-    const [email, setEmail] = useState('');
+    const [email, setEmail] = useState(initialEmail ?? '');
     const [loading, setLoading] = useState(false);
     const [resendTimer, setResendTimer] = useState(0);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -140,7 +142,7 @@ const ForgotPasswordContent = ({ onClose, onSuccess }: ForgotPasswordContentProp
                     <>
                         {/* Email */}
                         <Text className="text-white/70 text-xs font-semibold mt-5 mb-2">Email</Text>
-                        <View className="flex-row items-center rounded-xl bg-brand-greenDark/60 border border-brand-green/60 px-4">
+                        <View className="h-12 flex-row items-center rounded-xl bg-brand-greenDark/60 border border-brand-green/60 px-4">
                             <Image source={icons.mail} className="size-4 mr-3" tintColor="rgba(255,255,255,0.45)" resizeMode="contain" />
                             <TextInput
                                 value={email}
@@ -154,7 +156,9 @@ const ForgotPasswordContent = ({ onClose, onSuccess }: ForgotPasswordContentProp
                                 textContentType="emailAddress"
                                 returnKeyType="send"
                                 onSubmitEditing={handleSendLink}
-                                className="flex-1 py-3 text-white text-base"
+                                className="flex-1 h-full text-white"
+                                // No platform padding or line height (text-base adds one), so the text sits level with the icon
+                                style={{ fontSize: 16, paddingVertical: 0, includeFontPadding: false, textAlignVertical: "center" }}
                             />
                         </View>
 

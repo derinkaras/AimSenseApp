@@ -23,6 +23,7 @@ import UniversalModal from "@/components/UniversalModal";
 import LogoutContent from "@/components/contents/LogoutContent";
 import PrivacyPolicyContent from "@/components/contents/PrivacyPolicyContent";
 import DeleteAccountContent from "@/components/contents/DeleteAccountContent";
+import ForgotPasswordContent from "@/components/contents/ForgotPasswordContent";
 import TermsOfServiceContent from "@/components/contents/TermsOfServiceContent";
 import GuideSheet from "@/help/GuideSheet";
 import PremiumBadge from "@/components/profile/PremiumBadge";
@@ -31,7 +32,7 @@ import FreeBadge from "@/components/profile/FreeBadge";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { DebugPanel } from "@/components/DebugPanel";
 
-type ActiveModal = "" | "How it works & limits" | "Privacy" | "Terms of Service" | "Logout" | "Delete Account";
+type ActiveModal = "" | "How it works & limits" | "Privacy" | "Terms of Service" | "Reset Password" | "Logout" | "Delete Account";
 type SubscriptionTier = "premium" | "trial" | "free";
 
 const ACCENT = "#0b7f4f"; // brand-greenLight
@@ -215,7 +216,7 @@ const Profile = () => {
 
     // ✅ Open modals with connection check for sensitive operations
     const handleOpenModal = (modalType: ActiveModal) => {
-        if (modalType === "Logout" || modalType === "Delete Account") {
+        if (requiresConnection(modalType)) {
             if (!hasStableConnection) {
                 Toast.show({
                     type: "error",
@@ -298,11 +299,12 @@ const Profile = () => {
         "How it works & limits": { icon: icons.info },
         Privacy: { icon: icons.privacy },
         "Terms of Service": { icon: icons.file },
+        "Reset Password": { icon: icons.lock },
         Logout: { icon: icons.power },
         "Delete Account": { icon: icons.trash },
     }) as Array<[ActiveModal extends "" ? never : Exclude<ActiveModal, "">, { icon: any }]>;
 
-    const requiresConnection = (key: string) => key === "Logout" || key === "Delete Account";
+    const requiresConnection = (key: string) => key === "Reset Password" || key === "Logout" || key === "Delete Account";
 
     // Keep your initial full-screen loader behavior
     if (loading && !firstName && !lastName) {
@@ -382,8 +384,12 @@ const Profile = () => {
 
                 <GuideSheet visible={activeModal === "How it works & limits"} onClose={closeModal} />
 
+                <UniversalModal visible={activeModal === "Reset Password"} onClose={closeModal}>
+                    <ForgotPasswordContent initialEmail={user?.email ?? ""} onClose={closeModal} onSuccess={closeModal} />
+                </UniversalModal>
+
                 <UniversalModal visible={activeModal === "Delete Account"} onClose={closeModal}>
-                    <DeleteAccountContent onCancel={closeModal} onConfirm={handleDeleteAccount} />
+                    <DeleteAccountContent onCancel={closeModal} onConfirm={handleDeleteAccount} email={user?.email} />
                 </UniversalModal>
 
                 <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
