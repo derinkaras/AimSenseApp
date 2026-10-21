@@ -72,7 +72,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const validateEmail = (email: string) =>
         /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-    const validatePassword = (password: string) => password.length >= 6;
+    // Matches the password policy enforced in Firebase Auth (minimum 8 characters)
+    const validatePassword = (password: string) => password.length >= 8;
 
     const clearError = () => setError(null);
 
@@ -121,7 +122,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             Toast.show({
                 type: "error",
                 text1: "Weak Password",
-                text2: "Password must be at least 6 characters.",
+                text2: "Password must be at least 8 characters.",
             });
             return false;
         }

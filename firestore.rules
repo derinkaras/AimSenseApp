@@ -3,23 +3,73 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // users/{uid}: the signed-in user's own profile
-    match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
 
-      // users/{uid}/gunProfiles/{gunId}: that user's rifle profiles
+    // Optional field: absent, or of the given check
+    function optString(data, key, maxLen) {
+      return !(key in data) || (data[key] is string && data[key].size() <= maxLen);
+    }
+    function optNumber(data, key) {
+      return !(key in data) || data[key] is number;
+    }
+
+    // ---------- users/{uid}: the signed-in user's own profile ----------
+    function userKeys() {
+      return ['firstName', 'lastName', 'profilePhotoUri', 'updatedAt'];
+    }
+    function validUser(data) {
+      return optString(data, 'firstName', 100)
+        && optString(data, 'lastName', 100)
+        && optString(data, 'profilePhotoUri', 2048)
+        && optNumber(data, 'updatedAt');
+    }
+
+    // ---------- users/{uid}/gunProfiles/{gunId}: that user's rifles ----------
+    function gunKeys() {
+      return ['name', 'caliber', 'bulletWeightGrains', 'ballisticCoefficient', 'muzzleVelocityFps',
+              'zeroDistance', 'scopeHeight', 'unitSystem', 'gunPhotoUri', 'scopeUnit', 'clickSize',
+              'scopeMagnification', 'createdAt', 'updatedAt'];
+    }
+    function validGun(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.caliber is string && data.caliber.size() > 0 && data.caliber.size() <= 50
+        && data.bulletWeightGrains is number
+        && data.ballisticCoefficient is number
+        && data.muzzleVelocityFps is number
+        && data.zeroDistance is number
+        && data.scopeHeight is number
+        && data.unitSystem in ['IMPERIAL', 'METRIC']
+        && (!('gunPhotoUri' in data) || data.gunPhotoUri == null
+            || (data.gunPhotoUri is string && data.gunPhotoUri.size() <= 2048))
+        && (!('scopeUnit' in data) || data.scopeUnit in ['MOA', 'MIL'])
+        && optNumber(data, 'clickSize')
+        && optNumber(data, 'scopeMagnification')
+        && optNumber(data, 'createdAt')
+        && optNumber(data, 'updatedAt');
+    }
+
+    match /users/{uid} {
+      allow read, delete: if isOwner(uid);
+      // Only known fields can be written. Updates check only the fields they change, so
+      // fields left over from older app versions never block a save.
+      allow create: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(userKeys())
+        && validUser(request.resource.data);
+      allow update: if isOwner(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(userKeys())
+        && validUser(request.resource.data);
+
       match /gunProfiles/{gunId} {
-        allow read, delete: if request.auth != null && request.auth.uid == uid;
-        allow create, update: if request.auth != null
-          && request.auth.uid == uid
-          && request.resource.data.name is string
-          && request.resource.data.caliber is string
-          && request.resource.data.bulletWeightGrains is number
-          && request.resource.data.ballisticCoefficient is number
-          && request.resource.data.muzzleVelocityFps is number
-          && request.resource.data.zeroDistance is number
-          && request.resource.data.scopeHeight is number
-          && request.resource.data.unitSystem in ['IMPERIAL', 'METRIC'];
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && gunId.size() <= 64
+          && request.resource.data.keys().hasOnly(gunKeys())
+          && validGun(request.resource.data);
+        allow update: if isOwner(uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(gunKeys())
+          && validGun(request.resource.data);
       }
     }
 

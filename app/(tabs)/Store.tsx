@@ -11,11 +11,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
+import Toast from "react-native-toast-message";
 import icons from "@/constants/icons";
 
-// TODO: Replace with your actual store URL
-const STORE_URL = "https://your-store-url.com";
-const SUPPORT_EMAIL = "support@aimsense.com";
+// TODO: Set to the real store URL. Left empty, the store button shows a "not open yet"
+// message instead of opening a placeholder domain someone else could register.
+const STORE_URL = "";
+const SUPPORT_EMAIL = "support@aimsense.app";
 
 const ACCENT = "#0b7f4f"; // brand-greenLight
 
@@ -29,6 +31,11 @@ const PERKS = ["Fits all scope sizes", "Universal mounting", "Fast shipping", "Q
 const Store = () => {
     const handleOpenStore = useCallback(async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+        if (!STORE_URL) {
+            Toast.show({ type: "info", text1: "The store isn't open yet", text2: "Check back soon." });
+            return;
+        }
 
         try {
             const canOpen = await Linking.canOpenURL(STORE_URL);
@@ -121,34 +128,12 @@ const Store = () => {
                         activeOpacity={0.85}
                         accessibilityRole="link"
                         accessibilityLabel="Visit Store, opens in your browser"
-                        className="mt-6 rounded-2xl border border-brand-greenLight/70"
-                        style={{
-                            // Soft green glow so the main action stands out
-                            shadowColor: ACCENT,
-                            shadowOffset: { width: 0, height: 4 },
-                            shadowOpacity: 0.45,
-                            shadowRadius: 14,
-                            elevation: 10,
-                        }}
+                        className="mt-6 h-14 rounded-2xl bg-brand-greenLight flex-row items-center justify-center"
                     >
-                        <LinearGradient
-                            colors={["#0b7f4f", "#284a37"]}
-                            start={{ x: 0, y: 0.5 }}
-                            end={{ x: 1, y: 0.5 }}
-                            style={{ flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 12, borderRadius: 15 }}
-                        >
-                            <View className="size-11 rounded-xl bg-brand-black/30 border border-white/15 items-center justify-center mr-3">
-                                <Image source={icons.store} className="size-5" resizeMode="contain" tintColor="#ffffff" />
-                            </View>
-                            <View className="flex-1">
-                                <Text className="text-white text-lg font-bold">Visit Store</Text>
-                                <Text className="text-white/70 text-xs">Opens in your browser</Text>
-                            </View>
-                            <View className="size-9 rounded-full bg-white items-center justify-center">
-                                <Image source={icons.arrowRight} className="size-4" resizeMode="contain" tintColor="#284a37" />
-                            </View>
-                        </LinearGradient>
+                        <Text className="text-white text-base font-bold">Visit Store</Text>
+                        <Image source={icons.arrowRight} className="size-4 ml-2" resizeMode="contain" tintColor="#ffffff" />
                     </TouchableOpacity>
+                    <Text className="text-white/40 text-xs text-center mt-2">Opens in your browser</Text>
 
                     {/* ===================== SUPPORT ===================== */}
                     <TouchableOpacity
