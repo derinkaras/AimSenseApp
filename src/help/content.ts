@@ -28,7 +28,7 @@ export const HELP_TOPICS: Record<HelpTopicKey, HelpTopic> = {
             "Setup teaches the app how your phone and scope line up, so hunt mode can put its aiming mark in exactly the right place. You do it once per rifle.",
         points: [
             "Pick your rifle, its turret click value and the magnification you hunt at, and how the phone sits in its mount.",
-            "Line up: zoom until the scope view fills the screen, rotate until the crosshair looks square, and tap the crosshair center.",
+            "Line up: zoom until the scope view fills the screen, rotate until the crosshair looks square, and tap the crosshair center. Zooming in a bit further makes holdovers more precise, but leaves less room on screen for long shots.",
             "Measure: with the rifle rested and the crosshair on a sharp mark, turn the elevation turret UP a set number of clicks and tap where the mark moved. The crosshair stays in the middle and the picture moves behind it. That one move tells the app how big one MOA or MIL is on your screen.",
             "Next time you pick that rifle, you only check the green marker is still on your crosshair.",
             "If you change the scope, its magnification, or how the phone is mounted, choose Recalibrate.",
@@ -108,7 +108,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     {
         title: "What accuracy depends on",
         bullets: [
-            "Calibration precision. Keep the rifle rested and still while dialing, mark points carefully with the nudge arrows, and use camera zoom so the movement is large on screen.",
+            "Calibration precision. Keep the rifle rested and still while dialing and mark points carefully with the nudge arrows. If the movement is small on screen, the app asks you to dial further so it can be measured precisely.",
             "A solid mount. If the phone or scope shifts, or you change the scope's magnification, recalibrate the rifle.",
             "Honest inputs: muzzle velocity, ballistic coefficient, sight height and zero distance.",
             "A good wind estimate. Wind is usually the biggest source of error at longer range. For a typical .308 load, a 10 mph crosswind moves the bullet about 3 MOA at 400 yards.",
@@ -119,6 +119,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
         bullets: [
             "The orange crosshair marks where your target should sit on the screen. It is not a second aiming point for your scope.",
             "Inside your zero distance the bullet stays near your line of sight, above it for most of that range. Where it is above the line of sight the app shows no holdover, so it never tells you to hold under.",
+            `Cant means the rifle is tilted sideways instead of sitting upright. Gravity always pulls straight down, so a tilted rifle puts the shot off to the side and low, more so at long range. The orange crosshair corrects small tilts. Above ${CANT_WARN_DEG}° you'll see CHECK CANT, and above ${CANT_BAD_DEG}° LEVEL RIFLE. Roll the rifle back upright until the banner clears.`,
+            "When you tap Confirm, the app records the uphill or downhill angle to that target. You can lower the rifle to type the distance. For a different target, tap New Target and aim again.",
             "At long range the orange crosshair can move past the edge of the screen. The app warns you. Use your turret instead.",
             "Use Verify Zero to check that the green crosshair still sits on your scope's crosshair. If it has drifted, recalibrate the rifle.",
         ],
@@ -136,7 +138,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
 // ==================== BEFORE-YOU-HUNT BRIEFING ====================
 
 /** Bump this whenever the briefing changes in a way users must see again. */
-export const BRIEFING_VERSION = 1;
+export const BRIEFING_VERSION = 2;
 
 export const BRIEFING_TITLE = "Before you hunt";
 
@@ -146,6 +148,7 @@ export const BRIEFING_POINTS: string[] = [
     "AimSense is an aiming aid. It does not replace your judgment, your knowledge of your rifle, your effective range, or safe shooting practice.",
     "Check your zero with Verify Zero, and confirm your drops with live fire before you rely on them.",
     "Hunt with the same scope magnification and phone zoom you calibrated with. If anything moved, calibrate again.",
+    "Keep the rifle level. If you see CHECK CANT or LEVEL RIFLE, it is tilted sideways. Roll it back upright before you shoot.",
     "Results depend on your inputs: muzzle velocity, ballistic coefficient, distance and wind.",
     "The app assumes standard air unless you enter conditions, and it cannot measure wind.",
     "Not included: humidity, spin drift, changing wind and moving targets.",

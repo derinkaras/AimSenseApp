@@ -5,6 +5,8 @@
 // So: crosshair on a sharp mark, dial UP a known number of clicks, tap where the mark went,
 // dial back. That one move gives the pixels per MOA/MIL and the "up" direction on screen
 // (windage is the same scale at right angles, so it needs no measuring).
+// If the move comes out short on screen, the user is asked to keep dialing (see
+// getDialMultiple) so the marks' pixel error counts for less.
 
 import React, { useCallback, useState } from "react";
 import { Text, View } from "react-native";
@@ -15,7 +17,9 @@ import * as Haptics from "expo-haptics";
 import {
   useCalibrationStore,
   getCalibrationClickCount,
+  getDialMultiple,
   getTargetMovementLabel,
+  TARGET_MEASURED_MOVE_PX,
   nudgePoint,
   type CameraViewSize,
   type ElevationProblem,
@@ -28,7 +32,7 @@ import { useCameraContext } from "./_layout";
 
 const SCREEN_ID = "measure";
 
-type Phase = "dial" | "tap" | "dialBack";
+type Phase = "dial" | "dialMore" | "tap" | "dialBack";
 
 const PROBLEM_TEXT: Record<ElevationProblem, (movedPx: number) => string> = {
   tooSmall: (px) =>
@@ -45,6 +49,10 @@ export default function MeasureScreen() {
   const startSession = useHuntStore((s) => s.startSession);
 
   const [phase, setPhase] = useState<Phase>("dial");
+  // How many times the base movement (10 MOA / 3 MIL) is dialed in total
+  const [dialMultiple, setDialMultiple] = useState(1);
+  // The accepted move was still short on screen (the scope can't dial any further for it)
+  const [shortMove, setShortMove] = useState(false);
   const [mark, setMark] = useState<PixelPoint | null>(null);
   const [problem, setProblem] = useState<{ kind: ElevationProblem; movedPx: number } | null>(null);
   const [viewSize, setViewSize] = useState<CameraViewSize | null>(null);
@@ -60,6 +68,8 @@ export default function MeasureScreen() {
 
   const clicks = getCalibrationClickCount(scope.scopeUnit, scope.clickSize);
   const movement = getTargetMovementLabel(scope.scopeUnit);
+  const totalClicks = clicks * dialMultiple;
+  const totalMovement = getTargetMovementLabel(scope.scopeUnit, dialMultiple);
   const showCamera = !!permission?.granted && activeScreen === SCREEN_ID;
   // A sideways or downward move means the turret has to be dialed back before trying again
   const mustRedial = problem !== null && problem.kind !== "tooSmall";
@@ -75,10 +85,20 @@ export default function MeasureScreen() {
 
   const handleCheckMark = () => {
     if (!mark) return;
-    const check = store.recordElevation(mark);
+    const check = store.recordElevation(mark, dialMultiple);
     if (check.ok) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setProblem(null);
+      const needed = getDialMultiple(check.pxPerUnit, clicks * scope.clickSize);
+      if (needed > dialMultiple) {
+        // Too short to measure precisely: dial further and tap the mark again
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setDialMultiple(needed);
+        setMark(null);
+        setPhase("dialMore");
+        return;
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShortMove(check.movedPx < TARGET_MEASURED_MOVE_PX);
       setPhase("dialBack");
     } else {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -89,6 +109,8 @@ export default function MeasureScreen() {
   const handleStartOver = () => {
     setProblem(null);
     setMark(null);
+    setDialMultiple(1);
+    setShortMove(false);
     setPhase("dial");
   };
 
@@ -143,6 +165,22 @@ export default function MeasureScreen() {
     );
   }
 
+  if (phase === "dialMore") {
+    const extraClicks = totalClicks - clicks * (dialMultiple - 1);
+    return (
+      <CalibrationStage
+        {...common}
+        title={`Dial ${extraClicks} more clicks UP`}
+        message={`The move is small on screen, so dialing further measures it more precisely. Without moving the rifle, keep turning the elevation turret UP another ${extraClicks} clicks (${totalMovement} in total).`}
+        primary={{ label: "Done dialing", onPress: () => setPhase("tap") }}
+        onBack={() => {
+          setDialMultiple(1);
+          setPhase("tap");
+        }}
+      />
+    );
+  }
+
   if (phase === "tap") {
     return (
       <CalibrationStage
@@ -169,10 +207,18 @@ export default function MeasureScreen() {
   return (
     <CalibrationStage
       {...common}
-      title={`Dial back ${clicks} clicks`}
+      title={`Dial back ${totalClicks} clicks`}
       message="Turn the elevation turret back DOWN to zero. When your mark is back under the green crosshair, start hunting."
       primary={{ label: "Start hunting", onPress: handleFinish, busy }}
       onBack={() => setPhase("tap")}
-    />
+    >
+      {shortMove && (
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-white/45 text-xs leading-4">
+          {`Your scope picture is a little small on screen. This calibration is fine to use, no need to redo it: the difference only shows on long shots (inside about ${
+            gun?.unitSystem === "IMPERIAL" ? "300 yards it is usually an inch" : "275 meters it is usually 2.5 cm"
+          } or less). Next time you calibrate, zooming the camera in a bit more helps at long range.`}
+        </Text>
+      )}
+    </CalibrationStage>
   );
 }

@@ -3,7 +3,14 @@
 // ============================================================
 // No React, no Expo: plain functions that are easy to read and test.
 
-import { MAX_UP_AXIS_ANGLE_DEG, MIN_MEASURED_MOVE_PX, TARGET_MIL_MOVEMENT, TARGET_MOA_MOVEMENT } from "./constants";
+import {
+    MAX_DIAL_MULTIPLE,
+    MAX_UP_AXIS_ANGLE_DEG,
+    MIN_MEASURED_MOVE_PX,
+    TARGET_MEASURED_MOVE_PX,
+    TARGET_MIL_MOVEMENT,
+    TARGET_MOA_MOVEMENT,
+} from "./constants";
 import type { PixelPoint, ScopeUnit, UnitVector } from "./types";
 
 /** Clamp a value between min and max */
@@ -13,7 +20,7 @@ export function clampValue(v: number, min: number, max: number): number {
 
 /**
  * How many clicks the user must dial so the scope moves the target angle
- * (10 MOA or 3 MIL), based on the scope unit and click size.
+ * (10 MOA or 3 MIL, times `multiple`), based on the scope unit and click size.
  *
  * Examples:
  * - ¼ MOA (0.25): 10 / 0.25 = 40 clicks
@@ -23,9 +30,20 @@ export function clampValue(v: number, min: number, max: number): number {
  * - 0.2 MIL: 3 / 0.2 = 15 clicks
  * - 0.05 MIL: 3 / 0.05 = 60 clicks
  */
-export function getCalibrationClickCount(scopeUnit: ScopeUnit, clickSize: number): number {
+export function getCalibrationClickCount(scopeUnit: ScopeUnit, clickSize: number, multiple = 1): number {
     const targetMovement = scopeUnit === "MOA" ? TARGET_MOA_MOVEMENT : TARGET_MIL_MOVEMENT;
-    return Math.round(targetMovement / clickSize);
+    return Math.round(targetMovement / clickSize) * multiple;
+}
+
+/**
+ * How many times the base movement to dial in total so the measured move spans at least
+ * TARGET_MEASURED_MOVE_PX, given the scale measured so far. Between 1 and MAX_DIAL_MULTIPLE.
+ * `baseUnits` is the base movement in the scope's unit (10 MOA or 3 MIL).
+ */
+export function getDialMultiple(pxPerUnit: number, baseUnits: number): number {
+    if (!(pxPerUnit > 0) || !(baseUnits > 0)) return 1;
+    const needed = Math.ceil(TARGET_MEASURED_MOVE_PX / (pxPerUnit * baseUnits) - 1e-9);
+    return clampValue(needed, 1, MAX_DIAL_MULTIPLE);
 }
 
 /** Angular movement (in scope units) produced by a number of clicks. */

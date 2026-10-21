@@ -91,8 +91,11 @@ interface CalibrationActions {
     beginRecheck: (gun: GunProfile, saved: CalibrationResult) => Promise<void>;
     /** Line Up confirmed. */
     captureLineUp: (capture: LineUpCapture) => void;
-    /** Measure: the user tapped where the mark went. Stored only when the check passes. */
-    recordElevation: (markPx: PixelPoint) => ElevationCheck;
+    /**
+     * Measure: the user tapped where the mark went after dialing `dialMultiple` times the base
+     * movement. Stored only when the check passes.
+     */
+    recordElevation: (markPx: PixelPoint, dialMultiple?: number) => ElevationCheck;
     /** Build the result, save it for the rifle, and return it for hunt mode. */
     finish: () => Promise<CalibrationResult>;
     /** Wipe everything (after a hunt ends, or to start over). */
@@ -139,12 +142,12 @@ export const useCalibrationStore = create<CalibrationStore>((set, get) => ({
 
     captureLineUp: (capture) => set({ ...capture }),
 
-    recordElevation: (markPx) => {
+    recordElevation: (markPx, dialMultiple = 1) => {
         const { scopeCenterPx, scope } = get();
         if (!scopeCenterPx || !scope) {
             return { ok: false, problem: "tooSmall", movedPx: 0 };
         }
-        const unitsDialed = getCalibrationClickCount(scope.scopeUnit, scope.clickSize) * scope.clickSize;
+        const unitsDialed = getCalibrationClickCount(scope.scopeUnit, scope.clickSize, dialMultiple) * scope.clickSize;
         const check = evaluateElevationMove(scopeCenterPx, markPx, unitsDialed);
         if (check.ok) {
             set({ elevationEndPx: markPx, pxPerUnit: check.pxPerUnit, upAxis: check.upAxis });

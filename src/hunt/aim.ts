@@ -63,8 +63,8 @@ export function rifleCantDeg(cantNow: number, pitch0: number): number {
 export const CANT_DEAD_ZONE_DEG = 0.5;
 
 // Cant warnings (degrees of unfiltered cant)
-export const CANT_WARN_DEG = 3;
-export const CANT_BAD_DEG = 6;
+export const CANT_WARN_DEG = 5;
+export const CANT_BAD_DEG = 10;
 
 // Smoothing for the cant used to rotate the holdover (exponential moving average)
 const CANT_FILTER_KEEP = 0.85; // weight of the previous filtered value

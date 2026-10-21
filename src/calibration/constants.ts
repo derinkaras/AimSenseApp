@@ -31,6 +31,16 @@ export const TARGET_MIL_MOVEMENT = 3; // 3 MIL total movement for MIL scopes
 // a 1 px tap error would already change every holdover by more than ~7%.
 export const MIN_MEASURED_MOVE_PX = 15;
 
+// Every pixel the marks are off becomes holdover error, so the measured move should span
+// at least this many pixels (then a 1 px error is about 1/8 MOA). When the first move comes
+// out shorter, the user is asked to keep dialing instead of zooming in: more zoom would
+// leave less room on screen for long-range holdovers.
+export const TARGET_MEASURED_MOVE_PX = 80;
+
+// Dial at most this many times the movement above (20 MOA / 6 MIL), which hunting scopes
+// can dial up from their zero.
+export const MAX_DIAL_MULTIPLE = 2;
+
 // The dialed move must point within this angle of straight up on screen. Further off,
 // the wrong turret (or the wrong direction) was turned.
 export const MAX_UP_AXIS_ANGLE_DEG = 30;

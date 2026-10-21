@@ -280,6 +280,11 @@ export default function LineUpScreen() {
           accessibilityLabel="Camera zoom"
         />
       </SliderRow>
+      {!center && (
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-white/45 text-xs leading-4">
+          Tip: zooming in a bit further makes holdovers more precise, but leaves less room on screen for long shots.
+        </Text>
+      )}
       <SliderRow label="Rotate" value={`${rotation > 0 ? "+" : ""}${rotation.toFixed(1)}°`} stacked={layout.isLandscapeMode}>
         <FineButton label="−" accessibilityLabel="Rotate counterclockwise" onPress={() => setRotation((r) => clampValue(snapToHalfDegree(r - 0.5), -MAX_ROTATION, MAX_ROTATION))} />
         <Slider

@@ -21,7 +21,7 @@ export function getClickSizeLabel(unit: ScopeUnit, clickSize: number): string {
     return option?.label ?? `${clickSize} ${unit}`;
 }
 
-/** The angular movement the user is asked to dial, e.g. "10 MOA". */
-export function getTargetMovementLabel(scopeUnit: ScopeUnit): string {
-    return scopeUnit === "MOA" ? `${TARGET_MOA_MOVEMENT} MOA` : `${TARGET_MIL_MOVEMENT} MIL`;
+/** The angular movement the user is asked to dial, e.g. "10 MOA" (or "20 MOA" with multiple 2). */
+export function getTargetMovementLabel(scopeUnit: ScopeUnit, multiple = 1): string {
+    return scopeUnit === "MOA" ? `${TARGET_MOA_MOVEMENT * multiple} MOA` : `${TARGET_MIL_MOVEMENT * multiple} MIL`;
 }

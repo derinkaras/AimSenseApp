@@ -2,12 +2,15 @@
 // src/calibration/summary.ts - Console summary of a finished calibration
 // ============================================================
 
-import { getCalibrationClickCount } from "./math";
 import type { CalibrationResult } from "./types";
 
 /** Print a readable calibration summary (debug aid, no side effects). */
 export function logCalibrationSummary(result: CalibrationResult): void {
-    const clicks = getCalibrationClickCount(result.scopeUnit, result.clickSize);
+    // The dialed amount varies (the user may have been asked to dial further), so recover it
+    const unitsDialed =
+        Math.hypot(result.elevationEndPx.x - result.scopeCenterPx.x, result.elevationEndPx.y - result.scopeCenterPx.y) /
+        result.pxPerUnit;
+    const clicks = Math.round(unitsDialed / result.clickSize);
     const tiltDeg = (Math.atan2(result.upAxis.x, -result.upAxis.y) * 180) / Math.PI;
 
     console.log(`

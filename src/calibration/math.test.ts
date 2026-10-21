@@ -5,8 +5,10 @@ import {
     clicksToUnits,
     evaluateElevationMove,
     getCalibrationClickCount,
+    getDialMultiple,
     rightAxisFromUp,
 } from "./math";
+import { MAX_DIAL_MULTIPLE, TARGET_MEASURED_MOVE_PX } from "./constants";
 
 describe("clampValue", () => {
     it("passes values already inside the range through unchanged", () => {
@@ -65,6 +67,33 @@ describe("calculatePxPerUnit", () => {
     it("returns 0 when clicks dial out to 0 units, instead of dividing by zero", () => {
         expect(calculatePxPerUnit(100, 0, 0.25)).toBe(0);
         expect(Number.isFinite(calculatePxPerUnit(100, 0, 0.25))).toBe(true);
+    });
+});
+
+describe("getCalibrationClickCount with a multiple", () => {
+    it("multiplies the base click count", () => {
+        expect(getCalibrationClickCount("MOA", 0.25, 2)).toBe(80);
+        expect(getCalibrationClickCount("MIL", 0.1, 2)).toBe(60);
+    });
+});
+
+describe("getDialMultiple", () => {
+    it("keeps the base movement when the move is already large on screen", () => {
+        expect(getDialMultiple(TARGET_MEASURED_MOVE_PX / 10, 10)).toBe(1);
+        expect(getDialMultiple(12, 10)).toBe(1);
+    });
+
+    it("asks for more dialing when the move is short", () => {
+        expect(getDialMultiple(5, 10)).toBe(2); // 50 px -> 100 px
+    });
+
+    it("never asks for more than MAX_DIAL_MULTIPLE", () => {
+        expect(getDialMultiple(1, 10)).toBe(MAX_DIAL_MULTIPLE);
+    });
+
+    it("falls back to 1 for unusable input", () => {
+        expect(getDialMultiple(0, 10)).toBe(1);
+        expect(getDialMultiple(NaN, 10)).toBe(1);
     });
 });
 
