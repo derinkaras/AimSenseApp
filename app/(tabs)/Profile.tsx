@@ -19,7 +19,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNetworkStatus } from "@/contexts/NetworkStatusContext";
 import EditNameModal from "@/components/EditNameModal";
 import { userProfileApi } from "@/services/userProfile";
-import { SignInCancelled, socialProviderOf } from "@/services/socialAuth";
 import UniversalModal from "@/components/UniversalModal";
 import LogoutContent from "@/components/contents/LogoutContent";
 import PrivacyPolicyContent from "@/components/contents/PrivacyPolicyContent";
@@ -228,8 +227,7 @@ const Profile = () => {
         setActiveModal(modalType);
     };
 
-    // password is null for Apple / Google accounts (they confirm in the provider's sheet)
-    const handleDeleteAccount = async (password: string | null) => {
+    const handleDeleteAccount = async (password: string) => {
         try {
             if (!user) return;
 
@@ -255,8 +253,6 @@ const Profile = () => {
             setActiveModal("");
             await logout();
         } catch (error) {
-            // Closing the Apple / Google sheet just leaves the dialog open
-            if (error instanceof SignInCancelled) return;
             const message = error instanceof Error ? error.message : "Failed to delete account";
             console.log("handleDeleteAccount error:", message);
             Toast.show({
@@ -387,11 +383,7 @@ const Profile = () => {
                 <GuideSheet visible={activeModal === "How it works & limits"} onClose={closeModal} />
 
                 <UniversalModal visible={activeModal === "Delete Account"} onClose={closeModal}>
-                    <DeleteAccountContent
-                        onCancel={closeModal}
-                        onConfirm={handleDeleteAccount}
-                        provider={socialProviderOf(user)}
-                    />
+                    <DeleteAccountContent onCancel={closeModal} onConfirm={handleDeleteAccount} />
                 </UniversalModal>
 
                 <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>

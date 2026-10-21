@@ -18,14 +18,6 @@ import {
 import { auth } from "@/services/firebase";
 import { getAuthErrorMessage } from "@/utils/authErrors";
 import { apiCache } from "@/services/apiCache";
-import { userProfileApi } from "@/services/userProfile";
-import {
-    SignInCancelled,
-    signInWithApple,
-    signInWithGoogle,
-    signOutSocial,
-    type SocialProvider,
-} from "@/services/socialAuth";
 
 type AuthContextType = {
     user: User | null;
@@ -42,8 +34,6 @@ type AuthContextType = {
         email: string,
         password: string
     ) => Promise<{ success: boolean } | undefined>;
-    /** Sign in (or sign up) with Apple or Google. Cancelling the sheet returns success: false quietly. */
-    socialSignIn: (provider: SocialProvider) => Promise<{ success: boolean }>;
     logout: () => Promise<{ success: boolean }>;
     // Helper to check if we can reach the auth server
     checkAuthConnectivity: () => Promise<boolean>;
@@ -214,51 +204,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
-    // 🍎 / G  SOCIAL SIGN-IN (also creates the account the first time)
-    const socialSignIn = async (provider: SocialProvider): Promise<{ success: boolean }> => {
-        try {
-            clearError();
-            setLoading(true);
-
-            const result = provider === "apple.com" ? await signInWithApple() : await signInWithGoogle();
-            setUser(result.user);
-
-            // Save the name the provider shared so the user doesn't have to type it.
-            // Apple only sends it on the very first sign-in, so this is the one chance.
-            if (result.isNewUser && (result.firstName || result.lastName)) {
-                try {
-                    await userProfileApi.createProfile({
-                        ...(result.firstName && { firstName: result.firstName }),
-                        ...(result.lastName && { lastName: result.lastName }),
-                    });
-                } catch (profileError) {
-                    console.log("Saving provider name failed (non-fatal):", profileError);
-                }
-            }
-
-            Toast.show({
-                type: "success",
-                text1: result.isNewUser ? "Account Created" : "Login Successful",
-                text2: result.isNewUser ? "Welcome!" : "Welcome back!",
-            });
-            setLoading(false);
-            return { success: true };
-        } catch (e: any) {
-            setLoading(false);
-            if (e instanceof SignInCancelled) return { success: false };
-
-            console.log("Social sign-in error:", e?.code, e?.message);
-            const msg = getAuthErrorMessage(e);
-            setError(msg);
-            Toast.show({
-                type: "error",
-                text1: "Sign In Failed",
-                text2: msg,
-            });
-            return { success: false };
-        }
-    };
-
     // 🚪 LOGOUT - Always clears local state, attempts Firebase signout
     const logout = async (): Promise<{ success: boolean }> => {
         try {
@@ -268,7 +213,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             // ✅ Try to sign out from Firebase (best effort)
             try {
                 await signOut(auth);
-                await signOutSocial();
                 console.log("Firebase signOut successful");
             } catch (signOutError: any) {
                 // Log but don't fail - we'll clear local state anyway
@@ -316,7 +260,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 clearError,
                 signup,
                 login,
-                socialSignIn,
                 logout,
                 checkAuthConnectivity,
             }}

@@ -9,8 +9,6 @@ import UniversalModal from "@/components/UniversalModal";
 import ForgotPasswordContent from "@/components/contents/ForgotPasswordContent";
 import PrivacyPolicyContent from "@/components/contents/PrivacyPolicyContent";
 import TermsOfServiceContent from "@/components/contents/TermsOfServiceContent";
-import SocialSignInButtons from "@/components/SocialSignInButtons";
-import type { SocialProvider } from "@/services/socialAuth";
 
 const Authentication = () => {
     const router = useRouter();
@@ -19,20 +17,8 @@ const Authentication = () => {
     const [isSignUp, setIsSignUp] = useState(true);
     const [showForgotPasswordModal, setForgotPasswordModal] = useState(false);
     const [legalModal, setLegalModal] = useState<"privacy" | "terms" | null>(null);
-    const [socialBusy, setSocialBusy] = useState<SocialProvider | null>(null);
 
-    const { signup, login, socialSignIn, loading, error, clearError } = useAuth();
-
-    // Apple / Google create the account on first use, so this covers sign up and sign in
-    const handleSocialSignIn = async (provider: SocialProvider) => {
-        if (loading || socialBusy) return;
-        setSocialBusy(provider);
-        const res = await socialSignIn(provider);
-        setSocialBusy(null);
-        if (res.success) {
-            router.replace("/(tabs)/Home");
-        }
-    };
+    const { signup, login, loading, error, clearError } = useAuth();
 
     const handleSubmit = async () => {
         if (loading) return;
@@ -121,7 +107,7 @@ const Authentication = () => {
               className={`mt-6 rounded-xl bg-brand-green py-5 ${
                 loading ? 'opacity-60' : 'active:bg-brand-greenLight'
               }`}>
-              {loading && !socialBusy ? (
+              {loading ? (
                 <ActivityIndicator color="#ffffff" />
               ) : (
                 <Text className="text-center text-2xl font-semibold text-white">
@@ -129,8 +115,6 @@ const Authentication = () => {
                 </Text>
               )}
             </TouchableOpacity>
-
-            <SocialSignInButtons onSignIn={handleSocialSignIn} busy={socialBusy} />
 
             <View className="items-center justify-center gap-4">
               <View className="mt-6 flex-row items-center justify-center gap-2">
@@ -155,7 +139,7 @@ const Authentication = () => {
               }
             </View>
 
-            {/* Agreement (shown at sign up and sign in, since Apple / Google can create an account) */}
+            {/* Agreement */}
             <Text className="mt-8 text-white/45 text-xs text-center leading-5">
               By continuing, you agree to the{" "}
               <Text className="text-brand-greenLight" onPress={() => setLegalModal("terms")}>Terms of Service</Text>
