@@ -43,6 +43,7 @@ import { getSheetFrame } from "@/components/sheetFrame";
 import { useGunProfilesDirty } from "@/contexts/GunProfilesDirtyContext";
 import icons from "@/constants/icons";
 import type { GunProfile } from "@/types/apiTypes";
+import { getRifleProblems } from "@/hunt/rifleData";
 import HelpButton from "@/help/HelpButton";
 import InfoPopup from "@/help/InfoPopup";
 import { hasSeenCalibrationIntro, markCalibrationIntroSeen } from "@/help/helpStorage";
@@ -118,7 +119,7 @@ export default function RifleScreen() {
 
       // "Recalibrate" from hunt mode lands here with the rifle to set up
       const gunToSetUp = setupGunId && !autoOpened.current ? list.find((g) => g.id === setupGunId) : undefined;
-      if (gunToSetUp) {
+      if (gunToSetUp && getRifleProblems(gunToSetUp).length === 0) {
         autoOpened.current = true;
         openSetup(gunToSetUp, savedResults);
       }
@@ -142,7 +143,17 @@ export default function RifleScreen() {
     navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: "(tabs)" }] }));
   };
 
+  // A rifle with missing or impossible values would give wrong (or no) holdovers: finish it first
+  const editRifle = (gun: GunProfile) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    router.push({ pathname: "/(pages)/AddGunProfile", params: { id: String(gun.id) } });
+  };
+
   const handleRiflePress = async (gun: GunProfile) => {
+    if (getRifleProblems(gun).length > 0) {
+      editRifle(gun);
+      return;
+    }
     const result = gun.id ? saved[gun.id] : null;
     if (!result) {
       openSetup(gun, saved);
@@ -245,9 +256,15 @@ export default function RifleScreen() {
           )}
 
           {guns?.map((gun) => {
-            const ready = !!(gun.id && saved[gun.id]);
+            const problems = getRifleProblems(gun);
+            const incomplete = problems.length > 0;
+            const ready = !incomplete && !!(gun.id && saved[gun.id]);
             const gunScope = scopeOf(gun);
-            const details = [gun.caliber, gunScope && getClickSizeLabel(gunScope.scopeUnit, gunScope.clickSize), gunScope && `${gunScope.scopeMagnification}×`]
+            const details = incomplete
+              ? problems.length === 1
+                ? problems[0].message
+                : `${problems.length} details missing. Tap to finish.`
+              : [gun.caliber, gunScope && getClickSizeLabel(gunScope.scopeUnit, gunScope.clickSize), gunScope && `${gunScope.scopeMagnification}×`]
               .filter(Boolean)
               .join("  ·  ");
             return (
@@ -256,7 +273,7 @@ export default function RifleScreen() {
                   onPress={() => handleRiflePress(gun)}
                   disabled={starting !== null}
                   accessibilityRole="button"
-                  accessibilityLabel={`${gun.name}, ${ready ? "ready" : "needs setup"}`}
+                  accessibilityLabel={`${gun.name}, ${incomplete ? "details missing" : ready ? "ready" : "needs setup"}`}
                   className="flex-row items-center p-4"
                 >
                   {gun.gunPhotoUri ? (
@@ -270,7 +287,7 @@ export default function RifleScreen() {
                     <Text className="text-white text-base font-semibold" numberOfLines={1}>
                       {gun.name}
                     </Text>
-                    <Text className="text-white/50 text-sm mt-0.5" numberOfLines={1}>
+                    <Text className={cn("text-sm mt-0.5", incomplete ? "text-amber-200/80" : "text-white/50")} numberOfLines={1}>
                       {details}
                     </Text>
                   </View>
@@ -280,11 +297,17 @@ export default function RifleScreen() {
                     <View
                       className={cn(
                         "px-3 py-1.5 rounded-full",
-                        ready ? "bg-brand-greenLight/20 border border-brand-greenLight/50" : "bg-white/5 border border-white/15"
+                        incomplete
+                          ? "bg-amber-500/10 border border-amber-500/40"
+                          : ready
+                            ? "bg-brand-greenLight/20 border border-brand-greenLight/50"
+                            : "bg-white/5 border border-white/15"
                       )}
                     >
-                      <Text className={cn("text-xs font-bold", ready ? "text-brand-greenLight" : "text-white/70")}>
-                        {ready ? "READY" : "SET UP"}
+                      <Text
+                        className={cn("text-xs font-bold", incomplete ? "text-amber-200" : ready ? "text-brand-greenLight" : "text-white/70")}
+                      >
+                        {incomplete ? "FINISH" : ready ? "READY" : "SET UP"}
                       </Text>
                     </View>
                   )}

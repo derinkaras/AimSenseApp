@@ -23,6 +23,7 @@ import { gunProfileApi } from "@/services/gunProfile";
 import { useGunProfilesDirty } from "@/contexts/GunProfilesDirtyContext";
 import { ClickValuePicker, MagnificationField } from "@/calibration/ScopeSetupFields";
 import type { ScopeUnit } from "@/calibration";
+import { getRifleProblems, parseRifleNumber } from "@/hunt/rifleData";
 
 type UnitSystem = "METRIC" | "IMPERIAL";
 
@@ -54,6 +55,8 @@ const AddGunProfile = () => {
     const [loadingExisting, setLoadingExisting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [focusedField, setFocusedField] = useState<string | null>(null);
+    // Fields flagged on the last save attempt (cleared as soon as the field is edited)
+    const [badFields, setBadFields] = useState<Record<string, string>>({});
 
     // Load existing profile in edit mode
     useEffect(() => {
@@ -92,8 +95,8 @@ const AddGunProfile = () => {
         if (status !== "granted") {
             Toast.show({
                 type: "error",
-                text1: "Permission denied",
-                text2: "Photo library access is required to add a rifle photo.",
+                text1: "Photo access needed",
+                text2: "Allow photo access in Settings to add a rifle photo.",
             });
             return;
         }
@@ -112,36 +115,35 @@ const AddGunProfile = () => {
     const handleSubmit = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-        if (!name.trim() || !caliber.trim()) {
-            setError("Name and caliber are required.");
-            return;
-        }
-
-        const bulletWeightNum = Number(bulletWeightGrains);
-        const ballisticCoefNum = Number(ballisticCoefficient);
-        const muzzleVelocityNum = Number(muzzleVelocityFps);
-        const zeroDistanceNum = Number(zeroDistance);
-        const scopeHeightNum = Number(scopeHeight);
-
-        if (
-            isNaN(bulletWeightNum) ||
-            isNaN(ballisticCoefNum) ||
-            isNaN(muzzleVelocityNum) ||
-            isNaN(zeroDistanceNum) ||
-            isNaN(scopeHeightNum)
-        ) {
-            setError("All numeric fields must contain valid numbers.");
-            return;
-        }
-
-        const payload = {
+        // Empty fields are null (never 0), so a rifle can't be saved half filled in
+        const values = {
             name: name.trim(),
             caliber: caliber.trim(),
-            bulletWeightGrains: bulletWeightNum,
-            ballisticCoefficient: ballisticCoefNum,
-            muzzleVelocityFps: muzzleVelocityNum,
-            zeroDistance: zeroDistanceNum,
-            scopeHeight: scopeHeightNum,
+            bulletWeightGrains: parseRifleNumber(bulletWeightGrains),
+            ballisticCoefficient: parseRifleNumber(ballisticCoefficient),
+            muzzleVelocityFps: parseRifleNumber(muzzleVelocityFps),
+            zeroDistance: parseRifleNumber(zeroDistance),
+            scopeHeight: parseRifleNumber(scopeHeight),
+            unitSystem,
+        };
+        const problems = getRifleProblems(values);
+        if (problems.length > 0) {
+            // Shown under each field, plus a count next to the Save button
+            setBadFields(Object.fromEntries(problems.map((p) => [p.field, p.message])));
+            setError(null);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            return;
+        }
+        setBadFields({});
+
+        const payload = {
+            name: values.name,
+            caliber: values.caliber,
+            bulletWeightGrains: values.bulletWeightGrains!,
+            ballisticCoefficient: values.ballisticCoefficient!,
+            muzzleVelocityFps: values.muzzleVelocityFps!,
+            zeroDistance: values.zeroDistance!,
+            scopeHeight: values.scopeHeight!,
             unitSystem,
             gunPhotoUri,
             scopeUnit: scopeUnit ?? undefined,
@@ -163,7 +165,8 @@ const AddGunProfile = () => {
 
             Toast.show({
                 type: "success",
-                text1: isEdit ? "Profile updated" : "Profile created",
+                text1: isEdit ? "Rifle updated" : "Rifle saved",
+                text2: payload.name,
             });
 
             router.back();
@@ -198,7 +201,7 @@ const AddGunProfile = () => {
 
                         Toast.show({
                             type: "success",
-                            text1: "Profile deleted",
+                            text1: "Rifle deleted",
                         });
 
                         router.back();
@@ -229,12 +232,14 @@ const AddGunProfile = () => {
         }
     ) => {
         const focused = focusedField === key;
+        const problem = badFields[key];
+        const bad = !!problem;
         return (
             <View className="mb-3.5">
                 <Text className="text-white/70 text-xs font-semibold mb-1.5">{label}</Text>
                 <View
                     className={`flex-row items-center rounded-xl border px-4 bg-brand-black/60 ${
-                        focused ? "border-brand-greenLight" : "border-brand-green/60"
+                        focused ? "border-brand-greenLight" : bad ? "border-red-500/70" : "border-brand-green/60"
                     }`}
                 >
                     <TextInput
@@ -242,14 +247,27 @@ const AddGunProfile = () => {
                         placeholder={options?.placeholder}
                         placeholderTextColor="rgba(255,255,255,0.3)"
                         value={value}
-                        onChangeText={onChangeText}
+                        onChangeText={(text) => {
+                            onChangeText(text);
+                            if (bad) {
+                                setBadFields((prev) => {
+                                    const next = { ...prev };
+                                    delete next[key];
+                                    return next;
+                                });
+                            }
+                        }}
                         keyboardType={options?.keyboardType || "default"}
                         onFocus={() => setFocusedField(key)}
                         onBlur={() => setFocusedField((f) => (f === key ? null : f))}
                     />
                     {options?.suffix && <Text className="text-white/40 text-sm font-semibold ml-2">{options.suffix}</Text>}
                 </View>
-                {options?.helperText && <Text className="text-xs text-white/40 mt-1.5">{options.helperText}</Text>}
+                {bad ? (
+                    <Text className="text-xs text-red-300 mt-1.5">{problem}</Text>
+                ) : (
+                    options?.helperText && <Text className="text-xs text-white/40 mt-1.5">{options.helperText}</Text>
+                )}
             </View>
         );
     };
@@ -399,17 +417,17 @@ const AddGunProfile = () => {
                         {/* Ammo & ballistics */}
                         {sectionLabel("AMMO & BALLISTICS")}
                         <View className="rounded-2xl bg-brand-greenDark/60 border border-brand-green/50 p-4 pb-0.5">
-                            {renderInput("weight", "Bullet weight", bulletWeightGrains, setBulletWeightGrains, {
+                            {renderInput("bulletWeightGrains", "Bullet weight", bulletWeightGrains, setBulletWeightGrains, {
                                 placeholder: "e.g. 168",
                                 keyboardType: "numeric",
                                 suffix: "gr",
                             })}
-                            {renderInput("bc", "Ballistic coefficient", ballisticCoefficient, setBallisticCoefficient, {
+                            {renderInput("ballisticCoefficient", "Ballistic coefficient", ballisticCoefficient, setBallisticCoefficient, {
                                 placeholder: "e.g. 0.47",
                                 keyboardType: "decimal-pad",
                                 suffix: "G1",
                             })}
-                            {renderInput("velocity", "Muzzle velocity", muzzleVelocityFps, setMuzzleVelocityFps, {
+                            {renderInput("muzzleVelocityFps", "Muzzle velocity", muzzleVelocityFps, setMuzzleVelocityFps, {
                                 placeholder: "e.g. 2650",
                                 keyboardType: "numeric",
                                 suffix: "fps",
@@ -421,12 +439,12 @@ const AddGunProfile = () => {
                         {/* Zero & scope */}
                         {sectionLabel("ZERO & SCOPE")}
                         <View className="rounded-2xl bg-brand-greenDark/60 border border-brand-green/50 p-4">
-                            {renderInput("zero", "Zero distance", zeroDistance, setZeroDistance, {
+                            {renderInput("zeroDistance", "Zero distance", zeroDistance, setZeroDistance, {
                                 placeholder: "e.g. 100",
                                 keyboardType: "numeric",
                                 suffix: isImperial ? "yd" : "m",
                             })}
-                            {renderInput("height", "Scope height", scopeHeight, setScopeHeight, {
+                            {renderInput("scopeHeight", "Scope height", scopeHeight, setScopeHeight, {
                                 placeholder: isImperial ? "e.g. 1.5" : "e.g. 3.8",
                                 keyboardType: "decimal-pad",
                                 suffix: isImperial ? "in" : "cm",
@@ -454,6 +472,13 @@ const AddGunProfile = () => {
 
                     {/* ===================== SAVE ===================== */}
                     <View className="px-6 pt-3 pb-6 border-t border-brand-green/40">
+                        {Object.keys(badFields).length > 0 && (
+                            <Text className="text-red-300 text-xs text-center mb-2.5">
+                                {Object.keys(badFields).length === 1
+                                    ? "1 field needs attention before this rifle can be saved."
+                                    : `${Object.keys(badFields).length} fields need attention before this rifle can be saved.`}
+                            </Text>
+                        )}
                         <TouchableOpacity
                             onPress={handleSubmit}
                             disabled={submitting}

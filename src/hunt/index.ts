@@ -21,3 +21,4 @@ export * from "./conditions";
 export * from "./units";
 export * from "./invariants";
 export * from "./voiceParse";
+export * from "./rifleData";

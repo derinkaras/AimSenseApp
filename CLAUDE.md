@@ -116,6 +116,7 @@ All math is in plain functions (no React/Expo) so it is easy to read and change.
 | Holdover: cosine (angle) correction, cant rotation, cant dead zone/warnings, crosshair pixel position and direction | `src/hunt/aim.ts` |
 | Camera-match checks between calibration and hunt | `src/hunt/invariants.ts` |
 | Hunt session state (selected gun, status) | `src/hunt/store.ts` |
+| Which rifle profile values are required and their allowed ranges (blocks saving and hunting with an incomplete rifle) | `src/hunt/rifleData.ts` |
 | Clicks needed, checking the dialed move (too small / sideways / down), pixels per MOA/MIL, up/right axes | `src/calibration/math.ts` |
 | Camera panel sizes (the camera area shared by calibration and hunt) | `src/calibration/layout.ts` |
 | Nudge arrows, tap-to-focus coordinates | `src/calibration/geometry.ts` |
