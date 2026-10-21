@@ -91,6 +91,9 @@ export default function ActiveHunt() {
 
     // UI State
     const [showEndConfirm, setShowEndConfirm] = useState(false);
+    // True once End hunt is confirmed, while the session is torn down
+    const [isEnding, setIsEnding] = useState(false);
+    const endingRef = useRef(false);
     const [showCrosshair, setShowCrosshair] = useState(false);
     const [showDistanceInput, setShowDistanceInput] = useState(false);
     const [showCalibrationTip, setShowCalibrationTip] = useState(true);
@@ -457,6 +460,10 @@ export default function ActiveHunt() {
 
     const handleConfirmEndHunt = useCallback(async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        // Clearing the session and rotating back to portrait resize the camera area before the
+        // screen goes away; without this the camera-match banner would flash "Recalibrate".
+        endingRef.current = true;
+        setIsEnding(true);
         setShowEndConfirm(false);
         endHunt();
         await resetCalibration();
@@ -477,6 +484,7 @@ export default function ActiveHunt() {
     // itself; the area size is the one thing the screen can change, so it is checked on layout.
     const [cameraMismatch, setCameraMismatch] = useState(false);
     const handleCameraAreaLayout = useCallback((event: LayoutChangeEvent) => {
+        if (endingRef.current) return; // the hunt is closing: the area changes on purpose
         const { width, height } = event.nativeEvent.layout;
         const check = validateCameraInvariants(
             calibrationData.cameraZoom,
@@ -645,7 +653,7 @@ export default function ActiveHunt() {
 
     // Camera area differs from calibration: block the holdover and offer a recalibration
     const CameraMismatchBanner = useMemo(() => {
-        if (!cameraMismatch) return null;
+        if (!cameraMismatch || isEnding) return null;
 
         return (
             <View style={[styles.cantBanner, styles.mismatchBanner, { top: insets.top + 8, left: isLandscapeMode ? 48 : 16 }]}>
@@ -657,7 +665,7 @@ export default function ActiveHunt() {
                 </Pressable>
             </View>
         );
-    }, [cameraMismatch, insets.top, isLandscapeMode, handleRecalibrate]);
+    }, [cameraMismatch, isEnding, insets.top, isLandscapeMode, handleRecalibrate]);
 
     // Reminder of the magnification the pixel scale is valid for
     const MagnificationBadge = useMemo(() => {

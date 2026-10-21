@@ -4,12 +4,14 @@ import {
     CANT_DEAD_ZONE_DEG,
     CANT_WARN_DEG,
     computeAimSolution,
+    computeDropSolution,
     filterCant,
     isHoldoverOffScreen,
     mapIMUToRifleAxes,
     riflePitchDeg,
     rifleCantDeg,
 } from "./aim";
+import { convertDistance, gunDistanceUnit, type DistanceUnit } from "./units";
 
 describe("IMU axis mapping", () => {
     it("maps pitch to cant and roll to elevation, per the canonical axis convention", () => {
@@ -170,5 +172,42 @@ describe("isHoldoverOffScreen", () => {
         expect(isHoldoverOffScreen(1001, 400, view)).toBe(true);
         expect(isHoldoverOffScreen(500, -1, view)).toBe(true);
         expect(isHoldoverOffScreen(500, 801, view)).toBe(true);
+    });
+});
+
+// Hunt mode lets the shooter type the target distance in yd or m whatever the rifle's unit
+// system, and converts it to the rifle's unit before solving (app/(hunt)/active.tsx).
+describe("computeDropSolution - target distance unit is independent of the rifle's units", () => {
+    const solve = (distance: number, unit: DistanceUnit, isImperial: boolean, rifle: { zero: number; height: number }) =>
+        computeDropSolution({
+            targetDistance: convertDistance(distance, unit, gunDistanceUnit(isImperial)),
+            isImperial,
+            zeroDistance: rifle.zero,
+            scopeHeight: rifle.height,
+            muzzleVelocityFps: 2650,
+            ballisticCoefficient: 0.462,
+            rangefinderMode: "LOS",
+            pitchLockedDeg: 0,
+            scopeUnit: "MOA",
+            wind: null,
+            atmosphere: null,
+        }).D;
+
+    // The same physical rifle described both ways: 100 yd zero, 1.5" scope height
+    const imperial = { zero: 100, height: 1.5 };
+    const metric = { zero: 91.44, height: 3.81 };
+    const reference = solve(300, "yd", true, imperial);
+
+    it("an imperial rifle gives the same holdover for 300 yd and the same distance in meters", () => {
+        expect(solve(274.32, "m", true, imperial)).toBeCloseTo(reference, 4);
+    });
+
+    it("a metric rifle gives the same holdover for 274.32 m and for 300 yd", () => {
+        expect(solve(274.32, "m", false, metric)).toBeCloseTo(reference, 4);
+        expect(solve(300, "yd", false, metric)).toBeCloseTo(reference, 4);
+    });
+
+    it("300 m is farther than 300 yd, so it needs more holdover", () => {
+        expect(solve(300, "m", true, imperial)).toBeGreaterThan(reference);
     });
 });
