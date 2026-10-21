@@ -40,11 +40,19 @@ describe("parseVoiceShotSetup", () => {
         const result = parseVoiceShotSetup("three hundred yards");
         expect(result.matchedAny).toBe(true);
         expect(result.distanceText).toBe("300");
+        expect(result.distanceUnit).toBe("yd");
+    });
+
+    it("reports meters when the distance is said in meters", () => {
+        expect(parseVoiceShotSetup("450 meters").distanceUnit).toBe("m");
+        expect(parseVoiceShotSetup("450 metres").distanceUnit).toBe("m");
+        expect(parseVoiceShotSetup("450m").distanceUnit).toBe("m");
     });
 
     it("parses distance via 'at N' fallback when no unit word is given", () => {
         const result = parseVoiceShotSetup("at 450");
         expect(result.distanceText).toBe("450");
+        expect(result.distanceUnit).toBeNull();
     });
 
     it("parses wind speed with a numeric clock position", () => {

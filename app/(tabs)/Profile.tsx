@@ -7,8 +7,10 @@ import {
     Image,
     ActivityIndicator,
     ScrollView,
+    Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import Toast from "react-native-toast-message";
 
@@ -31,6 +33,10 @@ import { DebugPanel } from "@/components/DebugPanel";
 
 type ActiveModal = "" | "How it works & limits" | "Privacy" | "Terms of Service" | "Logout" | "Delete Account";
 type SubscriptionTier = "premium" | "trial" | "free";
+
+const ACCENT = "#0b7f4f"; // brand-greenLight
+const DANGER = "#f87171"; // red-400
+const SUPPORT_EMAIL = "support@aimsense.app";
 
 const Profile = () => {
     const [profilePhotoUri, setProfilePhotoUri] = useState("");
@@ -302,10 +308,50 @@ const Profile = () => {
     if (loading && !firstName && !lastName) {
         return (
             <View className="flex-1 bg-brand-black justify-center items-center">
-                <ActivityIndicator size="large" color="#0b7f4f" />
+                <ActivityIndicator size="large" color={ACCENT} />
             </View>
         );
     }
+
+    const renderRow = ([key, value]: (typeof options)[number], index: number, group: typeof options) => {
+        const danger = key === "Delete Account";
+        const isDisabled = requiresConnection(key) && !hasStableConnection;
+        const last = index === group.length - 1;
+        const tint = danger ? DANGER : ACCENT;
+
+        return (
+            <TouchableOpacity
+                key={key}
+                className={`flex-row items-center px-4 py-3.5 ${last ? "" : "border-b border-brand-green/40"} ${isDisabled ? "opacity-50" : ""}`}
+                activeOpacity={isDisabled ? 1 : 0.7}
+                onPress={() => handleOpenModal(key as ActiveModal)}
+            >
+                <View
+                    className={`size-9 rounded-xl items-center justify-center mr-3 border ${
+                        danger ? "bg-red-950/40 border-red-500/40" : "bg-brand-black/60 border-brand-green/60"
+                    }`}
+                >
+                    <Image source={value.icon} className="size-4" resizeMode="contain" tintColor={tint} />
+                </View>
+                <Text className={`text-base flex-shrink ${danger ? "text-red-400 font-semibold" : "text-white"}`}>{key}</Text>
+                {isDisabled && (
+                    <View className="ml-2 px-2 py-0.5 rounded-full bg-amber-900/50">
+                        <Text className="text-amber-200 text-[10px]">Requires internet</Text>
+                    </View>
+                )}
+                <View className="flex-1" />
+                <Image
+                    source={icons.chevronRight}
+                    className="size-3.5"
+                    resizeMode="contain"
+                    tintColor={danger ? "rgba(248,113,113,0.6)" : "rgba(255,255,255,0.4)"}
+                />
+            </TouchableOpacity>
+        );
+    };
+
+    const helpOptions = options.filter(([key]) => !requiresConnection(key));
+    const accountOptions = options.filter(([key]) => requiresConnection(key));
 
     return (
         <View className="flex-1 bg-brand-black">
@@ -340,139 +386,116 @@ const Profile = () => {
                     <DeleteAccountContent onCancel={closeModal} onConfirm={handleDeleteAccount} />
                 </UniversalModal>
 
-                {/* ✅ Single ScrollView with proper padding */}
-                <ScrollView
-                    className="flex-1"
-                    contentContainerStyle={{ paddingBottom: 120 }}
-                    showsVerticalScrollIndicator={false}
-                >
-                    {/* PROFILE CARD */}
-                    <View className="mx-6 mt-6 rounded-2xl bg-brand-greenDark/30 border border-brand-green/40 p-6">
-                        <View className="mb-2">
-                            <OfflineBanner />
-                        </View>
-
-                        <View className="items-center gap-4">
-                            {/* Avatar */}
-                            <TouchableOpacity
-                                onPress={handlePickPhoto}
-                                activeOpacity={0.85}
-                                className="size-32 items-center justify-center overflow-hidden rounded-full bg-brand-greenDark border-2 border-brand-green/80"
-                            >
-                                <Image
-                                    source={profilePhotoUri ? { uri: profilePhotoUri } : icons.user}
-                                    className="w-full h-full"
-                                    style={{
-                                        tintColor: profilePhotoUri ? undefined : "#0b7f4f",
-                                        resizeMode: profilePhotoUri ? "cover" : "contain",
-                                    }}
-                                />
-                            </TouchableOpacity>
-
-                            {/* Remove photo / hint */}
-                            {profilePhotoUri ? (
-                                <TouchableOpacity
-                                    onPress={handleRemovePhoto}
-                                    className="px-3 py-1 rounded-full bg-brand-black/60 border border-brand-green/60"
-                                    activeOpacity={0.85}
-                                >
-                                    <Text className="text-xs text-gray-300">Remove profile photo</Text>
-                                </TouchableOpacity>
-                            ) : (
-                                <Text className="text-xs text-gray-400">Tap the avatar to add a photo</Text>
-                            )}
-
-                            {/* Name */}
-                            <Text className="text-white text-2xl font-semibold">
-                                {displayFirst} {displayLast}
-                            </Text>
-
-                            {/* Edit */}
-                            <TouchableOpacity
-                                onPress={() => setShowEditNameModal(true)}
-                                className="flex-row items-center px-3 py-1.5 rounded-full bg-brand-black/60 border border-brand-green/70"
-                                activeOpacity={0.85}
-                            >
-                                <Image
-                                    source={icons.pencil}
-                                    className="w-4 h-4 mr-1"
-                                    tintColor="#10b981"
-                                    resizeMode="contain"
-                                />
-                                <Text className="text-gray-200 text-xs">Edit display name</Text>
-                            </TouchableOpacity>
-
-                            {/* Email */}
-                            <Text className="text-gray-400 text-md text-center" numberOfLines={1}>
-                                {user?.email || "aimsense@app.com"}
-                            </Text>
-
-                            {/* Subscription */}
-                            <View>
-                                {subscription === "premium" && <PremiumBadge />}
-                                {subscription === "trial" && <TrialBadge />}
-                                {subscription === "free" && <FreeBadge />}
+                <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+                    <View className="mx-6">
+                        {/* ===================== HEADER ===================== */}
+                        <View className="mt-4 mb-5 flex-row items-center">
+                            <View className="size-11 rounded-2xl bg-brand-greenDark/80 border border-brand-green/60 items-center justify-center mr-3">
+                                <Image source={icons.user} className="size-5" resizeMode="contain" tintColor={ACCENT} />
+                            </View>
+                            <View className="flex-1">
+                                <Text className="text-brand-greenLight text-[11px] font-bold tracking-[0.2em]">AIMSENSE</Text>
+                                <Text className="text-white text-2xl font-bold">Profile</Text>
                             </View>
                         </View>
-                    </View>
 
-                    {/* SETTINGS */}
-                    <Text className="mx-6 mt-8 mb-2 text-gray-500 text-xs uppercase tracking-[2px]">
-                        Account & App
-                    </Text>
+                        <OfflineBanner />
 
-                    {/* ✅ Use map instead of FlatList - no nested scrolling */}
-                    <View className="mx-6">
-                        {options.map(([key, value]) => {
-                            const danger = key === "Delete Account";
-                            const needsConnection = requiresConnection(key);
-                            const isDisabled = needsConnection && !hasStableConnection;
+                        {/* ===================== PROFILE CARD ===================== */}
+                        <View className="rounded-3xl border border-brand-green/60 overflow-hidden">
+                            <LinearGradient
+                                colors={["#284a37", "#0e2018", "#121212"]}
+                                locations={[0, 0.55, 1]}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={{ padding: 20 }}
+                            >
+                                <View className="flex-row items-center">
+                                    {/* Avatar: tap to add or change the photo */}
+                                    <TouchableOpacity onPress={handlePickPhoto} activeOpacity={0.85} accessibilityLabel="Change profile photo">
+                                        <View className="size-20 items-center justify-center overflow-hidden rounded-full bg-brand-black/60 border-2 border-brand-greenLight/70">
+                                            <Image
+                                                source={profilePhotoUri ? { uri: profilePhotoUri } : icons.user}
+                                                className={profilePhotoUri ? "w-full h-full" : "size-9"}
+                                                style={{
+                                                    tintColor: profilePhotoUri ? undefined : ACCENT,
+                                                    resizeMode: profilePhotoUri ? "cover" : "contain",
+                                                }}
+                                            />
+                                        </View>
+                                        <View className="absolute bottom-0 right-0 size-7 rounded-full bg-brand-green border-2 border-brand-black items-center justify-center">
+                                            <Image source={icons.camera} className="size-3.5" resizeMode="contain" tintColor="#ffffff" />
+                                        </View>
+                                    </TouchableOpacity>
 
-                            return (
-                                <TouchableOpacity
-                                    key={key}
-                                    className={`flex-row h-14 items-center justify-between rounded-xl mb-3 px-4
-                  bg-brand-black/70 border ${
-                                        danger ? "border-red-500/70" : "border-brand-green/70"
-                                    } ${isDisabled ? "opacity-50" : ""}`}
-                                    activeOpacity={isDisabled ? 1 : 0.85}
-                                    onPress={() => handleOpenModal(key as ActiveModal)}
-                                >
-                                    <View className="flex-row items-center flex-1">
-                                        <Image
-                                            source={value.icon}
-                                            className="w-5 h-5"
-                                            tintColor={danger ? "#f97373" : "#10b981"}
-                                        />
-                                        <Text className="text-white text-lg ml-3">{key}</Text>
-
-                                        {isDisabled && (
-                                            <View className="ml-2 px-2 py-0.5 rounded-full bg-amber-900/50">
-                                                <Text className="text-amber-200 text-[10px]">Requires internet</Text>
-                                            </View>
-                                        )}
+                                    <View className="flex-1 ml-4">
+                                        <Text className="text-white text-xl font-bold" numberOfLines={1}>
+                                            {displayFirst} {displayLast}
+                                        </Text>
+                                        <Text className="text-white/55 text-sm mt-0.5" numberOfLines={1}>
+                                            {user?.email || "aimsense@app.com"}
+                                        </Text>
+                                        <View className="flex-row mt-2.5">
+                                            {subscription === "premium" && <PremiumBadge />}
+                                            {subscription === "trial" && <TrialBadge />}
+                                            {subscription === "free" && <FreeBadge />}
+                                        </View>
                                     </View>
+                                </View>
 
-                                    <Image
-                                        source={icons.chevronRight}
-                                        className="w-5 h-5"
-                                        tintColor={danger ? "#f97373" : "#10b981"}
-                                        resizeMode="contain"
-                                    />
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </View>
+                                {/* Quick actions */}
+                                <View className="flex-row gap-2 mt-5">
+                                    <TouchableOpacity
+                                        onPress={() => setShowEditNameModal(true)}
+                                        activeOpacity={0.85}
+                                        className="flex-1 flex-row items-center justify-center rounded-xl bg-brand-black/50 border border-brand-green/60 py-2.5"
+                                    >
+                                        <Image source={icons.pencil} className="size-3.5 mr-2" tintColor={ACCENT} resizeMode="contain" />
+                                        <Text className="text-white text-sm font-semibold">Edit name</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        onPress={profilePhotoUri ? handleRemovePhoto : handlePickPhoto}
+                                        activeOpacity={0.85}
+                                        className="flex-1 flex-row items-center justify-center rounded-xl bg-brand-black/50 border border-brand-green/60 py-2.5"
+                                    >
+                                        <Image
+                                            source={profilePhotoUri ? icons.trash : icons.camera}
+                                            className="size-3.5 mr-2"
+                                            tintColor={ACCENT}
+                                            resizeMode="contain"
+                                        />
+                                        <Text className="text-white text-sm font-semibold">
+                                            {profilePhotoUri ? "Remove photo" : "Add photo"}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </LinearGradient>
+                        </View>
 
+                        {/* ===================== HELP & LEGAL ===================== */}
+                        <Text className="text-white/50 text-[11px] font-bold tracking-[0.16em] mt-7 mb-3">HELP & LEGAL</Text>
+                        <View className="rounded-2xl bg-brand-greenDark/60 border border-brand-green/50 overflow-hidden">
+                            {helpOptions.map(renderRow)}
+                        </View>
 
-                    {/* Contact Info */}
-                    <View className="mx-6 mt-6 mb-4">
-                        <Text className="text-gray-500 text-sm text-center">Need help? Contact us at</Text>
-                        <Text className="text-gray-400 text-sm text-center mt-1">support@aimsense.app</Text>
+                        {/* ===================== ACCOUNT ===================== */}
+                        <Text className="text-white/50 text-[11px] font-bold tracking-[0.16em] mt-7 mb-3">ACCOUNT</Text>
+                        <View className="rounded-2xl bg-brand-greenDark/60 border border-brand-green/50 overflow-hidden">
+                            {accountOptions.map(renderRow)}
+                        </View>
+
+                        {/* ===================== SUPPORT ===================== */}
+                        <TouchableOpacity
+                            onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`).catch(() => {})}
+                            activeOpacity={0.8}
+                            className="mt-7 items-center"
+                        >
+                            <Text className="text-white/40 text-xs">Need help? Contact us at</Text>
+                            <Text className="text-brand-greenLight text-sm mt-1">{SUPPORT_EMAIL}</Text>
+                        </TouchableOpacity>
                     </View>
                 </ScrollView>
 
-                {/*/!* Debug Panel - fixed position *!/*/}
                 {/*<DebugPanel />*/}
             </SafeAreaView>
         </View>
@@ -480,3 +503,4 @@ const Profile = () => {
 };
 
 export default Profile;
+

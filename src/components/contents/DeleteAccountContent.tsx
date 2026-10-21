@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { View, Text, Image, TouchableOpacity, ScrollView, TextInput } from 'react-native';
-import icons from '@/constants/icons';
+import React, { useState } from "react";
+import { View, Text, Image, TouchableOpacity, TextInput } from "react-native";
+import icons from "@/constants/icons";
 
 interface DeleteAccountContentProps {
     // Firebase requires a recent sign-in to delete an account, so the password is collected here
@@ -8,98 +8,75 @@ interface DeleteAccountContentProps {
     onCancel?: () => void;
 }
 
+const REMOVED = [
+    "Your account, email, name and profile photo",
+    "All rifle profiles and ballistic data",
+    "Your app preferences",
+];
+
 const DeleteAccountContent = ({ onConfirm, onCancel }: DeleteAccountContentProps) => {
-    const [password, setPassword] = useState('');
+    const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
 
     return (
-        <View className="gap-6 py-2">
+        <View>
             {/* Icon */}
-            <View className="items-center justify-center">
-                <View className="bg-red-500/10 p-6 rounded-full border-2 border-red-500/30">
-                    <Image
-                        source={icons.trash} // or icons.delete if you have it
-                        className="size-12"
-                        tintColor="#ef4444"
-                        resizeMode="contain"
-                    />
+            <View className="items-center">
+                <View className="size-16 rounded-2xl bg-red-950/50 border border-red-500/40 items-center justify-center">
+                    <Image source={icons.trash} className="size-7" tintColor="#f87171" resizeMode="contain" />
                 </View>
             </View>
 
             {/* Message */}
-            <View className="gap-2">
-                <Text className="text-white text-xl font-semibold text-center">
-                    Delete Account
-                </Text>
-                <Text className="text-gray-400 text-base text-center px-4">
-                    This action cannot be undone
-                </Text>
+            <Text className="text-white text-xl font-bold text-center mt-4">Delete your account?</Text>
+            <Text className="text-white/60 text-sm text-center mt-1">This can&apos;t be undone.</Text>
+
+            {/* What gets removed */}
+            <View className="mt-5 rounded-2xl bg-red-950/25 border border-red-500/30 p-4">
+                <Text className="text-red-300 text-[11px] font-bold tracking-[0.14em] mb-1">PERMANENTLY DELETED</Text>
+                {REMOVED.map((item) => (
+                    <View key={item} className="flex-row items-start mt-2">
+                        <Image source={icons.cancel} className="size-2.5 mt-1 mr-2.5" tintColor="#f87171" resizeMode="contain" />
+                        <Text className="text-white/75 text-sm flex-1">{item}</Text>
+                    </View>
+                ))}
             </View>
 
-            {/* Warning Details */}
-            <ScrollView className="max-h-48 px-2" showsVerticalScrollIndicator={true}>
-                <View className="gap-3">
-                    <Text className="text-gray-400 text-base">
-                        When you delete your account, the following data will be
-                        <Text className="text-red-500 font-semibold"> permanently removed</Text>:
-                    </Text>
-
-                    <View className="gap-2 pl-2">
-                        <Text className="text-gray-400 text-base">
-                            • Your account information (email, name, profile photo)
-                        </Text>
-                        <Text className="text-gray-400 text-base">
-                            • All saved rifle profiles and ballistic data
-                        </Text>
-                        <Text className="text-gray-400 text-base">
-                            • App preferences and settings
-                        </Text>
-                    </View>
-
-                    <Text className="text-gray-400 text-base mt-2">
-                        This data <Text className="text-white font-semibold">cannot be recovered</Text> after
-                        deletion. You will need to create a new account to use AimSense again.
-                    </Text>
-                </View>
-            </ScrollView>
-
             {/* Password confirmation */}
-            <View>
-                <Text className="text-white text-sm font-medium mb-2">
-                    Enter your password to confirm
-                </Text>
+            <Text className="text-white/70 text-xs font-semibold mt-5 mb-2">Enter your password to confirm</Text>
+            <View className="flex-row items-center rounded-xl bg-brand-greenDark/60 border border-brand-green/60 px-4">
                 <TextInput
                     value={password}
                     onChangeText={setPassword}
                     placeholder="Password"
-                    placeholderTextColor="#6b7280"
-                    secureTextEntry
+                    placeholderTextColor="rgba(255,255,255,0.3)"
+                    secureTextEntry={!showPassword}
                     autoCapitalize="none"
                     autoCorrect={false}
-                    className="bg-gray-800/50 border border-gray-700 rounded-xl px-4 py-3 text-white"
+                    textContentType="password"
+                    className="flex-1 py-3 text-white text-base"
                 />
+                <TouchableOpacity onPress={() => setShowPassword((v) => !v)} hitSlop={8} accessibilityRole="button">
+                    <Text className="text-brand-greenLight text-xs font-semibold">{showPassword ? "Hide" : "Show"}</Text>
+                </TouchableOpacity>
             </View>
 
-            {/* Action Buttons */}
-            <View className="gap-3 mt-2">
+            {/* Actions */}
+            <View className="gap-2.5 mt-6">
                 <TouchableOpacity
                     onPress={() => onConfirm?.(password)}
                     disabled={!password}
-                    className={`bg-red-600 rounded-xl py-4 px-6 ${!password ? 'opacity-50' : ''}`}
-                    activeOpacity={0.7}
+                    activeOpacity={0.85}
+                    className={`rounded-2xl bg-red-600/90 border border-red-400/40 py-3.5 items-center ${!password ? "opacity-40" : ""}`}
                 >
-                    <Text className="text-white text-center font-semibold text-base">
-                        Yes, Delete My Account
-                    </Text>
+                    <Text className="text-white font-bold text-base">Delete my account</Text>
                 </TouchableOpacity>
-
                 <TouchableOpacity
                     onPress={onCancel}
-                    className="bg-brand-green rounded-xl py-4 px-6"
-                    activeOpacity={0.7}
+                    activeOpacity={0.85}
+                    className="rounded-2xl bg-brand-green border border-brand-greenLight/60 py-3.5 items-center"
                 >
-                    <Text className="text-white text-center font-semibold text-base">
-                        Cancel
-                    </Text>
+                    <Text className="text-white font-semibold text-base">Cancel</Text>
                 </TouchableOpacity>
             </View>
         </View>

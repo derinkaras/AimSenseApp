@@ -1,6 +1,6 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, Image } from 'react-native';
-import icons from '@/constants/icons';
+import React from "react";
+import { View, Text, TouchableOpacity, Image } from "react-native";
+import icons from "@/constants/icons";
 
 interface LogoutContentProps {
     onConfirm?: () => void;
@@ -8,51 +8,36 @@ interface LogoutContentProps {
 }
 
 const LogoutContent = ({ onConfirm, onCancel }: LogoutContentProps) => {
-
     return (
-        <View className="gap-6 py-2">
+        <View>
             {/* Icon */}
-            <View className="items-center justify-center">
-                <View className="bg-red-500/10 p-6 rounded-full border-2 border-red-500/30">
-                    <Image
-                        source={icons.power}
-                        className="size-12"
-                        tintColor="#ef4444"
-                        resizeMode="contain"
-                    />
+            <View className="items-center">
+                <View className="size-16 rounded-2xl bg-brand-greenDark border border-brand-green/60 items-center justify-center">
+                    <Image source={icons.power} className="size-7" tintColor="#0b7f4f" resizeMode="contain" />
                 </View>
             </View>
 
             {/* Message */}
-            <View className="gap-2">
-                <Text className="text-white text-xl font-semibold text-center">
-                    Logout Confirmation
-                </Text>
-                <Text className="text-gray-400 text-base text-center px-4">
-                    Are you sure you want to logout? You&apos ll need to sign in again to access your account.
-                </Text>
-            </View>
+            <Text className="text-white text-xl font-bold text-center mt-4">Log out?</Text>
+            <Text className="text-white/60 text-sm leading-5 text-center mt-2 px-2">
+                You&apos;ll need to sign in again to use AimSense. Your rifle profiles stay saved to your account.
+            </Text>
 
-            {/* Action Buttons */}
-            <View className="gap-3 mt-2">
+            {/* Actions */}
+            <View className="gap-2.5 mt-6">
                 <TouchableOpacity
                     onPress={onConfirm}
-                    className="bg-red-600 rounded-xl py-4 px-6"
-                    activeOpacity={0.7}
+                    activeOpacity={0.85}
+                    className="rounded-2xl bg-red-600/90 border border-red-400/40 py-3.5 items-center"
                 >
-                    <Text className="text-white text-center font-semibold text-base">
-                        Yes, Logout
-                    </Text>
+                    <Text className="text-white font-bold text-base">Log out</Text>
                 </TouchableOpacity>
-
                 <TouchableOpacity
                     onPress={onCancel}
-                    className="bg-brand-green rounded-xl py-4 px-6"
-                    activeOpacity={0.7}
+                    activeOpacity={0.85}
+                    className="rounded-2xl bg-brand-green border border-brand-greenLight/60 py-3.5 items-center"
                 >
-                    <Text className="text-white text-center font-semibold text-base">
-                        Cancel
-                    </Text>
+                    <Text className="text-white font-semibold text-base">Cancel</Text>
                 </TouchableOpacity>
             </View>
         </View>

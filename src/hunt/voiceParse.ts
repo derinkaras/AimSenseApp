@@ -58,6 +58,8 @@ export function normalizeSpokenNumbers(text: string): string {
 
 export interface VoiceParseResult {
     distanceText: string | null;
+    /** The unit said with the distance ("300 yards" -> "yd"), or null if none was said. */
+    distanceUnit: "yd" | "m" | null;
     windSpeedText: string | null;
     windClock: number | null;
     altitudeText: string | null;
@@ -94,6 +96,7 @@ export function parseVoiceShotSetup(rawTranscript: string): VoiceParseResult {
 
     const result: VoiceParseResult = {
         distanceText: null,
+        distanceUnit: null,
         windSpeedText: null,
         windClock: null,
         altitudeText: null,
@@ -103,9 +106,10 @@ export function parseVoiceShotSetup(rawTranscript: string): VoiceParseResult {
     };
 
     // Distance: a number followed by a distance unit word, e.g. "300 yards", "450 meters"
-    const distanceMatch = text.match(new RegExp(`${NUM}\\s*(?:yards?|yds?|meters?|metres?|m)\\b`));
+    const distanceMatch = text.match(new RegExp(`${NUM}\\s*(yards?|yds?|meters?|metres?|m)\\b`));
     if (distanceMatch) {
         result.distanceText = distanceMatch[1];
+        result.distanceUnit = distanceMatch[2].startsWith("y") ? "yd" : "m";
         result.matchedAny = true;
     } else {
         // Fall back to "at 300" or a bare leading number, since shooters often skip the unit

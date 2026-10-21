@@ -9,7 +9,7 @@
 // only confirms or moves the green marker onto the crosshair, then hunting starts.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, Text, View, useWindowDimensions } from "react-native";
+import { BackHandler, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useCameraPermissions, type CameraView } from "expo-camera";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -25,6 +25,7 @@ import {
   tapToNormalizedCameraPoint,
   snapToHalfDegree,
   clampValue,
+  lockToPortrait,
   DEFAULT_TILT_CONFIG,
   type CameraViewSize,
   type FocusPoint,
@@ -74,10 +75,36 @@ export default function LineUpScreen() {
     updateIntervalMs: 50,
   });
 
+  // Going back: camera off, rotate to portrait, THEN leave. Rotating while the back
+  // transition is running (with the camera live) can freeze the app, so mirror the way in,
+  // which rotates first and then navigates.
+  const leaving = useRef(false);
+  const [isLeaving, setIsLeaving] = useState(false);
+  const handleBack = useCallback(async () => {
+    if (leaving.current) return;
+    leaving.current = true;
+    setIsLeaving(true);
+    setActiveScreen(null);
+    try {
+      await lockToPortrait();
+    } catch (error) {
+      console.warn("Could not rotate to portrait:", error);
+    }
+    router.back();
+  }, [setActiveScreen]);
+
   useFocusEffect(
     useCallback(() => {
+      leaving.current = false;
+      setIsLeaving(false);
       setActiveScreen(SCREEN_ID);
-    }, [setActiveScreen])
+      // Android back button takes the same path as the back arrow
+      const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+        handleBack();
+        return true;
+      });
+      return () => sub.remove();
+    }, [setActiveScreen, handleBack])
   );
 
   useEffect(() => {
@@ -120,7 +147,9 @@ export default function LineUpScreen() {
 
   // A re-check on a camera area that no longer matches cannot be trusted
   const savedSize = store.cameraViewSize;
+  // (skipped while leaving: rotating to portrait on the way out resizes the camera area)
   const layoutChanged =
+    !isLeaving &&
     isRecheck &&
     !!viewSize &&
     !!savedSize &&
@@ -189,7 +218,7 @@ export default function LineUpScreen() {
     onCameraTap: handleCameraTap,
     onCameraLayout: setViewSize,
     overlay,
-    onBack: () => router.back(),
+    onBack: handleBack,
   };
 
   if (layoutChanged) {

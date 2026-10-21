@@ -110,6 +110,7 @@ All math is in plain functions (no React/Expo) so it is easy to read and change.
 | Wind speed + clock direction -> components | `src/hunt/wind.ts` |
 | Which optional entries exist (wind, altitude, temperature, pressure), their units and limits | `src/hunt/conditions.ts` |
 | The distance / wind / air-conditions form | `src/hunt/ShotSetupModal.tsx` |
+| Privacy Policy / Terms of Service text (keep it true to what the app collects), developer name/address placeholders | `src/legal/content.ts` |
 | Any help text, the limits list, the before-you-hunt briefing (bump `BRIEFING_VERSION` to show it again) | `src/help/content.ts` |
 | Metric/imperial conversion, drop display text | `src/hunt/units.ts` |
 | Holdover: cosine (angle) correction, cant rotation, cant dead zone/warnings, crosshair pixel position and direction | `src/hunt/aim.ts` |

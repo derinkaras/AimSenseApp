@@ -13,6 +13,20 @@ export function toYards(distance: number, isImperial: boolean): number {
     return isImperial ? distance : distance * YARDS_PER_METER;
 }
 
+// ---- Target distance: the shooter picks yd or m per shot, independent of the gun's unit system
+export type DistanceUnit = "yd" | "m";
+
+/** The distance unit a gun profile uses. */
+export function gunDistanceUnit(isImperial: boolean): DistanceUnit {
+    return isImperial ? "yd" : "m";
+}
+
+/** Distance in one unit -> the same distance in another. */
+export function convertDistance(distance: number, from: DistanceUnit, to: DistanceUnit): number {
+    if (from === to) return distance;
+    return from === "m" ? distance * YARDS_PER_METER : distance / YARDS_PER_METER;
+}
+
 /** Height in the gun's unit (in or cm) -> inches. */
 export function toInches(height: number, isImperial: boolean): number {
     return isImperial ? height : height * INCHES_PER_CM;

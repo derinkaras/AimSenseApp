@@ -14,8 +14,13 @@ import type { BottomTabBarButtonProps } from "expo-router/js-tabs";
 import icons from "@/constants/icons";
 import { useAuth } from "@/contexts/AuthContext";
 
-const ICON_BOX = 28;   // outer box
-const ICON_SIZE = 22;  // base inner size
+const PILL_WIDTH = 56;  // highlight behind the icon
+const PILL_HEIGHT = 34;
+const ICON_SIZE = 17;   // base inner size (each tab scales it to look the same size)
+
+// Brand palette (tailwind.config.js)
+const ACCENT = "#0b7f4f";   // brand-greenLight
+const INACTIVE = "#6b7280"; // gray-500
 
 type TabIconProps = {
     focused: boolean;
@@ -28,11 +33,14 @@ const TabIcon = ({ focused, icon, title, scale = 1 }: TabIconProps) => {
     const size = ICON_SIZE * scale;
 
     return (
-        <View className="items-center justify-center px-3 py-3 w-full">
+        <View className="items-center justify-center w-[76px]">
+            {/* Selected tab: icon sits in a green pill, like the home slider thumb */}
             <View
+                className={focused ? "bg-brand-green border border-brand-greenLight/70" : "border border-transparent"}
                 style={{
-                    width: ICON_BOX,
-                    height: ICON_BOX,
+                    width: PILL_WIDTH,
+                    height: PILL_HEIGHT,
+                    borderRadius: PILL_HEIGHT / 2,
                     justifyContent: "center",
                     alignItems: "center",
                 }}
@@ -42,7 +50,7 @@ const TabIcon = ({ focused, icon, title, scale = 1 }: TabIconProps) => {
                     style={{
                         width: size,
                         height: size,
-                        tintColor: focused ? "#0b7f4f" : "#6b7280",
+                        tintColor: focused ? "#ffffff" : INACTIVE,
                     }}
                     resizeMode="contain"
                 />
@@ -50,16 +58,12 @@ const TabIcon = ({ focused, icon, title, scale = 1 }: TabIconProps) => {
 
             <Text
                 numberOfLines={1}
-                className={`text-xs mt-1 text-center w-[70px] ${
-                    focused ? "text-brand-greenLight font-semibold" : "text-gray-400"
+                className={`text-[11px] mt-1 text-center w-[76px] ${
+                    focused ? "text-white font-semibold" : "text-gray-500"
                 }`}
             >
                 {title}
             </Text>
-
-            {focused && (
-                <View className="mt-1 h-0.5 w-8 bg-brand-greenLight rounded-full" />
-            )}
         </View>
     );
 };
@@ -108,11 +112,17 @@ export default function Layout() {
                     left: 0,
                     right: 0,
                     height: 88,
-                    backgroundColor: "#0e2018",
+                    backgroundColor: "#121212", // brand-black, same as the home checklist card
                     borderTopWidth: 1,
-                    borderTopColor: "#284a37",
+                    borderTopColor: "rgba(11, 127, 79, 0.45)", // brand-greenLight hairline
                     paddingTop: 14,
                     paddingBottom: 16,
+                    // Soft green glow along the top edge
+                    shadowColor: ACCENT,
+                    shadowOffset: { width: 0, height: -2 },
+                    shadowOpacity: 0.25,
+                    shadowRadius: 10,
+                    elevation: 12,
                 },
                 tabBarButton: (props) => <TabBarButton {...props} />, // ⬅️ use wrapper
             }}

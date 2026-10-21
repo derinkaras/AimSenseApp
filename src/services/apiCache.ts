@@ -87,6 +87,23 @@ export const apiCache = {
         }
     },
 
+    /**
+     * Remove EVERYTHING AimSense keeps on this device: caches, the offline queue, and every
+     * "aimsense." key (saved calibrations, shot conditions, preferences, dismissed tips).
+     * Used after account deletion so no personal data is left behind.
+     */
+    clearAllLocalData: async (): Promise<void> => {
+        try {
+            const keys = await AsyncStorage.getAllKeys();
+            const ours = keys.filter(
+                key => key.startsWith(CACHE_PREFIX) || key.startsWith('aimsense.') || key === PENDING_OPS_KEY
+            );
+            await AsyncStorage.multiRemove(ours);
+        } catch (error) {
+            console.log('Clear local data error:', error);
+        }
+    },
+
     // ═══════════════════════════════════════════════════════════════
     // PENDING OPERATIONS QUEUE (for offline mutations)
     // ═══════════════════════════════════════════════════════════════

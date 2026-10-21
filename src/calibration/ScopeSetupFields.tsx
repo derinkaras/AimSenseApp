@@ -60,7 +60,7 @@ interface MagnificationFieldProps {
 
 // The number and the "×" share one font size with no line height or font padding, set here
 // rather than with text-xl, whose line height makes Android draw the TextInput text lower
-const MAGNIFICATION_TEXT = { fontSize: 20, includeFontPadding: false } as const;
+const MAGNIFICATION_TEXT = { fontSize: 16, includeFontPadding: false } as const; // text-base, like the other fields
 
 /** The magnification a typed text stands for, or null if it is not usable. */
 function parseMagnification(text: string): number | null {
@@ -99,7 +99,7 @@ export function MagnificationField({ value, onChange }: MagnificationFieldProps)
                 <StepButton label="−" accessibilityLabel="Lower magnification" onPress={() => step(-1)} />
                 <View
                     className={cn(
-                        "flex-1 h-12 flex-row items-center justify-center rounded-xl border bg-brand-greenDark/60",
+                        "flex-1 h-11 flex-row items-center justify-center rounded-xl border bg-brand-greenDark/60",
                         invalid ? "border-red-500/70" : "border-brand-green/50"
                     )}
                 >
@@ -151,9 +151,9 @@ function StepButton({ label, accessibilityLabel, onPress }: { label: string; acc
             onPress={onPress}
             accessibilityRole="button"
             accessibilityLabel={accessibilityLabel}
-            className="w-12 h-12 rounded-xl bg-brand-greenDark/60 border border-brand-green/50 items-center justify-center"
+            className="w-11 h-11 rounded-xl bg-brand-greenDark/60 border border-brand-green/50 items-center justify-center"
         >
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-brand-greenLight text-2xl font-semibold">{label}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-brand-greenLight text-lg font-semibold">{label}</Text>
         </Pressable>
     );
 }

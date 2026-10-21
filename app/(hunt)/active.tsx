@@ -54,7 +54,10 @@ import {
     isHoldoverOffScreen,
     toSolverConditions,
     describeConditions,
+    convertDistance,
+    gunDistanceUnit,
     NO_CONDITIONS,
+    type DistanceUnit,
     type ShotConditions,
     type RangefinderMode,
 } from "@/hunt";
@@ -71,6 +74,8 @@ import { loadSavedConditions, saveConditions } from "@/hunt/conditionsStorage";
 
 const SCREEN_ID = "active";
 const STORAGE_KEY_RANGEFINDER_MODE = "aimsense.hunt.rangefinderMode";
+// The shooter's last yd/m choice for target distance (overrides the gun's unit once set)
+const STORAGE_KEY_DISTANCE_UNIT = "aimsense.hunt.distanceUnit";
 
 // ============================================================
 // MAIN COMPONENT
@@ -103,6 +108,8 @@ export default function ActiveHunt() {
 
     // Shot State
     const [targetDistance, setTargetDistance] = useState<number | null>(null);
+    // Unit the shooter entered the distance in; null until they pick one (then the gun's unit is used)
+    const [chosenDistanceUnit, setChosenDistanceUnit] = useState<DistanceUnit | null>(null);
     // Optional wind + air conditions entered with the distance (wind is per shot, the rest is remembered)
     const [conditions, setConditions] = useState<ShotConditions>(NO_CONDITIONS);
     const [isTargetConfirmed, setIsTargetConfirmed] = useState(false);
@@ -153,7 +160,7 @@ export default function ActiveHunt() {
         scopeHeight: selectedGun?.scopeHeight ?? 1.5,
     }), [selectedGun]);
 
-    const distanceUnit = gunData.isImperial ? "yd" : "m";
+    const distanceUnit: DistanceUnit = chosenDistanceUnit ?? gunDistanceUnit(gunData.isImperial);
 
     // IMU - always enabled when focused
     const { rollNow: imuRoll, pitchNow: imuPitch } = useTiltLevel(
@@ -207,7 +214,8 @@ export default function ActiveHunt() {
         const { wind, atmosphere } = toSolverConditions(conditions, gunData.isImperial);
 
         return computeDropSolution({
-            targetDistance,
+            // The solver takes the distance in the gun's unit system, whatever unit it was entered in
+            targetDistance: convertDistance(targetDistance, distanceUnit, gunDistanceUnit(gunData.isImperial)),
             isImperial: gunData.isImperial,
             zeroDistance: gunData.zeroDistance,
             scopeHeight: gunData.scopeHeight,
@@ -222,6 +230,7 @@ export default function ActiveHunt() {
     }, [
         isTargetConfirmed,
         targetDistance,
+        distanceUnit,
         pitchLocked,
         rangefinderMode,
         gunData.isImperial,
@@ -295,6 +304,9 @@ export default function ActiveHunt() {
             } else {
                 setShowRangefinderModal(true);
             }
+        });
+        AsyncStorage.getItem(STORAGE_KEY_DISTANCE_UNIT).then((val) => {
+            if (val === "yd" || val === "m") setChosenDistanceUnit(val);
         });
     }, []);
 
@@ -384,9 +396,11 @@ export default function ActiveHunt() {
     // Submitting the distance sheet is what actually starts tracking (shows the holdover) --
     // but only once the aim has been locked in first. If the sheet is opened directly (e.g.
     // to tweak the distance while already tracking), it just updates the numbers in place.
-    const handleConfirmDistance = useCallback((distance: number, entered: ShotConditions) => {
+    const handleConfirmDistance = useCallback((distance: number, unit: DistanceUnit, entered: ShotConditions) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         setTargetDistance(distance);
+        setChosenDistanceUnit(unit);
+        AsyncStorage.setItem(STORAGE_KEY_DISTANCE_UNIT, unit).catch(() => {});
         setConditions(entered);
         saveConditions(gunData.isImperial, entered);
         setShowDistanceInput(false);
@@ -755,6 +769,7 @@ export default function ActiveHunt() {
             visible={showDistanceInput}
             isImperial={gunData.isImperial}
             initialDistance={targetDistance}
+            initialDistanceUnit={distanceUnit}
             initialConditions={conditions}
             onCancel={handleCancelDistance}
             onConfirm={handleConfirmDistance}

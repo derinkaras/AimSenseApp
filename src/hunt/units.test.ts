@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDrop, toFahrenheit, toFeet, toInches, toInHg, toMph, toYards } from "./units";
+import { convertDistance, formatDrop, gunDistanceUnit, toFahrenheit, toFeet, toInches, toInHg, toMph, toYards } from "./units";
 
 describe("toYards", () => {
     it("passes yards through unchanged when imperial", () => {
@@ -68,5 +68,23 @@ describe("toInHg", () => {
     it("converts hPa to inHg", () => {
         // Standard sea-level pressure: 1013.25 hPa ≈ 29.92 inHg
         expect(toInHg(1013.25, false)).toBeCloseTo(29.92, 1);
+    });
+});
+
+describe("convertDistance", () => {
+    it("passes the value through when the units match", () => {
+        expect(convertDistance(300, "yd", "yd")).toBe(300);
+        expect(convertDistance(300, "m", "m")).toBe(300);
+    });
+    it("converts meters to yards and back", () => {
+        expect(convertDistance(100, "m", "yd")).toBeCloseTo(109.36133, 4);
+        expect(convertDistance(109.36133, "yd", "m")).toBeCloseTo(100, 4);
+    });
+});
+
+describe("gunDistanceUnit", () => {
+    it("is yards for imperial and meters for metric", () => {
+        expect(gunDistanceUnit(true)).toBe("yd");
+        expect(gunDistanceUnit(false)).toBe("m");
     });
 });

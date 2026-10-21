@@ -3,10 +3,13 @@ import {
     View,
     Text,
     Animated,
+    Easing,
     PanResponder,
     Dimensions,
     Image,
+    StyleSheet,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import icons from "@/constants/icons";
 
@@ -14,20 +17,31 @@ type Props = {
     onComplete: () => void;
     label?: string;
 };
+
+// Brand palette (tailwind.config.js)
+const BUTTON = "#284a37"; // brand-green
+const ACCENT = "#0b7f4f"; // brand-greenLight
+
+const TRACK_HEIGHT = 64;
+const THUMB_SIZE = 52;
+const PADDING = (TRACK_HEIGHT - THUMB_SIZE) / 2 - 1; // centers the thumb inside the 1px border
+const CHEVRONS = 3;
+
 export function SlideToStartCalibration({ onComplete, label }: Props) {
     const slideX = useRef(new Animated.Value(0)).current;
+    const nudge = useRef(new Animated.Value(0)).current;
+    const chevronPulse = useRef(new Animated.Value(0)).current;
     const [containerWidth, setContainerWidth] = useState(0);
-
-    const THUMB_SIZE = 60;
-    const PADDING = 6;
+    const [done, setDone] = useState(false);
 
     // Use measured width or fallback to screen width minus padding
     const effectiveWidth = containerWidth || (Dimensions.get('window').width - 48);
-    const MAX_SLIDE = Math.max(0, effectiveWidth - THUMB_SIZE - PADDING * 2);
+    const MAX_SLIDE = Math.max(1, effectiveWidth - THUMB_SIZE - PADDING * 2 - 2);
 
     // Store MAX_SLIDE in a ref so PanResponder can access current value
     const maxSlideRef = useRef(MAX_SLIDE);
     const onCompleteRef = useRef(onComplete);
+    const nudgeLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
     // Update refs when values change
     useEffect(() => {
@@ -44,6 +58,27 @@ export function SlideToStartCalibration({ onComplete, label }: Props) {
         setContainerWidth(0); // Force remeasurement
     }, []);
 
+    // Chevrons pulse left to right, and the thumb gives a small nudge now and then, as a swipe hint
+    useEffect(() => {
+        const pulse = Animated.loop(
+            Animated.timing(chevronPulse, { toValue: 1, duration: 1400, easing: Easing.linear, useNativeDriver: true })
+        );
+        const nudgeLoop = Animated.loop(
+            Animated.sequence([
+                Animated.delay(2600),
+                Animated.timing(nudge, { toValue: 12, duration: 220, easing: Easing.out(Easing.quad), useNativeDriver: false }),
+                Animated.spring(nudge, { toValue: 0, tension: 120, friction: 5, useNativeDriver: false }),
+            ])
+        );
+        nudgeLoopRef.current = nudgeLoop;
+        pulse.start();
+        nudgeLoop.start();
+        return () => {
+            pulse.stop();
+            nudgeLoop.stop();
+        };
+    }, [chevronPulse, nudge]);
+
     const panResponder = useRef(
         PanResponder.create({
             onStartShouldSetPanResponder: () => true,
@@ -52,6 +87,9 @@ export function SlideToStartCalibration({ onComplete, label }: Props) {
             onMoveShouldSetPanResponderCapture: () => true,
 
             onPanResponderGrant: () => {
+                // The shooter found the thumb: stop hinting
+                nudgeLoopRef.current?.stop();
+                nudge.setValue(0);
                 try {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 } catch (e) {
@@ -76,6 +114,7 @@ export function SlideToStartCalibration({ onComplete, label }: Props) {
                     } catch (e) {
                         console.log("Haptics not available");
                     }
+                    setDone(true);
 
                     Animated.timing(slideX, {
                         toValue: currentMaxSlide,
@@ -84,7 +123,7 @@ export function SlideToStartCalibration({ onComplete, label }: Props) {
                     }).start(() => {
                         setTimeout(() => {
                             onCompleteRef.current();
-                        }, 100);
+                        }, 150);
                     });
                 } else {
                     // Spring back
@@ -99,6 +138,14 @@ export function SlideToStartCalibration({ onComplete, label }: Props) {
         })
     ).current;
 
+    const thumbX = Animated.add(slideX, nudge);
+    // The crosshair turns a quarter turn across the track, like dialing a turret
+    const thumbRotate = slideX.interpolate({
+        inputRange: [0, MAX_SLIDE],
+        outputRange: ["0deg", "90deg"],
+        extrapolate: "clamp",
+    });
+
     return (
         <View
             onLayout={(e) => {
@@ -110,93 +157,154 @@ export function SlideToStartCalibration({ onComplete, label }: Props) {
                     }
                 }
             }}
-            style={{
-                height: 72,
-                width: '100%', // Explicitly set full width
-                borderRadius: 16,
-                backgroundColor: 'rgba(0, 0, 0, 0.6)',
-                borderWidth: 2,
-                borderColor: 'rgba(11, 127, 79, 0.4)',
-                paddingHorizontal: PADDING,
-                justifyContent: 'center',
-                overflow: 'hidden',
-            }}
+            style={styles.track}
         >
-            {/* Background Progress Fill */}
+            {/* Progress fill: grows behind the thumb */}
             <Animated.View
-                style={{
-                    position: 'absolute',
-                    left: 0,
-                    top: 0,
-                    bottom: 0,
-                    backgroundColor: 'rgba(11, 127, 79, 0.2)',
-                    borderRadius: 16,
-                    width: slideX.interpolate({
-                        inputRange: [0, MAX_SLIDE],
-                        outputRange: [THUMB_SIZE + PADDING * 2, effectiveWidth],
-                        extrapolate: 'clamp',
-                    }),
-                }}
-            />
-
-            {/* Text Instructions */}
-            <Animated.View
-                style={{
-                    position: 'absolute',
-                    alignSelf: 'center',
-                    opacity: slideX.interpolate({
-                        inputRange: [0, MAX_SLIDE * 0.4],
-                        outputRange: [1, 0],
-                        extrapolate: 'clamp',
-                    }),
-                }}
+                style={[
+                    styles.fill,
+                    {
+                        width: thumbX.interpolate({
+                            inputRange: [0, MAX_SLIDE],
+                            outputRange: [THUMB_SIZE + PADDING * 2, effectiveWidth],
+                            extrapolate: "clamp",
+                        }),
+                    },
+                ]}
                 pointerEvents="none"
             >
-                <Text style={{
-                    color: 'white',
-                    fontWeight: 'bold',
-                    fontSize: 18,
-                    textAlign: 'center',
-                }}>
-                    {label}
-                </Text>
-                <Text style={{
-                    color: 'rgba(255, 255, 255, 0.6)',
-                    fontSize: 14,
-                    textAlign: 'center',
-                    marginTop: 4,
-                }}>
-                    Swipe right →
-                </Text>
+                <LinearGradient
+                    colors={["rgba(14,32,24,0.95)", "rgba(11,127,79,0.55)"]}
+                    start={{ x: 0, y: 0.5 }}
+                    end={{ x: 1, y: 0.5 }}
+                    style={StyleSheet.absoluteFill}
+                />
+            </Animated.View>
+
+            {/* Label + pulsing chevrons, fading out as the thumb moves */}
+            <Animated.View
+                style={[
+                    styles.labelRow,
+                    {
+                        opacity: slideX.interpolate({
+                            inputRange: [0, MAX_SLIDE * 0.4],
+                            outputRange: [1, 0],
+                            extrapolate: "clamp",
+                        }),
+                    },
+                ]}
+                pointerEvents="none"
+            >
+                <Text style={styles.label}>{label}</Text>
+                <View style={styles.chevronRow}>
+                    {Array.from({ length: CHEVRONS }, (_, i) => {
+                        const start = i / (CHEVRONS + 1);
+                        return (
+                            <Animated.Text
+                                key={i}
+                                style={[
+                                    styles.chevron,
+                                    {
+                                        opacity: chevronPulse.interpolate({
+                                            inputRange: [0, start, start + 0.2, start + 0.45, 1],
+                                            outputRange: [0.2, 0.2, 1, 0.2, 0.2],
+                                        }),
+                                    },
+                                ]}
+                            >
+                                ›
+                            </Animated.Text>
+                        );
+                    })}
+                </View>
             </Animated.View>
 
             {/* Draggable Thumb */}
             <Animated.View
                 {...panResponder.panHandlers}
-                style={{
-                    height: THUMB_SIZE,
-                    width: THUMB_SIZE,
-                    borderRadius: 12,
-                    backgroundColor: '#0b7f4f',
-                    borderWidth: 2,
-                    borderColor: 'rgba(11, 127, 79, 0.6)',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    shadowColor: '#0b7f4f',
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 8,
-                    elevation: 8,
-                    transform: [{ translateX: slideX }],
-                }}
+                style={[styles.thumb, { transform: [{ translateX: thumbX }] }]}
             >
-                <Image
-                    source={icons.arrowRight}
-                    style={{ width: 28, height: 28, tintColor: '#ffffff' }}
-                    resizeMode="contain"
-                />
+                {/* Only the crosshair rotates; the check sits in its own unrotated view so it is always upright */}
+                {done ? (
+                    <Image source={icons.check} style={styles.checkIcon} resizeMode="contain" />
+                ) : (
+                    <Animated.View style={{ transform: [{ rotate: thumbRotate }] }}>
+                        <Image source={icons.crosshair} style={styles.crosshairIcon} resizeMode="contain" />
+                    </Animated.View>
+                )}
             </Animated.View>
-
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    track: {
+        height: TRACK_HEIGHT,
+        width: "100%",
+        borderRadius: TRACK_HEIGHT / 2,
+        backgroundColor: "rgba(18, 18, 18, 0.85)", // brand-black/85, same as the home checklist card
+        borderWidth: 1,
+        borderColor: "rgba(40, 74, 55, 0.7)", // brand-green/70
+        paddingHorizontal: PADDING,
+        justifyContent: "center",
+        overflow: "hidden",
+    },
+    fill: {
+        position: "absolute",
+        left: 0,
+        top: 0,
+        bottom: 0,
+        borderRadius: TRACK_HEIGHT / 2,
+        overflow: "hidden",
+    },
+    labelRow: {
+        position: "absolute",
+        left: THUMB_SIZE + PADDING * 2,
+        right: 0,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 10,
+    },
+    label: {
+        color: "white",
+        fontWeight: "700",
+        fontSize: 17,
+        letterSpacing: 0.3,
+    },
+    chevronRow: {
+        flexDirection: "row",
+        gap: 2,
+    },
+    chevron: {
+        color: ACCENT,
+        fontSize: 24,
+        fontWeight: "700",
+        lineHeight: 26,
+    },
+    thumb: {
+        height: THUMB_SIZE,
+        width: THUMB_SIZE,
+        borderRadius: THUMB_SIZE / 2,
+        backgroundColor: BUTTON,
+        borderWidth: 1.5,
+        borderColor: ACCENT,
+        alignItems: "center",
+        justifyContent: "center",
+        shadowColor: ACCENT,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.6,
+        shadowRadius: 10,
+        elevation: 8,
+    },
+    crosshairIcon: {
+        width: 26,
+        height: 26,
+        tintColor: "#ffffff",
+    },
+    checkIcon: {
+        width: 22,
+        height: 22,
+        tintColor: "#ffffff",
+    },
+});

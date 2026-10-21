@@ -33,6 +33,7 @@ import {
     type ShotConditions,
 } from "./conditions";
 import { parseVoiceShotSetup } from "./voiceParse";
+import { convertDistance, type DistanceUnit } from "./units";
 import { SpeechModule, useSpeechEvent, VOICE_AVAILABLE } from "./speech";
 import HelpButton from "@/help/HelpButton";
 import HelpTopicBody from "@/help/HelpTopicBody";
@@ -50,10 +51,12 @@ interface ShotSetupModalProps {
     isImperial: boolean;
     /** Distance already entered, if any */
     initialDistance: number | null;
+    /** Unit the distance starts in (the shooter's last choice, or the gun's unit); they can switch it */
+    initialDistanceUnit: DistanceUnit;
     /** Conditions already entered (or remembered from last time) */
     initialConditions: ShotConditions;
     onCancel: () => void;
-    onConfirm: (distance: number, conditions: ShotConditions) => void;
+    onConfirm: (distance: number, distanceUnit: DistanceUnit, conditions: ShotConditions) => void;
 }
 
 const asText = (v: number | null) => (v === null ? "" : String(v));
@@ -62,6 +65,7 @@ export default function ShotSetupModal({
     visible,
     isImperial,
     initialDistance,
+    initialDistanceUnit,
     initialConditions,
     onCancel,
     onConfirm,
@@ -70,7 +74,7 @@ export default function ShotSetupModal({
     const insets = useSafeAreaInsets();
     const frame = getSheetFrame(window, insets);
     const landscape = frame.landscape;
-    const distanceUnit = isImperial ? "yd" : "m";
+    const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>(initialDistanceUnit);
     const units = getConditionUnits(isImperial);
     const limits = getConditionLimits(isImperial);
 
@@ -95,6 +99,7 @@ export default function ShotSetupModal({
     useEffect(() => {
         if (!visible) return;
         setDistanceText(initialDistance ? String(initialDistance) : "");
+        setDistanceUnit(initialDistanceUnit);
         setWindSpeedText(asText(initialConditions.windSpeed));
         setWindClock(initialConditions.windClock);
         setAltitudeText(asText(initialConditions.altitude));
@@ -126,6 +131,10 @@ export default function ShotSetupModal({
         }
         if (parsed.distanceText !== null) {
             setDistanceText(parsed.distanceText);
+        }
+        // "450 meters" switches the unit; a bare number keeps the current one
+        if (parsed.distanceUnit !== null) {
+            setDistanceUnit(parsed.distanceUnit);
         }
         if (parsed.windSpeedText !== null) {
             setWindSpeedText(parsed.windSpeedText);
@@ -223,7 +232,7 @@ export default function ShotSetupModal({
         }
 
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        onConfirm(distance, {
+        onConfirm(distance, distanceUnit, {
             windSpeed: hasWind ? windSpeed : null,
             windClock: hasWind ? windClock : null,
             altitude,
@@ -241,6 +250,18 @@ export default function ShotSetupModal({
         Haptics.selectionAsync();
         Keyboard.dismiss();
         setOpenSection((open) => (open === section ? null : section));
+    };
+
+    // Switching unit converts a typed distance (300 yd -> 274 m) so it stays the same range
+    const switchDistanceUnit = (next: DistanceUnit) => {
+        if (next === distanceUnit) return;
+        Haptics.selectionAsync();
+        const current = parseFloat(distanceText);
+        if (!isNaN(current) && current > 0) {
+            setDistanceText(String(Math.round(convertDistance(current, distanceUnit, next))));
+        }
+        setDistanceUnit(next);
+        setError(null);
     };
 
     const pickDistance = (d: number) => {
@@ -342,6 +363,30 @@ export default function ShotSetupModal({
                     <Text style={[styles.distanceUnit, landscape && styles.distanceUnitLandscape]} maxFontSizeMultiplier={MAX_FONT_SCALE}>
                         {distanceUnit}
                     </Text>
+                    {/* yd / m switch: starts on the gun's unit, but the shooter can measure in either */}
+                    <View style={styles.unitSwitch} accessibilityRole="radiogroup">
+                        {(["yd", "m"] as const).map((u) => {
+                            const selected = distanceUnit === u;
+                            return (
+                                <Pressable
+                                    key={u}
+                                    onPress={() => switchDistanceUnit(u)}
+                                    accessibilityRole="radio"
+                                    accessibilityState={{ selected }}
+                                    accessibilityLabel={u === "yd" ? "Yards" : "Meters"}
+                                    hitSlop={4}
+                                    style={[styles.unitOption, selected && styles.unitOptionSelected]}
+                                >
+                                    <Text
+                                        style={[styles.unitOptionText, selected && styles.unitOptionTextSelected]}
+                                        maxFontSizeMultiplier={MAX_FONT_SCALE}
+                                    >
+                                        {u}
+                                    </Text>
+                                </Pressable>
+                            );
+                        })}
+                    </View>
             </Pressable>
             {distanceText === "" && !landscape && (
                 <Text style={styles.distanceHint} maxFontSizeMultiplier={MAX_FONT_SCALE}>
@@ -758,6 +803,38 @@ const styles = StyleSheet.create({
         fontSize: 17,
         fontWeight: "600",
         marginLeft: 6,
+    },
+    unitSwitch: {
+        position: "absolute",
+        right: 8,
+        flexDirection: "row",
+        backgroundColor: "#121212",
+        borderRadius: 9,
+        borderWidth: 1,
+        borderColor: BORDER,
+        padding: 2,
+    },
+    unitOption: {
+        minWidth: 32,
+        height: 28,
+        paddingHorizontal: 6,
+        borderRadius: 7,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    unitOptionSelected: {
+        backgroundColor: BUTTON,
+        borderWidth: 1,
+        borderColor: GREEN,
+    },
+    unitOptionText: {
+        color: "rgba(255,255,255,0.5)",
+        fontSize: 13,
+        fontWeight: "600",
+    },
+    unitOptionTextSelected: {
+        color: "white",
+        fontWeight: "700",
     },
     quickRow: {
         flexDirection: "row",

@@ -207,9 +207,9 @@ export const userProfileApi = {
             // 2. Delete the Firebase Auth user
             await withTimeout(deleteUser(user), WRITE_TIMEOUT_MS);
 
-            // Clear all cache after account deletion
-            await apiCache.clear('user_profile_me');
-            await apiCache.clear('gun_profiles_all');
+            // 3. Remove everything kept on this device too (caches, offline queue, calibrations,
+            // preferences), as promised in the delete dialog and the Privacy Policy
+            await apiCache.clearAllLocalData();
         } catch (error) {
             if (isNetworkOrTimeoutError(error)) {
                 throw new Error('Account deletion requires an internet connection. Please try again when online.');

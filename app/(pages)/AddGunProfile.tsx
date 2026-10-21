@@ -12,6 +12,7 @@ import {
     Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
@@ -24,6 +25,8 @@ import { ClickValuePicker, MagnificationField } from "@/calibration/ScopeSetupFi
 import type { ScopeUnit } from "@/calibration";
 
 type UnitSystem = "METRIC" | "IMPERIAL";
+
+const ACCENT = "#0b7f4f"; // brand-greenLight
 
 const AddGunProfile = () => {
     const router = useRouter();
@@ -50,6 +53,7 @@ const AddGunProfile = () => {
     const [submitting, setSubmitting] = useState(false);
     const [loadingExisting, setLoadingExisting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [focusedField, setFocusedField] = useState<string | null>(null);
 
     // Load existing profile in edit mode
     useEffect(() => {
@@ -209,39 +213,56 @@ const AddGunProfile = () => {
         ]);
     };
 
+    const isImperial = unitSystem === "IMPERIAL";
+
+    // One labelled field. `suffix` shows the unit inside the box; `last` drops the divider.
     const renderInput = (
+        key: string,
         label: string,
         value: string,
         onChangeText: (text: string) => void,
         options?: {
             placeholder?: string;
-            keyboardType?: "default" | "numeric";
+            keyboardType?: "default" | "numeric" | "decimal-pad";
+            suffix?: string;
             helperText?: string;
         }
-    ) => (
-        <View className="mb-4">
-            <Text className="text-gray-300 text-sm mb-2">{label}</Text>
-            <View className="bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 justify-center">
-                <TextInput
-                    className="text-white text-base"
-                    placeholder={options?.placeholder}
-                    placeholderTextColor="#6b7280"
-                    value={value}
-                    onChangeText={onChangeText}
-                    keyboardType={options?.keyboardType || "default"}
-                />
+    ) => {
+        const focused = focusedField === key;
+        return (
+            <View className="mb-3.5">
+                <Text className="text-white/70 text-xs font-semibold mb-1.5">{label}</Text>
+                <View
+                    className={`flex-row items-center rounded-xl border px-4 bg-brand-black/60 ${
+                        focused ? "border-brand-greenLight" : "border-brand-green/60"
+                    }`}
+                >
+                    <TextInput
+                        className="flex-1 text-white text-base py-3"
+                        placeholder={options?.placeholder}
+                        placeholderTextColor="rgba(255,255,255,0.3)"
+                        value={value}
+                        onChangeText={onChangeText}
+                        keyboardType={options?.keyboardType || "default"}
+                        onFocus={() => setFocusedField(key)}
+                        onBlur={() => setFocusedField((f) => (f === key ? null : f))}
+                    />
+                    {options?.suffix && <Text className="text-white/40 text-sm font-semibold ml-2">{options.suffix}</Text>}
+                </View>
+                {options?.helperText && <Text className="text-xs text-white/40 mt-1.5">{options.helperText}</Text>}
             </View>
-            {options?.helperText && (
-                <Text className="text-xs text-gray-500 mt-1">{options.helperText}</Text>
-            )}
-        </View>
+        );
+    };
+
+    const sectionLabel = (text: string) => (
+        <Text className="text-white/50 text-[11px] font-bold tracking-[0.16em] mt-6 mb-3">{text}</Text>
     );
 
     if (loadingExisting && isEdit) {
         return (
             <View className="flex-1 bg-brand-black justify-center items-center">
-                <ActivityIndicator size="large" color="#0b7f4f" />
-                <Text className="text-gray-400 mt-3">Loading profile...</Text>
+                <ActivityIndicator size="large" color={ACCENT} />
+                <Text className="text-white/50 mt-3">Loading profile...</Text>
             </View>
         );
     }
@@ -249,114 +270,170 @@ const AddGunProfile = () => {
     return (
         <View className="bg-brand-black flex-1">
             <SafeAreaView className="flex-1">
-                <KeyboardAvoidingView
-                    className="flex-1"
-                    behavior={Platform.OS === "ios" ? "padding" : undefined}
-                >
-                    {/* Header */}
-                    <View className="flex-row items-center justify-between px-6 pt-2 pb-4">
-                        <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2" hitSlop={8}>
-                            <Image
-                                source={icons.leftArrow}
-                                className="size-7"
-                                tintColor="#0b7f4f"
-                                resizeMode="contain"
-                            />
+                <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+                    {/* ===================== HEADER ===================== */}
+                    <View className="flex-row items-center px-6 pt-2 pb-3">
+                        <TouchableOpacity
+                            onPress={() => router.back()}
+                            hitSlop={8}
+                            accessibilityLabel="Back"
+                            className="size-10 rounded-full bg-brand-greenDark/80 border border-brand-green/60 items-center justify-center"
+                        >
+                            <Image source={icons.chevronLeft} className="size-4" tintColor="#ffffff" resizeMode="contain" />
                         </TouchableOpacity>
 
-                        <Text className="text-white text-xl font-semibold">
-                            {isEdit ? "Edit Rifle Profile" : "New Rifle Profile"}
-                        </Text>
+                        <View className="flex-1 items-center">
+                            <Text className="text-brand-greenLight text-[11px] font-bold tracking-[0.2em]">
+                                {isEdit ? "EDIT RIFLE" : "NEW RIFLE"}
+                            </Text>
+                            <Text className="text-white text-lg font-bold" numberOfLines={1}>
+                                {isEdit && name.trim() ? name.trim() : "Rifle profile"}
+                            </Text>
+                        </View>
 
-                        {/* Right: delete button only in edit mode */}
                         {isEdit ? (
-                            <TouchableOpacity onPress={handleDelete} disabled={submitting} className="p-2" hitSlop={8}>
-                                <Image
-                                    source={icons.trash}
-                                    className="size-7"
-                                    resizeMode="contain"
-                                    tintColor="#f97373"
-                                />
+                            <TouchableOpacity
+                                onPress={handleDelete}
+                                disabled={submitting}
+                                hitSlop={8}
+                                accessibilityLabel="Delete rifle"
+                                className="size-10 rounded-full bg-red-950/50 border border-red-500/40 items-center justify-center"
+                            >
+                                <Image source={icons.trash} className="size-4" resizeMode="contain" tintColor="#f87171" />
                             </TouchableOpacity>
                         ) : (
-                            <View className="w-6 h-6" />
+                            <View className="size-10" />
                         )}
                     </View>
 
-                    {/* Body */}
+                    {/* ===================== BODY ===================== */}
                     <ScrollView
                         className="flex-1 px-6"
                         contentContainerStyle={{ paddingBottom: 32 }}
                         keyboardShouldPersistTaps="handled"
+                        showsVerticalScrollIndicator={false}
                     >
-                        <View className="bg-zinc-950/80 border border-zinc-800 rounded-3xl p-5 mb-4">
-                            <Text className="text-gray-200 text-base font-semibold mb-1">
-                                Dial in your rifle
-                            </Text>
-                            <Text className="text-gray-500 text-sm">
-                                Enter your rifle and ammo details so AimSense can calculate accurate drops and holds for your shots.
-                            </Text>
-                        </View>
+                        {/* Photo banner (optional) */}
+                        <TouchableOpacity
+                            onPress={pickImage}
+                            activeOpacity={0.85}
+                            className={`mt-2 rounded-3xl overflow-hidden border ${
+                                gunPhotoUri ? "border-brand-green/60" : "border-dashed border-brand-greenLight/50"
+                            }`}
+                        >
+                            {gunPhotoUri ? (
+                                <View>
+                                    <Image source={{ uri: gunPhotoUri }} className="w-full h-44" resizeMode="cover" />
+                                    <LinearGradient
+                                        colors={["rgba(18,18,18,0)", "rgba(18,18,18,0.85)"]}
+                                        style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 70 }}
+                                        pointerEvents="none"
+                                    />
+                                    <View className="absolute bottom-3 right-3 flex-row items-center rounded-full bg-brand-black/80 border border-brand-green/60 px-3 py-1.5">
+                                        <Image source={icons.camera} className="size-3.5 mr-1.5" resizeMode="contain" tintColor={ACCENT} />
+                                        <Text className="text-white text-xs font-semibold">Change photo</Text>
+                                    </View>
+                                </View>
+                            ) : (
+                                <LinearGradient
+                                    colors={["#284a37", "#0e2018", "#121212"]}
+                                    locations={[0, 0.55, 1]}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                    style={{ height: 150, alignItems: "center", justifyContent: "center" }}
+                                >
+                                    <View className="size-12 rounded-2xl bg-brand-black/50 border border-brand-greenLight/50 items-center justify-center mb-2">
+                                        <Image source={icons.camera} className="size-6" resizeMode="contain" tintColor={ACCENT} />
+                                    </View>
+                                    <Text className="text-white text-sm font-semibold">Add rifle photo</Text>
+                                    <Text className="text-white/50 text-xs mt-0.5">Optional, helps you spot this rifle</Text>
+                                </LinearGradient>
+                            )}
+                        </TouchableOpacity>
 
                         {error && (
-                            <View className="bg-red-500/10 border border-red-500/40 rounded-2xl px-4 py-3 mb-4">
+                            <View className="mt-4 bg-red-950/40 border border-red-500/40 rounded-2xl px-4 py-3">
                                 <Text className="text-red-300 text-sm">{error}</Text>
                             </View>
                         )}
 
                         {/* Rifle */}
-                        <Text className="text-gray-400 text-xs uppercase tracking-[0.16em] mb-2">
-                            Rifle
-                        </Text>
+                        {sectionLabel("RIFLE")}
+                        <View className="rounded-2xl bg-brand-greenDark/60 border border-brand-green/50 p-4">
+                            {renderInput("name", "Profile name", name, setName, { placeholder: "e.g. Tikka T3x .308" })}
+                            {renderInput("caliber", "Caliber", caliber, setCaliber, { placeholder: "e.g. .308 Win, 6.5 Creedmoor" })}
 
-                        {renderInput("Profile name", name, setName, {
-                            placeholder: "e.g. Tikka T3x .308",
-                        })}
-
-                        {renderInput("Caliber", caliber, setCaliber, {
-                            placeholder: "e.g. .308 Win, 6.5 Creedmoor",
-                        })}
+                            <Text className="text-white/70 text-xs font-semibold mb-1.5">Units</Text>
+                            <View className="flex-row rounded-xl bg-brand-black/60 border border-brand-green/60 p-1">
+                                {(
+                                    [
+                                        { value: "IMPERIAL", title: "Imperial", detail: "yards · inches" },
+                                        { value: "METRIC", title: "Metric", detail: "meters · cm" },
+                                    ] as const
+                                ).map((option) => {
+                                    const selected = unitSystem === option.value;
+                                    return (
+                                        <TouchableOpacity
+                                            key={option.value}
+                                            onPress={() => {
+                                                Haptics.selectionAsync();
+                                                setUnitSystem(option.value);
+                                            }}
+                                            activeOpacity={0.85}
+                                            className={`flex-1 py-2 rounded-lg items-center border ${
+                                                selected ? "bg-brand-green border-brand-greenLight/70" : "border-transparent"
+                                            }`}
+                                        >
+                                            <Text className={selected ? "text-white text-sm font-bold" : "text-white/50 text-sm"}>
+                                                {option.title}
+                                            </Text>
+                                            <Text className={selected ? "text-white/70 text-[10px]" : "text-white/35 text-[10px]"}>
+                                                {option.detail}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                        </View>
 
                         {/* Ammo & ballistics */}
-                        <Text className="text-gray-400 text-xs uppercase tracking-[0.16em] mt-2 mb-2">
-                            Ammo & Ballistics
-                        </Text>
-
-                        {renderInput("Bullet weight (grains)", bulletWeightGrains, setBulletWeightGrains, {
-                            placeholder: "e.g. 168",
-                            keyboardType: "numeric",
-                        })}
-
-                        {renderInput("Ballistic coefficient (G1)", ballisticCoefficient, setBallisticCoefficient, {
-                            placeholder: "e.g. 0.47",
-                            keyboardType: "numeric",
-                        })}
-
-                        {renderInput("Muzzle velocity (fps)", muzzleVelocityFps, setMuzzleVelocityFps, {
-                            placeholder: "e.g. 2650",
-                            keyboardType: "numeric",
-                        })}
+                        {sectionLabel("AMMO & BALLISTICS")}
+                        <View className="rounded-2xl bg-brand-greenDark/60 border border-brand-green/50 p-4 pb-0.5">
+                            {renderInput("weight", "Bullet weight", bulletWeightGrains, setBulletWeightGrains, {
+                                placeholder: "e.g. 168",
+                                keyboardType: "numeric",
+                                suffix: "gr",
+                            })}
+                            {renderInput("bc", "Ballistic coefficient", ballisticCoefficient, setBallisticCoefficient, {
+                                placeholder: "e.g. 0.47",
+                                keyboardType: "decimal-pad",
+                                suffix: "G1",
+                            })}
+                            {renderInput("velocity", "Muzzle velocity", muzzleVelocityFps, setMuzzleVelocityFps, {
+                                placeholder: "e.g. 2650",
+                                keyboardType: "numeric",
+                                suffix: "fps",
+                                // The solver always uses feet per second, also for metric rifles
+                                helperText: "Always in feet per second, as printed on most ammo boxes.",
+                            })}
+                        </View>
 
                         {/* Zero & scope */}
-                        <Text className="text-gray-400 text-xs uppercase tracking-[0.16em] mt-2 mb-2">
-                            Zero & Scope
-                        </Text>
+                        {sectionLabel("ZERO & SCOPE")}
+                        <View className="rounded-2xl bg-brand-greenDark/60 border border-brand-green/50 p-4">
+                            {renderInput("zero", "Zero distance", zeroDistance, setZeroDistance, {
+                                placeholder: "e.g. 100",
+                                keyboardType: "numeric",
+                                suffix: isImperial ? "yd" : "m",
+                            })}
+                            {renderInput("height", "Scope height", scopeHeight, setScopeHeight, {
+                                placeholder: isImperial ? "e.g. 1.5" : "e.g. 3.8",
+                                keyboardType: "decimal-pad",
+                                suffix: isImperial ? "in" : "cm",
+                                helperText: "Center of the scope to center of the bore.",
+                            })}
 
-                        {renderInput("Zero distance", zeroDistance, setZeroDistance, {
-                            placeholder: unitSystem === "IMPERIAL" ? "e.g. 100 (yards)" : "e.g. 100 (meters)",
-                            keyboardType: "numeric",
-                        })}
-
-                        {renderInput("Scope height", scopeHeight, setScopeHeight, {
-                            placeholder:
-                                unitSystem === "IMPERIAL"
-                                    ? "e.g. 1.5 in (center to bore)"
-                                    : "e.g. 3.8 cm (converted)",
-                            keyboardType: "numeric",
-                        })}
-
-                        <View className="mb-4">
-                            <Text className="text-gray-300 text-sm mb-2">Turret clicks</Text>
+                            <Text className="text-white/70 text-xs font-semibold mb-1.5">Turret clicks</Text>
                             <ClickValuePicker
                                 scopeUnit={scopeUnit}
                                 clickSize={clickSize}
@@ -365,136 +442,33 @@ const AddGunProfile = () => {
                                     setClickSize(size);
                                 }}
                             />
-                            <Text className="text-xs text-gray-500 mt-2">Printed on the turret cap.</Text>
-                        </View>
+                            <Text className="text-xs text-white/40 mt-1.5 mb-3.5">Printed on the turret cap.</Text>
 
-                        <View className="mb-4">
-                            <Text className="text-gray-300 text-sm mb-2">Hunting magnification</Text>
+                            <Text className="text-white/70 text-xs font-semibold mb-1.5">Hunting magnification</Text>
                             <MagnificationField value={scopeMagnification} onChange={setScopeMagnification} />
-                            <Text className="text-xs text-gray-500 mt-2">
+                            <Text className="text-xs text-white/40 mt-1.5">
                                 The power you hunt at. Calibration is done at this magnification.
                             </Text>
                         </View>
-
-                        {/* Unit system toggle */}
-                        <View className="mt-4 mb-4">
-                            <Text className="text-gray-300 text-sm mb-2">Unit system</Text>
-                            <View className="flex-row bg-zinc-900 rounded-2xl p-1">
-                                <TouchableOpacity
-                                    className={`flex-1 py-2 rounded-xl items-center ${
-                                        unitSystem === "IMPERIAL" ? "bg-brand-greenDark" : ""
-                                    }`}
-                                    onPress={() => setUnitSystem("IMPERIAL")}
-                                >
-                                    <Text
-                                        className={
-                                            unitSystem === "IMPERIAL"
-                                                ? "text-white text-sm font-semibold"
-                                                : "text-gray-400 text-sm"
-                                        }
-                                    >
-                                        Imperial
-                                    </Text>
-                                    <Text
-                                        className={
-                                            unitSystem === "IMPERIAL"
-                                                ? "text-white/70 text-[10px]"
-                                                : "text-gray-500 text-[10px]"
-                                        }
-                                    >
-                                        yards / fps / inches
-                                    </Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    className={`flex-1 py-2 rounded-xl items-center ${
-                                        unitSystem === "METRIC" ? "bg-brand-greenDark" : ""
-                                    }`}
-                                    onPress={() => setUnitSystem("METRIC")}
-                                >
-                                    <Text
-                                        className={
-                                            unitSystem === "METRIC"
-                                                ? "text-white text-sm font-semibold"
-                                                : "text-gray-400 text-sm"
-                                        }
-                                    >
-                                        Metric
-                                    </Text>
-                                    <Text
-                                        className={
-                                            unitSystem === "METRIC"
-                                                ? "text-white/70 text-[10px]"
-                                                : "text-gray-500 text-[10px]"
-                                        }
-                                    >
-                                        meters / m/s / cm
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-
-                        {/* Rifle photo */}
-                        <Text className="text-gray-400 text-xs uppercase tracking-[0.16em] mt-2 mb-2">
-                            Rifle Photo (Optional)
-                        </Text>
-
-                        <TouchableOpacity
-                            onPress={pickImage}
-                            activeOpacity={0.9}
-                            className="bg-zinc-900 border border-dashed border-zinc-700 rounded-2xl px-4 py-4 items-center justify-center mb-8"
-                        >
-                            {gunPhotoUri ? (
-                                <View className="w-full items-center">
-                                    <Image
-                                        source={{ uri: gunPhotoUri }}
-                                        className="w-full h-40 rounded-xl mb-3"
-                                        resizeMode="cover"
-                                    />
-                                    <Text className="text-brand-greenLight text-sm font-medium">
-                                        Change rifle photo
-                                    </Text>
-                                    <Text className="text-gray-500 text-xs mt-1">
-                                        Make sure the scope and barrel are clearly visible.
-                                    </Text>
-                                </View>
-                            ) : (
-                                <>
-                                    <View className="w-12 h-12 rounded-full bg-zinc-800 items-center justify-center mb-2">
-                                        <Image
-                                            source={icons.camera || icons.plus}
-                                            className="w-6 h-6"
-                                            resizeMode="contain"
-                                            tintColor="#9ca3af"
-                                        />
-                                    </View>
-                                    <Text className="text-gray-200 text-sm font-medium">
-                                        Add rifle photo
-                                    </Text>
-                                    <Text className="text-gray-500 text-xs mt-1 text-center">
-                                        Optional, but helps you quickly recognize this profile.
-                                    </Text>
-                                </>
-                            )}
-                        </TouchableOpacity>
                     </ScrollView>
 
-                    {/* Submit button */}
-                    <View className="px-6 pb-6">
+                    {/* ===================== SAVE ===================== */}
+                    <View className="px-6 pt-3 pb-6 border-t border-brand-green/40">
                         <TouchableOpacity
                             onPress={handleSubmit}
                             disabled={submitting}
-                            className={`rounded-2xl py-3.5 flex-row items-center justify-center ${
-                                submitting ? "bg-brand-green/60" : "bg-brand-green"
+                            activeOpacity={0.85}
+                            className={`rounded-2xl py-4 flex-row items-center justify-center bg-brand-green border border-brand-greenLight/60 ${
+                                submitting ? "opacity-60" : ""
                             }`}
-                            activeOpacity={0.9}
                         >
                             {submitting ? (
-                                <ActivityIndicator color="#0b7f4f" />
+                                <ActivityIndicator color="#ffffff" />
                             ) : (
-                                <Text className="text-lg font-semibold text-white">
-                                    {isEdit ? "Update profile" : "Save profile"}
-                                </Text>
+                                <>
+                                    <Image source={icons.check} className="size-4 mr-2" resizeMode="contain" tintColor="#ffffff" />
+                                    <Text className="text-lg font-bold text-white">{isEdit ? "Save changes" : "Save rifle"}</Text>
+                                </>
                             )}
                         </TouchableOpacity>
                     </View>
