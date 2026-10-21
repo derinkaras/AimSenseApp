@@ -24,7 +24,16 @@
         {
           "microphonePermission": "AimSense uses the microphone so you can speak the target distance and wind instead of typing while your hands are on the rifle.",
           "speechRecognitionPermission": "AimSense uses speech recognition to turn your spoken shot setup into distance and wind values.",
-          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
+      ],
+      "expo-apple-authentication",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.REPLACE_WITH_IOS_CLIENT_ID"
         }
       ]
     ],
@@ -39,7 +48,8 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {

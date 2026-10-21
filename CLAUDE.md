@@ -70,7 +70,7 @@ All contexts are mounted at the root in `app/_layout.tsx`.
 ### Backend
 
 - **Firebase** (`src/services/firebase.ts`, JS SDK) — Auth + Cloud Firestore; there is no separate backend server. Config comes from `EXPO_PUBLIC_FIREBASE_*` env vars (see `.env.example`); security rules live in `firestore.rules`
-- Auth: email/password; password reset sends a Firebase email link (`src/services/authService.ts`)
+- Auth: email/password; password reset sends a Firebase email link (`src/services/authService.ts`). Sign in with Apple (iOS) and Google live in `src/services/socialAuth.ts` (need a dev build; Google client IDs in `.env`, reversed iOS client ID in `app.json`). Social accounts have no password, so account deletion re-authenticates through the provider and revokes its access
 - Data model: `users/{uid}` (profile) and `users/{uid}/gunProfiles/{id}`. CRUD wrappers are in `src/services/gunProfile.ts` and `src/services/userProfile.ts`, with shared helpers in `src/services/firestoreUtils.ts`
 - Offline-first: the Firestore JS SDK has no on-disk cache in React Native, so writes that time out are queued in `src/services/apiCache.ts` and replayed by `src/services/syncService.ts`. Gun profile doc IDs are generated client-side so replays are idempotent
 - Account deletion is client-side (re-authenticate, delete Firestore docs, then the Auth user)

@@ -3,6 +3,7 @@ import { EmailAuthProvider, deleteUser, reauthenticateWithCredential } from "fir
 import { deleteDoc, getDoc, getDocs, setDoc, writeBatch } from "firebase/firestore";
 import { auth, db } from "@/services/firebase";
 import { apiCache } from "./apiCache";
+import { SignInCancelled, reauthenticateSocial, revokeSocialAccess, signOutSocial, socialProviderOf } from "./socialAuth";
 import {
     READ_TIMEOUT_MS,
     WRITE_TIMEOUT_MS,
@@ -169,26 +170,38 @@ export const userProfileApi = {
 
     /**
      * Delete entire account
-     * - This REQUIRES an online connection and the user's current password.
+     * - This REQUIRES an online connection, and a fresh sign-in: the password for email
+     *   accounts, or the Apple / Google sheet for social accounts (pass password = null).
      * - Order matters: Firestore rules need a signed-in user, so data is deleted first and
-     *   the Auth user last. Re-authenticating up front (a) verifies the password before
+     *   the Auth user last. Re-authenticating up front (a) verifies the user before
      *   anything is deleted and (b) satisfies Firebase's "recent login" rule for deleteUser.
+     * - Throws SignInCancelled if the user closes the Apple / Google sheet.
      */
-    deleteAccount: async (password: string): Promise<void> => {
+    deleteAccount: async (password: string | null): Promise<void> => {
         const user = auth.currentUser;
-        if (!user || !user.email) throw new Error('Not signed in');
+        if (!user) throw new Error('Not signed in');
+        const provider = socialProviderOf(user);
+        let appleAuthorizationCode: string | null = null;
 
         try {
-            await withTimeout(
-                reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password)),
-                WRITE_TIMEOUT_MS
-            );
+            if (password !== null && user.email) {
+                await withTimeout(
+                    reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, password)),
+                    WRITE_TIMEOUT_MS
+                );
+            } else if (provider) {
+                // No timeout: the user is looking at the Apple / Google sheet
+                ({ appleAuthorizationCode } = await reauthenticateSocial(user, provider));
+            } else {
+                throw new Error('Enter your password to confirm');
+            }
         } catch (error: any) {
+            if (error instanceof SignInCancelled) throw error;
             if (
                 error?.code === 'auth/wrong-password' ||
                 error?.code === 'auth/invalid-credential'
             ) {
-                throw new Error('Incorrect password');
+                throw new Error(password !== null ? 'Incorrect password' : 'Could not confirm it is you. Please try again.');
             }
             if (isNetworkOrTimeoutError(error)) {
                 throw new Error('Account deletion requires an internet connection. Please try again when online.');
@@ -204,10 +217,14 @@ export const userProfileApi = {
             batch.delete(userDoc(user.uid));
             await withTimeout(batch.commit(), WRITE_TIMEOUT_MS);
 
-            // 2. Delete the Firebase Auth user
-            await withTimeout(deleteUser(user), WRITE_TIMEOUT_MS);
+            // 2. Revoke Apple / Google access (Apple requires this; it needs a signed-in user)
+            if (provider) await revokeSocialAccess(provider, appleAuthorizationCode);
 
-            // 3. Remove everything kept on this device too (caches, offline queue, calibrations,
+            // 3. Delete the Firebase Auth user
+            await withTimeout(deleteUser(user), WRITE_TIMEOUT_MS);
+            await signOutSocial();
+
+            // 4. Remove everything kept on this device too (caches, offline queue, calibrations,
             // preferences), as promised in the delete dialog and the Privacy Policy
             await apiCache.clearAllLocalData();
         } catch (error) {

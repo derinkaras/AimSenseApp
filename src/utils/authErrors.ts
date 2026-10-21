@@ -20,6 +20,11 @@ export const getAuthErrorMessage = (error: any): string => {
             return "This account has been disabled.";
         case "auth/requires-recent-login":
             return "Please log in again to continue.";
+        // Apple / Google sign-in
+        case "auth/account-exists-with-different-credential":
+            return "An account with this email already exists. Sign in with your email and password instead.";
+        case "auth/operation-not-allowed":
+            return "This sign-in method isn't turned on yet. Please use email and password.";
         default:
             return error?.message || "Something went wrong. Please try again.";
     }

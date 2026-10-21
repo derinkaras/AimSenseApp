@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, Image, TouchableOpacity, ActivityIndicator } from "react-native";
+import { View, Text, Image, TouchableOpacity, ActivityIndicator, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import icons from "@/constants/icons";
 import { useRouter } from "expo-router";
@@ -7,6 +7,10 @@ import CustomTextInput from "@/components/CustomTextInput";
 import { useAuth } from "@/contexts/AuthContext";
 import UniversalModal from "@/components/UniversalModal";
 import ForgotPasswordContent from "@/components/contents/ForgotPasswordContent";
+import PrivacyPolicyContent from "@/components/contents/PrivacyPolicyContent";
+import TermsOfServiceContent from "@/components/contents/TermsOfServiceContent";
+import SocialSignInButtons from "@/components/SocialSignInButtons";
+import type { SocialProvider } from "@/services/socialAuth";
 
 const Authentication = () => {
     const router = useRouter();
@@ -14,8 +18,21 @@ const Authentication = () => {
     const [password, setPassword] = useState("");
     const [isSignUp, setIsSignUp] = useState(true);
     const [showForgotPasswordModal, setForgotPasswordModal] = useState(false);
+    const [legalModal, setLegalModal] = useState<"privacy" | "terms" | null>(null);
+    const [socialBusy, setSocialBusy] = useState<SocialProvider | null>(null);
 
-    const { signup, login, loading, error, clearError } = useAuth();
+    const { signup, login, socialSignIn, loading, error, clearError } = useAuth();
+
+    // Apple / Google create the account on first use, so this covers sign up and sign in
+    const handleSocialSignIn = async (provider: SocialProvider) => {
+        if (loading || socialBusy) return;
+        setSocialBusy(provider);
+        const res = await socialSignIn(provider);
+        setSocialBusy(null);
+        if (res.success) {
+            router.replace("/(tabs)/Home");
+        }
+    };
 
     const handleSubmit = async () => {
         if (loading) return;
@@ -45,7 +62,15 @@ const Authentication = () => {
             />
         </UniversalModal>
 
-        <SafeAreaView>
+        <UniversalModal visible={legalModal === "privacy"} onClose={() => setLegalModal(null)}>
+            <PrivacyPolicyContent onClose={() => setLegalModal(null)} />
+        </UniversalModal>
+        <UniversalModal visible={legalModal === "terms"} onClose={() => setLegalModal(null)}>
+            <TermsOfServiceContent onClose={() => setLegalModal(null)} />
+        </UniversalModal>
+
+        <SafeAreaView className="flex-1">
+          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
             <TouchableOpacity
                 onPress={() => router.back()}
                 className="ml-6 mt-6 w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 items-center justify-center"
@@ -96,14 +121,16 @@ const Authentication = () => {
               className={`mt-6 rounded-xl bg-brand-green py-5 ${
                 loading ? 'opacity-60' : 'active:bg-brand-greenLight'
               }`}>
-              {loading ? (
-                <ActivityIndicator />
+              {loading && !socialBusy ? (
+                <ActivityIndicator color="#ffffff" />
               ) : (
                 <Text className="text-center text-2xl font-semibold text-white">
                   {isSignUp ? 'Sign Up' : 'Sign In'}
                 </Text>
               )}
             </TouchableOpacity>
+
+            <SocialSignInButtons onSignIn={handleSocialSignIn} busy={socialBusy} />
 
             <View className="items-center justify-center gap-4">
               <View className="mt-6 flex-row items-center justify-center gap-2">
@@ -127,7 +154,16 @@ const Authentication = () => {
                   )
               }
             </View>
+
+            {/* Agreement (shown at sign up and sign in, since Apple / Google can create an account) */}
+            <Text className="mt-8 text-white/45 text-xs text-center leading-5">
+              By continuing, you agree to the{" "}
+              <Text className="text-brand-greenLight" onPress={() => setLegalModal("terms")}>Terms of Service</Text>
+              {" "}and{" "}
+              <Text className="text-brand-greenLight" onPress={() => setLegalModal("privacy")}>Privacy Policy</Text>.
+            </Text>
           </View>
+          </ScrollView>
         </SafeAreaView>
       </View>
     );

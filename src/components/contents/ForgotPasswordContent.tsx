@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, Image, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, Image, TextInput, ActivityIndicator } from 'react-native';
 import Toast, { BaseToast, ErrorToast } from 'react-native-toast-message';
 import icons from '@/constants/icons';
 import authService from "@/services/authService";
@@ -82,103 +82,104 @@ const ForgotPasswordContent = ({ onClose, onSuccess }: ForgotPasswordContentProp
         await handleSendLink();
     };
 
+    const sent = step === 'sent';
+
     return (
         <>
-            <View className="gap-6 py-2">
-                {/* Icon */}
-                <View className="items-center justify-center">
-                    <View className="bg-brand-green/10 p-6 rounded-full border-2 border-brand-green/30">
-                        <Image
-                            source={icons.lock}
-                            className="size-12"
-                            tintColor="#10b981"
-                            resizeMode="contain"
-                        />
+            <View>
+                {/* Icon: lock to start, envelope once the link is sent */}
+                <View className="items-center">
+                    <View className="size-16 rounded-2xl bg-brand-greenDark border border-brand-green/60 items-center justify-center">
+                        <Image source={sent ? icons.mail : icons.lock} className="size-7" tintColor="#0b7f4f" resizeMode="contain" />
                     </View>
                 </View>
 
                 {/* Header */}
-                <View className="gap-2">
-                    <Text className="text-white text-xl font-semibold text-center">
-                        {step === 'email' ? 'Reset Password' : 'Check Your Email'}
-                    </Text>
-                    <Text className="text-gray-400 text-base text-center px-4">
-                        {step === 'email'
-                            ? 'Enter your email address and we\'ll send you a link to reset your password'
-                            : `If an account exists for ${email.trim()}, a reset link is on its way. Open it to choose a new password, then log in.`}
-                    </Text>
-                </View>
+                <Text className="text-white text-xl font-bold text-center mt-4">
+                    {sent ? 'Check your email' : 'Reset your password'}
+                </Text>
+                <Text className="text-white/60 text-sm leading-5 text-center mt-2 px-2">
+                    {sent
+                        ? 'If an account exists for this email, a reset link is on its way. Open it to choose a new password, then sign in.'
+                        : "Enter your account email and we'll send you a link to choose a new password."}
+                </Text>
 
-                {/* Form */}
-                {step === 'email' ? (
-                    <View className="gap-4">
-                        <View>
-                            <Text className="text-white text-sm font-medium mb-2">Email Address</Text>
+                {sent ? (
+                    <>
+                        {/* Where it went */}
+                        <View className="mt-5 flex-row items-center rounded-xl bg-brand-greenDark/60 border border-brand-green/60 px-4 py-3">
+                            <Image source={icons.check} className="size-3.5 mr-2.5" tintColor="#0b7f4f" resizeMode="contain" />
+                            <Text className="text-white text-sm font-semibold flex-1" numberOfLines={1}>{email.trim()}</Text>
+                        </View>
+                        <Text className="text-white/40 text-xs text-center mt-2">Not there? Check your spam or junk folder.</Text>
+
+                        <View className="gap-2.5 mt-6">
+                            <TouchableOpacity
+                                onPress={onSuccess ?? onClose}
+                                activeOpacity={0.85}
+                                className="rounded-2xl bg-brand-green border border-brand-greenLight/60 py-3.5 items-center"
+                            >
+                                <Text className="text-white font-bold text-base">Back to sign in</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={handleResend}
+                                disabled={resendTimer > 0 || loading}
+                                activeOpacity={0.85}
+                                className={`rounded-2xl bg-brand-black border border-brand-green/60 py-3.5 items-center ${resendTimer > 0 || loading ? 'opacity-50' : ''}`}
+                            >
+                                <Text className="text-white font-semibold text-base">
+                                    {resendTimer > 0 ? `Resend link in ${resendTimer}s` : 'Resend link'}
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => setStep('email')} activeOpacity={0.7} className="py-2">
+                                <Text className="text-brand-greenLight text-center text-sm font-semibold">Use a different email</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </>
+                ) : (
+                    <>
+                        {/* Email */}
+                        <Text className="text-white/70 text-xs font-semibold mt-5 mb-2">Email</Text>
+                        <View className="flex-row items-center rounded-xl bg-brand-greenDark/60 border border-brand-green/60 px-4">
+                            <Image source={icons.mail} className="size-4 mr-3" tintColor="rgba(255,255,255,0.45)" resizeMode="contain" />
                             <TextInput
                                 value={email}
                                 onChangeText={setEmail}
-                                placeholder="Enter your email"
-                                placeholderTextColor="#6b7280"
+                                placeholder="you@example.com"
+                                placeholderTextColor="rgba(255,255,255,0.3)"
                                 keyboardType="email-address"
                                 autoCapitalize="none"
-                                className="bg-gray-800/50 border border-gray-700 rounded-xl px-4 py-3 text-white"
+                                autoCorrect={false}
+                                autoComplete="email"
+                                textContentType="emailAddress"
+                                returnKeyType="send"
+                                onSubmitEditing={handleSendLink}
+                                className="flex-1 py-3 text-white text-base"
                             />
                         </View>
 
-                        <TouchableOpacity
-                            onPress={handleSendLink}
-                            disabled={loading}
-                            className={`bg-brand-green rounded-xl py-4 px-6 ${loading ? 'opacity-50' : ''}`}
-                            activeOpacity={0.7}
-                        >
-                            <Text className="text-white text-center font-semibold text-base">
-                                {loading ? 'Sending...' : 'Send Reset Link'}
-                            </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            onPress={onClose}
-                            className="bg-gray-800 rounded-xl py-4 px-6"
-                            activeOpacity={0.7}
-                        >
-                            <Text className="text-white text-center font-semibold text-base">
-                                Cancel
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-                ) : (
-                    <View className="gap-4">
-                        <TouchableOpacity
-                            onPress={onSuccess ?? onClose}
-                            className="bg-brand-green rounded-xl py-4 px-6"
-                            activeOpacity={0.7}
-                        >
-                            <Text className="text-white text-center font-semibold text-base">
-                                Done
-                            </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            onPress={handleResend}
-                            disabled={resendTimer > 0 || loading}
-                            className={`bg-gray-800 rounded-xl py-4 px-6 ${(resendTimer > 0 || loading) ? 'opacity-50' : ''}`}
-                            activeOpacity={0.7}
-                        >
-                            <Text className="text-white text-center font-semibold text-base">
-                                {resendTimer > 0 ? `Resend Link (${resendTimer}s)` : 'Resend Link'}
-                            </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            onPress={() => setStep('email')}
-                            className="py-2"
-                            activeOpacity={0.7}
-                        >
-                            <Text className="text-gray-400 text-center text-sm">
-                                Use a different email
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
+                        <View className="gap-2.5 mt-6">
+                            <TouchableOpacity
+                                onPress={handleSendLink}
+                                disabled={loading}
+                                activeOpacity={0.85}
+                                className={`rounded-2xl bg-brand-green border border-brand-greenLight/60 py-3.5 items-center ${loading ? 'opacity-60' : ''}`}
+                            >
+                                {loading ? (
+                                    <ActivityIndicator color="#ffffff" />
+                                ) : (
+                                    <Text className="text-white font-bold text-base">Send reset link</Text>
+                                )}
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={onClose}
+                                activeOpacity={0.85}
+                                className="rounded-2xl bg-brand-black border border-brand-green/60 py-3.5 items-center"
+                            >
+                                <Text className="text-white font-semibold text-base">Cancel</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </>
                 )}
             </View>
 

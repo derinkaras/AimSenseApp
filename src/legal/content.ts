@@ -16,7 +16,7 @@ export const LEGAL_DEVELOPER_NAME = "AimSense"; // your legal name or company na
 export const LEGAL_DEVELOPER_ADDRESS = "[Street address, City, Province/State, Country]";
 export const LEGAL_GOVERNING_LAW = "[Province/State, Country]";
 
-export const LEGAL_EFFECTIVE_DATE = "October 20, 2026";
+export const LEGAL_EFFECTIVE_DATE = "October 20, 2026"; // bump when the text changes
 export const PRIVACY_EMAIL = "privacy@aimsense.app";
 export const LEGAL_EMAIL = "legal@aimsense.app";
 
@@ -46,6 +46,7 @@ export const PRIVACY_POLICY: LegalDocument = {
                 "Information you give us, stored with your account:",
                 [
                     "Account details: your email address and password, used to sign you in. Your password is handled by Google Firebase Authentication and is never visible to us.",
+                    "Sign in with Apple or Google: if you choose this, we receive the email address and name that Apple or Google shares with us, and no password. With Apple you can choose to hide your email, in which case we only receive a private relay address from Apple.",
                     "Profile details (optional): your first and last name.",
                     "Rifle profiles: the details you enter for each rifle, such as its name, caliber, bullet weight, ballistic coefficient, muzzle velocity, zero distance, scope height, unit system, turret click value and scope magnification.",
                     "Account identifier: a random user ID created by Firebase so your data is linked to your account.",
@@ -104,6 +105,7 @@ export const PRIVACY_POLICY: LegalDocument = {
             title: "Service providers",
             blocks: [
                 "We use Google Firebase (Firebase Authentication and Cloud Firestore), provided by Google LLC, to run sign-in and store your account and rifle profiles. Google processes this data on our behalf to provide the service and may store it on servers outside your country, including in the United States. Learn more at firebase.google.com/support/privacy.",
+                "If you sign in with Apple or Google, they confirm who you are and share your name and email with us as described above, under their own privacy policies.",
                 "If you use voice input, your speech is handled by Apple or Google as described above.",
                 "We do not share your information with anyone else, except if required by law or to protect the safety of any person.",
             ],
@@ -111,7 +113,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         {
             title: "How long we keep it",
             blocks: [
-                "We keep your account and rifle profiles for as long as you have an account. When you delete your account, your profile, rifle profiles and sign-in account are permanently deleted from our systems. Any copies kept by our service provider for backup or security are removed on its standard schedule.",
+                "We keep your account and rifle profiles for as long as you have an account. When you delete your account, your profile, rifle profiles and sign-in account are permanently deleted from our systems, and if you signed in with Apple or Google, AimSense's access to that account is revoked. Any copies kept by our service provider for backup or security are removed on its standard schedule.",
             ],
         },
         {
